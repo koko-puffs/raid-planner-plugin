@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Raid Planner's plugin icon: the site's mark (public/favicon-raid.svg), the planner's swords in
+       its orange on a rounded tile of it, with a faint ember glow. Rendered to
+       RaidPlanner/images/icon.png by tools/make-icon.mjs. -->
+  <defs>
+    <radialGradient id="glow" cx="0.5" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ff8a3d" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ff8a3d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="#29160a"/>
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="url(#glow)"/>
+  <rect x="9.5" y="9.5" width="493" height="493" rx="110.5" fill="none" stroke="#ff8a3d" stroke-opacity="0.22" stroke-width="3"/>
+  <g transform="translate(86 86) scale(14.2)" fill="none" stroke="#ff8a3d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m13 19 6-6"/>
+    <path d="M14.5 17.5 3.586 6.586A2 2 0 013 5.172V3h2.172a2 2 0 011.414.586L17.5 14.5"/>
+    <path d="m14.828 6.172 2.586-2.586A2 2 0 0118.828 3H21v2.172a2 2 0 01-.586 1.414l-2.586 2.586"/>
+    <path d="m16 16 4 4"/>
+    <path d="m19 21 2-2"/>
+    <path d="m5 14 4 4"/>
+    <path d="m5 21-2-2"/>
+    <path d="M7.5 16.5 4 20"/>
+  </g>
+</svg>

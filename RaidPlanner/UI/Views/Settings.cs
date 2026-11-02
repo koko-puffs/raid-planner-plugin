@@ -1,0 +1,193 @@
+using System;
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+using RaidPlanner.Core;
+using static RaidPlanner.UI.Theme;
+
+namespace RaidPlanner.UI;
+
+/// <summary>Settings' tabs: how pulls are recorded, and the site.</summary>
+public enum SettingsTab
+{
+    Recording,
+    Account,
+}
+
+/// <summary>
+/// Settings, laid out as Housing Studio's plugin lays its own: the back arrow at the top left, the
+/// title, the tabs under it, and a card of rows, each a setting's name, one line under it, and its
+/// control on the right (the longer words are its tooltip). Recording holds the four things worth
+/// choosing; Account links the plugin to the site. The version and What's new at the foot.
+/// </summary>
+public sealed partial class MainWindow
+{
+    private const string ReleasesUrl = "https://github.com/koko-puffs/raid-planner-plugin/releases";
+
+    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Account") };
+
+    private SettingsTab settingsTab;
+
+    /// <summary>Where Settings was opened from: its back arrow goes there.</summary>
+    private Screen settingsFrom = Screen.Home;
+
+    private void OpenSettings(SettingsTab tab)
+    {
+        settingsTab = tab;
+        if (screen != Screen.Settings) settingsFrom = screen;
+        screen = Screen.Settings;
+    }
+
+    private void DrawSettings()
+    {
+        Frame.BeginHeader(20);
+        if (ScreenHeader(settingsFrom == Screen.Pull ? "Back to the pull" : "Back", null, "Settings"))
+            screen = settingsFrom == Screen.Pull && openFile != null && store.Find(openFile) != null ? Screen.Pull : Screen.Home;
+        Kit.Gap(16);
+        settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", SettingsTabs, (int)settingsTab);
+        Frame.EndHeader();
+
+        Frame.BeginBody(settingsTab == SettingsTab.Account ? "##settings-account" : "##settings-recording", null, 18, 22);
+        if (settingsTab == SettingsTab.Account) DrawAccountTab();
+        else DrawRecordingTab();
+
+        Frame.BeginBottom("settings-bottom");
+        var v = typeof(MainWindow).Assembly.GetName().Version;
+        var runs = new[]
+        {
+            new Run(v == null ? "Raid Planner · " : $"Raid Planner {v.Major}.{v.Minor}.{v.Build} · ", Face.Sans, 13, Palette.Faint),
+            new Run("What's new", Face.SansMedium, 13, Palette.Light, Link: "news"),
+        };
+        if (Txt.Para(runs, 19.5f, center: true) == "news") Dalamud.Utility.Util.OpenLink(ReleasesUrl);
+        Frame.EndBottom();
+        Frame.EndBody();
+    }
+
+    private void DrawRecordingTab()
+    {
+        Kit.BeginPanel("##set-recording", 0, 0, 0);
+        var i = 0;
+        if (SwitchRow(i++, "##auto", "Record fights by themselves", "In any duty, from the pull until the fight ends", config.AutoRecord,
+                "Each pull is recorded on its own: the bosses' casts and where they land, stacks, spreads, tankbusters, tethers, head markers and waymarks. Off: nothing is recorded."))
+        {
+            config.AutoRecord = !config.AutoRecord;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##party", "Record where the party stands",
+                config.RecordParty ? "Your party's places come along into the plan" : "Just the bosses and mechanics: place the party yourself",
+                config.RecordParty,
+                "On, the plan shows where everyone stood at each mechanic (you can still swap to standard spots on the site). Off, only the enemies and their attacks are kept, for when you'd rather work out your own strats. Names are never kept, only jobs."))
+        {
+            config.RecordParty = !config.RecordParty;
+            config.Save();
+        }
+        var keepWords = Words.Count(config.Keep, "pull");
+        var delta = StepperRow(i++, "##keep", "Keep the last", "The oldest go after that", keepWords, config.Keep > 5, config.Keep < 100,
+            "Pulls are kept in the plugin's folder until there are more than this. One you've sent is safe on the site.");
+        if (delta != 0)
+        {
+            config.Keep = Math.Clamp(config.Keep + delta * 5, 5, 100);
+            config.Save();
+            store.SetKeep(config.Keep);
+        }
+        if (SwitchRow(i++, "##bar", "Show it in the server info bar", "“Rec 2:31” while a pull is recorded", config.ShowInBar,
+                "The bar at the top right of the screen shows that a pull is being recorded, and for how long. Click it to open the plugin."))
+        {
+            config.ShowInBar = !config.ShowInBar;
+            config.Save();
+        }
+        if (ButtonRow(i, "##folder", "Recordings folder", "Where the pulls are kept", "Open", Btn.Glass, false, null, store.Folder))
+            Dalamud.Utility.Util.OpenLink(store.Folder);
+        Kit.EndPanel();
+
+        if (recorder.HookProblem is { } problem)
+        {
+            Kit.Gap(14);
+            Txt.Note(problem, Palette.EmberText);
+        }
+    }
+
+    private void DrawAccountTab()
+    {
+        Kit.BeginPanel("##set-account", 0, 0, 0);
+        DrawAccountRow(0);
+        if (ButtonRow(1, "##planner", "The Raid Planner", "Make plans from your pulls, draw your strats, present them", "Open", Btn.Glass, false, null,
+                "kokos-tools.com/raid-planner"))
+            Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+        Kit.EndPanel();
+        Kit.Gap(14);
+        Txt.Note("Anyone with the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.", Palette.Faint);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Rows.
+
+    private static readonly Run[] SetNote = new Run[1];
+
+    /// <summary>
+    /// A setting's row (12px 16px inside, a hairline between): its name (with an icon before it when
+    /// given) and one line under it, the control on the right; the longer words are the tooltip over
+    /// the words. <paramref name="below"/> puts the control under the words instead, for wide ones.
+    /// </summary>
+    private static void SetRow(int index, string name, string? note, float controlW, float controlH, Action<Vector2> control, bool below = false,
+        string? tip = null, bool disabled = false, Icon? icon = null)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        if (index > 0) Kit.Dl.AddLine(new Vector2(at.X + 1, at.Y - 0.5f), new Vector2(at.X + w - 1, at.Y - 0.5f), Palette.U32(Palette.Line), 1f);
+        var x = at.X + S(16);
+        var wordsW = below || controlW <= 0 ? w - S(32) : w - S(32) - controlW - S(14);
+        var nameH = Txt.Natural(Face.SansMedium, 14);
+        if (note != null) SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
+        var noteH = note != null ? Txt.Flow(Vector2.Zero, wordsW, SetNote, 18, out _, draw: false) : 0;
+        var wordsH = nameH + (note != null ? S(2) + noteH : 0);
+        var h = below ? S(13) * 2 + wordsH + (controlH > 0 ? S(10) + controlH : 0) : S(13) * 2 + MathF.Max(wordsH, controlH);
+        var dl = Kit.Dl;
+        var top = below ? at.Y + S(13) : at.Y + (h - wordsH) / 2;
+        var old = Palette.Opacity;
+        if (disabled) Palette.Opacity = old * 0.5f;
+        var nx = x;
+        if (icon is { } ic)
+        {
+            Icons.Draw(dl, ic, new Vector2(nx, top + (nameH - S(14)) / 2), S(14), Palette.Ember);
+            nx += S(14 + 6);
+        }
+        Txt.Line(dl, new Vector2(nx, top), Txt.Fit(name, Face.SansMedium, 14, x + wordsW - nx), Face.SansMedium, 14, Palette.Ink);
+        if (note != null)
+        {
+            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
+            Txt.Flow(new Vector2(x, top + nameH + S(2)), wordsW, SetNote, 18, out _);
+        }
+        Palette.Opacity = old;
+        if (tip != null && !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(new Vector2(x, top), new Vector2(x + wordsW, top + wordsH)))
+            Kit.Tooltip(tip);
+        if (below) control(new Vector2(x, top + wordsH + S(10)));
+        else if (controlW > 0) control(new Vector2(at.X + w - S(16) - controlW, at.Y + (h - controlH) / 2));
+        Kit.Reserve(at, w, h);
+    }
+
+    /// <summary>A setting with a switch; true when it's flipped.</summary>
+    private static bool SwitchRow(int index, string id, string name, string? note, bool on, string? tip = null, bool disabled = false)
+    {
+        var flipped = false;
+        SetRow(index, name, note, S(44), S(24), p => flipped = Kit.Switch(id, p, on, disabled), false, tip, disabled);
+        return flipped;
+    }
+
+    /// <summary>A setting with a − value + stepper; returns −1, 0 or +1.</summary>
+    private static int StepperRow(int index, string id, string name, string? note, string value, bool canDown, bool canUp, string? tip = null)
+    {
+        var delta = 0;
+        SetRow(index, name, note, Kit.StepperWidth(value), S(36), p => delta = Kit.Stepper(id, p, value, canDown, canUp), false, tip);
+        return delta;
+    }
+
+    /// <summary>A setting with a small button on the right; true when it's pressed.</summary>
+    private static bool ButtonRow(int index, string id, string name, string? note, string label, Btn style = Btn.Glass, bool disabled = false,
+        string? buttonTip = null, string? tip = null)
+    {
+        var pressed = false;
+        SetRow(index, name, note, Kit.ButtonWidth(label, BtnSize.Tiny, null, style), Kit.ButtonHeight(BtnSize.Tiny),
+            p => pressed = Kit.Button(id, p, label, style, BtnSize.Tiny, null, 0, disabled, buttonTip), false, tip);
+        return pressed;
+    }
+}
