@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -401,7 +402,7 @@ public sealed class RecordingStore
     /// nothing a file name can't hold) ending in the recording's extension. Anything else in the index
     /// or the marks is ignored, so they can never point outside the folder or at the index itself.
     /// </summary>
-    public static bool IsOwnName(string? file) =>
+    public static bool IsOwnName([NotNullWhen(true)] string? file) =>
         !string.IsNullOrWhiteSpace(file)
         && file.EndsWith(Words.Extension, StringComparison.OrdinalIgnoreCase)
         && file.IndexOfAny(Path.GetInvalidFileNameChars()) < 0

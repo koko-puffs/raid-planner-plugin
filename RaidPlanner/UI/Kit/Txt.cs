@@ -174,6 +174,27 @@ public static class Txt
 
         var dl = ImGui.GetWindowDrawList();
         var cursor = ImGui.GetCursorScreenPos();
+        // The link under the mouse, found first: a link of several words lights up whole, whichever
+        // of its words the mouse is on (each word is its own button, laid where it falls).
+        string? hoveredLink = null;
+        if (!Kit.Blocked && ImGui.IsWindowHovered())
+        {
+            var hy = pos.Y;
+            foreach (var (a, b, w) in lines)
+            {
+                var hx = pos.X + (center ? (width - w) / 2 : 0);
+                for (var t = a; t < b && hoveredLink == null; t++)
+                {
+                    var tok = tokens[t];
+                    var link = runs[tok.Run].Link;
+                    if (link != null && ImGui.IsMouseHoveringRect(new Vector2(hx, hy), new Vector2(hx + tok.Width + tok.Trailing, hy + box)))
+                        hoveredLink = link;
+                    hx += tok.Width + tok.Trailing;
+                }
+                if (hoveredLink != null) break;
+                hy += box;
+            }
+        }
         var y = pos.Y;
         var linkIndex = 0;
         foreach (var (a, b, w) in lines)
@@ -200,13 +221,9 @@ public static class Txt
                         var max = new Vector2(lx + tok.Width + (t < b - 1 && runs[tokens[t + 1].Run].Link == run.Link ? tok.Trailing : 0), y + box);
                         ImGui.SetCursorScreenPos(min);
                         var hit = ImGui.InvisibleButton($"##link{run.Link}{linkIndex++}", Vector2.Max(max - min, new Vector2(1)));
-                        var hovered = ImGui.IsItemHovered() && !Kit.Blocked;
                         if (hit && !Kit.Blocked) clicked = run.Link;
-                        if (hovered)
-                        {
-                            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-                            color = Palette.Ink;
-                        }
+                        if (ImGui.IsItemHovered() && !Kit.Blocked) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                        if (run.Link == hoveredLink) color = Palette.Ink;
                     }
                     if (tok.Text.Length > 0) dl.AddText(Snap(top), Palette.U32(color), tok.Text);
                 }
