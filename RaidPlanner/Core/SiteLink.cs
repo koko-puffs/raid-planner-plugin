@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Security.Cryptography;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -13,7 +15,8 @@ namespace RaidPlanner.Core;
 
 /// <summary>What became of a send: the pull's id on the site, or why it didn't go.</summary>
 /// <param name="TokenRefused">The site doesn't know the token (revoked, or mistyped): link again.</param>
-public sealed record SendResult(string? Id, string? Why, bool TokenRefused = false)
+/// <param name="Thinned">It was too big whole, so it went with fewer of the party's places.</param>
+public sealed record SendResult(string? Id, string? Why, bool TokenRefused = false, bool Thinned = false)
 {
     public bool Sent => Id != null;
 }
@@ -38,11 +41,86 @@ public static class SiteLink
     /// <summary>Where a token is made: Settings → Raid Planner → In-game plugin.</summary>
     public const string TokensUrl = "https://www.kokos-tools.com/raid-planner?settings=raid-plugin";
 
-    /// <summary>The longest a send waits for the site (a long pull is a big file).</summary>
-    public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(40);
+    /// <summary>How long a send waits for the site: half a minute, and a quarter more for each MB (a slow upload).</summary>
+    public static TimeSpan TimeoutFor(int bytes) => TimeSpan.FromSeconds(30 + 15.0 * bytes / 1_000_000);
 
-    /// <summary>The most the site takes in one recording (its own limit is the same).</summary>
+    /// <summary>
+    /// The most the site takes in one recording, as the database counts it (<see cref="ServerSize"/>):
+    /// its own limit is the same number.
+    /// </summary>
     public const int MaxBytes = 3_000_000;
+
+    /// <summary>
+    /// A recording's size as the database counts it: its JSON written back out, which puts a space
+    /// after every colon and comma (outside the strings). The file itself is compact, so it's
+    /// smaller than this by about a sixth.
+    /// </summary>
+    public static int ServerSize(string json)
+    {
+        var size = Encoding.UTF8.GetByteCount(json);
+        var inString = false;
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+            if (inString)
+            {
+                if (c == '\\') i++;
+                else if (c == '"') inString = false;
+            }
+            else if (c == '"') inString = true;
+            else if (c is ':' or ',') size++;
+        }
+        return size;
+    }
+
+    /// <summary>
+    /// The recording as it's sent: whole when it fits; else with the places kept less often (every
+    /// second, then every two, then four), then the enemies' places only, then none. Null when even
+    /// that's too big (a pull with more events than the site takes).
+    /// </summary>
+    public static (string Json, bool Thinned)? Fit(string json)
+    {
+        if (ServerSize(json) <= MaxBytes) return (json, false);
+        Recording r;
+        try
+        {
+            r = Recording.Parse(json);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        var frames = r.Frames;
+        for (var step = 2; step <= 8; step *= 2)
+        {
+            var thinned = r.WithFrames(frames.Where((_, i) => i % step == 0), r.PartyPositions).ToJson();
+            if (ServerSize(thinned) <= MaxBytes) return (thinned, true);
+        }
+        for (var step = 2; step <= 8; step *= 2)
+        {
+            var every = step;
+            var enemies = r.WithFrames(
+                frames.Where((_, i) => i % every == 0)
+                    .Select(f => f with { At = f.At.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value) })
+                    .Where(f => f.At.Count > 0),
+                false).ToJson();
+            if (ServerSize(enemies) <= MaxBytes) return (enemies, true);
+        }
+        var none = r.WithFrames(Array.Empty<Frame>(), false).ToJson();
+        return ServerSize(none) <= MaxBytes ? (none, true) : null;
+    }
+
+    /// <summary>
+    /// The pull's own id for the site, made from its file and when it was recorded: the same pull sent
+    /// twice (a send that timed out after it arrived, then sent again) is kept once.
+    /// </summary>
+    public static string ClientId(string file, DateTimeOffset recordedAt)
+    {
+        // To the second, as the file has it: the same after the list is made again from the files.
+        var at = recordedAt.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{file}|{at}"));
+        return Convert.ToHexString(bytes, 0, 16).ToLowerInvariant();
+    }
 
     private static readonly Regex Shape = new(@"^rpp_[A-Za-z0-9_-]{43}$", RegexOptions.CultureInvariant);
 
@@ -65,20 +143,21 @@ public static class SiteLink
 
     public static bool IsUuid(string? id) => id != null && Uuid.IsMatch(id);
 
-    /// <summary>What's sent: the token, the pull's name and the recording (its file's JSON, as an object).</summary>
-    public static string Body(string token, string name, string recordingJson) =>
-        new JsonObject
+    /// <summary>What's sent: the token, the pull's name, its own id and the recording (its file's JSON, as an object).</summary>
+    public static string Body(string token, string name, string recordingJson, string? clientId = null)
+    {
+        var body = new JsonObject
         {
             ["p_token"] = token,
-            ["p_name"] = name,
+            ["p_name"] = name.Length > 120 ? name[..120] : name,
             ["p_recording"] = JsonNode.Parse(recordingJson),
-        }.ToJsonString();
+        };
+        if (clientId != null) body["p_client_id"] = clientId;
+        return body.ToJsonString();
+    }
 
-    /// <summary>Words that are the database's, not the site's (a missing function, a bad value): not for players.</summary>
-    private static readonly string[] Internal =
-    {
-        "function", "column", "relation", "syntax", "violates", "permission denied", "schema", "operator does not exist", "invalid input",
-    };
+    /// <summary>The refusals the site words for players (its hints); any other message is the database's own, not shown.</summary>
+    private static readonly string[] Hints = { "off", "rate", "size", "recording", "full" };
 
     /// <summary>
     /// What the site answered, in words: the new pull's id (a quoted id), or its refusal's message
@@ -113,10 +192,7 @@ public static class SiteLink
         }
         if (hint == "token")
             return new SendResult(null, (message ?? "The site doesn't know this token.") + " Link again in Settings with a new one.", true);
-        if (hint is "off" or "rate" or "size" or "recording" && message != null)
-            return new SendResult(null, message);
-        if (message != null && code is 400 or 403 or 409 or 500 && message.Length <= 200
-            && !Array.Exists(Internal, w => message.Contains(w, StringComparison.OrdinalIgnoreCase)))
+        if (hint != null && message != null && Array.IndexOf(Hints, hint) >= 0 && message.Length <= 300)
             return new SendResult(null, message);
         return code switch
         {
@@ -129,6 +205,19 @@ public static class SiteLink
         };
     }
 
+    private static async Task<(HttpStatusCode Status, string Text)> PostAsync(HttpClient http, string body, CancellationToken cancel)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{SupabaseUrl}/rest/v1/rpc/rp_plugin_send")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("apikey", PublishableKey);
+        request.Headers.Accept.ParseAdd("application/json");
+        using var response = await http.SendAsync(request, cancel).ConfigureAwait(false);
+        var text = await response.Content.ReadAsStringAsync(cancel).ConfigureAwait(false);
+        return (response.StatusCode, text);
+    }
+
     private static string? Text(JsonNode? n) =>
         n is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
 
@@ -136,33 +225,31 @@ public static class SiteLink
     /// Sends a pull to the token's owner's Raid Planner and says how it went; never throws (a lost
     /// connection or the wait running out is said in words). The token goes in the body only.
     /// </summary>
-    public static async Task<SendResult> SendAsync(HttpClient http, string token, string name, string recordingJson, CancellationToken cancel = default)
+    public static async Task<SendResult> SendAsync(HttpClient http, string token, string name, string recordingJson, string? clientId = null,
+        CancellationToken cancel = default)
     {
         if (!LooksRight(token)) return new SendResult(null, "That isn't a Raid Planner token. Link again in Settings.", true);
-        if (Encoding.UTF8.GetByteCount(recordingJson) > MaxBytes)
+        if (Fit(recordingJson) is not { } fit)
             return new SendResult(null, "This pull is too big to send. Save it as a file instead, and import it on the site.");
         string body;
         try
         {
-            body = Body(token, name, recordingJson);
+            body = Body(token, name, fit.Json, clientId);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
         {
             return new SendResult(null, "The pull couldn't be written down to send.");
         }
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        timeout.CancelAfter(Timeout);
+        timeout.CancelAfter(TimeoutFor(Encoding.UTF8.GetByteCount(body)));
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{SupabaseUrl}/rest/v1/rpc/rp_plugin_send")
-            {
-                Content = new StringContent(body, Encoding.UTF8, "application/json"),
-            };
-            request.Headers.Add("apikey", PublishableKey);
-            request.Headers.Accept.ParseAdd("application/json");
-            using var response = await http.SendAsync(request, timeout.Token).ConfigureAwait(false);
-            var text = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-            return Read(response.StatusCode, text);
+            var (status, text) = await PostAsync(http, body, timeout.Token).ConfigureAwait(false);
+            // A site that doesn't take the pull's own id yet (its database not updated): sent again without it.
+            if (status == HttpStatusCode.NotFound && clientId != null)
+                (status, text) = await PostAsync(http, Body(token, name, fit.Json), timeout.Token).ConfigureAwait(false);
+            var read = Read(status, text);
+            return read.Sent && fit.Thinned ? read with { Thinned = true } : read;
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {

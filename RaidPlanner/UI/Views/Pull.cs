@@ -108,11 +108,19 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         var timeW = MathF.Max(S(38), Txt.Measure("00:00", Face.Mono, 12).X);
         var rowH = S(38);
+        // Only the rows in view are drawn (a long pull has hundreds); the rest only take their room.
+        var clipTop = ImGui.GetWindowPos().Y;
+        var clipBottom = clipTop + ImGui.GetWindowSize().Y;
         for (var i = 0; i < lines.Count; i++)
         {
             var e = lines[i];
             var at = Kit.At;
             var w = Kit.Width;
+            if (at.Y + rowH < clipTop || at.Y > clipBottom)
+            {
+                Kit.Reserve(at, w, rowH);
+                continue;
+            }
             var hovered = !Kit.Blocked && ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(at, at + new Vector2(w, rowH));
             if (hovered) dl.AddRectFilled(at, at + new Vector2(w, rowH), Palette.U32(Palette.RowHover), S(Palette.RadiusMd));
             var x = at.X + S(10);

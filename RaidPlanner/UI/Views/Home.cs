@@ -165,7 +165,7 @@ public sealed partial class MainWindow
             var nameH = Txt.Natural(Face.SansMedium, 14);
             var h = S(10) * 2 + MathF.Max(S(36), nameH + S(2) + S(19.5f));
             if (i > 0) dl.AddLine(new Vector2(at.X + S(10), at.Y - 0.5f), new Vector2(at.X + w - S(10), at.Y - 0.5f), Palette.U32(Palette.Line), 1f);
-            var (clicked, hovered, _) = Kit.Hit($"##pull{i}", at, new Vector2(w, h));
+            var (clicked, hovered, _) = Kit.Hit($"##pull-{row.File}", at, new Vector2(w, h));
             if (clicked) Later(() => ShowPull(row));
             if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
 

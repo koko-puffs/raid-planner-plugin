@@ -42,9 +42,9 @@ public sealed class Fonts : IDisposable
 
     private static readonly (Face Face, int Px)[] Wanted =
     {
-        (Face.Sans, 15), (Face.Sans, 14), (Face.Sans, 13), (Face.Sans, 12),
-        (Face.SansMedium, 15), (Face.SansMedium, 14), (Face.SansMedium, 13), (Face.SansMedium, 12),
-        (Face.SansSemibold, 30), (Face.SansSemibold, 22), (Face.SansSemibold, 18), (Face.SansSemibold, 15), (Face.SansSemibold, 14),
+        (Face.Sans, 14), (Face.Sans, 13), (Face.Sans, 12),
+        (Face.SansMedium, 14), (Face.SansMedium, 13), (Face.SansMedium, 12),
+        (Face.SansSemibold, 30), (Face.SansSemibold, 22), (Face.SansSemibold, 18), (Face.SansSemibold, 15),
         (Face.Mono, 13), (Face.Mono, 12), (Face.Mono, 11),
     };
 
@@ -64,7 +64,8 @@ public sealed class Fonts : IDisposable
                 _ => "GeistMono-Regular.ttf",
             };
             var dalamudFont = japanese && face is not Face.Mono;
-            handles[(face, px)] = Make(atlas, file, px * GeistLine, dalamudFont);
+            // The mono only shows times and counts: it needs no other language's letters.
+            handles[(face, px)] = Make(atlas, file, px * GeistLine, dalamudFont, face is not Face.Mono);
         }
     }
 
@@ -78,7 +79,7 @@ public sealed class Fonts : IDisposable
         return handles.TryGetValue(best, out h) ? h : handles[(Face.Sans, 14)];
     }
 
-    private static IFontHandle Make(IFontAtlas atlas, string file, float sizePx, bool dalamudFont) =>
+    private static IFontHandle Make(IFontAtlas atlas, string file, float sizePx, bool dalamudFont, bool languages) =>
         atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
         {
             var font = dalamudFont
@@ -86,7 +87,7 @@ public sealed class Fonts : IDisposable
                 : tk.AddFontFromMemory(Read(file), new SafeFontConfig { SizePx = sizePx }, file);
             // The game's own symbols and whatever Dalamud's language needs (ability names in any client's language).
             tk.AddGameSymbol(new SafeFontConfig { SizePx = sizePx, MergeFont = font });
-            tk.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig { SizePx = sizePx, MergeFont = font });
+            if (languages) tk.AttachExtraGlyphsForDalamudLanguage(new SafeFontConfig { SizePx = sizePx, MergeFont = font });
         }));
 
     private static readonly Dictionary<string, byte[]> Files = new();

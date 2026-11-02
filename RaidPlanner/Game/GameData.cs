@@ -10,6 +10,14 @@ public sealed class GameData
     private readonly Dictionary<uint, ActionInfo?> actions = new();
     private readonly Dictionary<uint, DutyInfo?> duties = new();
     private readonly Dictionary<uint, (string Job, byte Role)> jobs = new();
+    private readonly Dictionary<uint, bool> fights = new();
+
+    /// <summary>
+    /// Duty kinds (the ContentType sheet's rows) that aren't one fight to plan: dungeons, guildhests,
+    /// PvP, quest battles, treasure hunts, deep dungeons, Eureka and Bozja. A trash pack there would
+    /// otherwise be kept as a pull, and push out the ones you meant to keep.
+    /// </summary>
+    private static readonly HashSet<uint> NotFights = new() { 2, 3, 6, 7, 9, 21, 26, 29 };
 
     /// <summary>
     /// An action's name, cast type (its shape), reach, width, floor marker and cast, as the game's
@@ -42,6 +50,20 @@ public sealed class GameData
         }
         duties[territory] = info;
         return info;
+    }
+
+    /// <summary>
+    /// Is the zone a fight worth recording by itself: a duty from the Duty Finder that's a trial, a
+    /// raid, an ultimate, a criterion dungeon (anything but the kinds in <see cref="NotFights"/>)?
+    /// </summary>
+    public bool IsFight(uint territory)
+    {
+        if (fights.TryGetValue(territory, out var known)) return known;
+        var fight = Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t)
+            && t.ContentFinderCondition.ValueNullable is { } cfc && t.ContentFinderCondition.RowId != 0
+            && !NotFights.Contains(cfc.ContentType.RowId);
+        fights[territory] = fight;
+        return fight;
     }
 
     /// <summary>A zone's own name, for a fight recorded outside a duty.</summary>

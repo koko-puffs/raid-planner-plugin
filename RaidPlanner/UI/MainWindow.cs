@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Numerics;
+using System.Threading;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Windowing;
@@ -17,7 +19,7 @@ namespace RaidPlanner.UI;
 /// as a timeline, with the same buttons) and Settings (Recording and Account). Below Home every
 /// screen has the back arrow at its top left, as Housing Studio's plugin has it.
 /// </summary>
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IDisposable
 {
     private enum Screen
     {
@@ -36,6 +38,13 @@ public sealed partial class MainWindow : Window
 
     /// <summary>The pull open on its own screen (by its file).</summary>
     private string? openFile;
+
+    /// <summary>Cancelled when the plugin unloads: a send under way stops, and nothing after it runs.</summary>
+    private readonly CancellationTokenSource closing = new();
+
+    private readonly HttpClient http = new();
+
+    private DateTime dialogFailedAt;
 
     public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, Fonts fonts)
         : base("Raid Planner###RaidPlannerMain")
@@ -56,6 +65,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens the window on Home.</summary>
     public void ShowMain()
     {
+        Dismiss();
         screen = Screen.Home;
         IsOpen = true;
     }
@@ -63,6 +73,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens Settings (Dalamud's cog, /raidplan settings).</summary>
     public void ShowSettings()
     {
+        Dismiss();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
         IsOpen = true;
@@ -71,6 +82,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Opens a pull's own screen.</summary>
     public void ShowPull(RecordingInfo info)
     {
+        Dismiss();
         openFile = info.File;
         screen = Screen.Pull;
         IsOpen = true;
@@ -79,6 +91,15 @@ public sealed partial class MainWindow : Window
     public override void OnClose()
     {
         settingsTab = SettingsTab.Recording;
+        Dismiss();
+    }
+
+    /// <summary>The plugin unloads: a send under way is stopped (it won't mark or say anything after).</summary>
+    public void Dispose()
+    {
+        closing.Cancel();
+        http.Dispose();
+        closing.Dispose();
     }
 
     public override void PreDraw()
@@ -100,7 +121,19 @@ public sealed partial class MainWindow : Window
     public override void PostDraw()
     {
         Theme.Pop();
-        dialogs.Draw();
+        // Outside the window's own catch: a fault here would turn off the plugin's whole interface.
+        try
+        {
+            dialogs.Draw();
+        }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - dialogFailedAt > TimeSpan.FromSeconds(10))
+            {
+                Services.Log.Error(ex, "Raid Planner's file dialog failed");
+                dialogFailedAt = DateTime.UtcNow;
+            }
+        }
     }
 
     public override void Draw()
@@ -240,8 +273,21 @@ public sealed partial class MainWindow : Window
     private Confirmation? confirm;
     private float confirmCardH;
 
-    private void Ask(string title, string body, string yes, string no, Action onYes, bool danger = false) =>
+    /// <summary>The question has been brought to the front once (after that, only when the plugin's window is clicked).</summary>
+    private bool confirmFocused;
+
+    private void Ask(string title, string body, string yes, string no, Action onYes, bool danger = false)
+    {
         confirm = new Confirmation(title, body, yes, no, onYes, danger);
+        confirmFocused = false;
+    }
+
+    /// <summary>The question goes unanswered: the window closed, or another screen opened.</summary>
+    private void Dismiss()
+    {
+        confirm = null;
+        confirmCardH = 0;
+    }
 
     /// <summary>
     /// The question over the plugin's window: a window of its own the size of the plugin's, kept in
@@ -255,7 +301,12 @@ public sealed partial class MainWindow : Window
         var winSize = ImGui.GetWindowSize();
         ImGui.SetNextWindowPos(winPos, ImGuiCond.Always);
         ImGui.SetNextWindowSize(winSize, ImGuiCond.Always);
-        ImGui.SetNextWindowFocus();
+        // To the front as it opens, and when the plugin's window is clicked; never taken from another window.
+        if (!confirmFocused || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows))
+        {
+            ImGui.SetNextWindowFocus();
+            confirmFocused = true;
+        }
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, S(14));

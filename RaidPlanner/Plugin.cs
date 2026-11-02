@@ -33,6 +33,12 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>The last pull kept, shown in the bar for a moment ("Pull 3 kept").</summary>
     private (RecordingInfo Info, DateTime Until)? justKept;
 
+    /// <summary>What the bar shows now: set again only when it changes (setting it redraws the game's bar).</summary>
+    private string? barText;
+
+    /// <summary>The bar couldn't be used this session (another plugin took its name): not tried again, the setting left as it is.</summary>
+    private bool barBroken;
+
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
         pluginInterface.Create<Services>();
@@ -102,9 +108,9 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
-            if (!config.ShowInBar)
+            if (!config.ShowInBar || barBroken)
             {
-                if (bar != null) bar.Shown = false;
+                HideBar();
                 return;
             }
             string? text = null;
@@ -121,20 +127,31 @@ public sealed class Plugin : IDalamudPlugin
             }
             if (text == null)
             {
-                if (bar != null) bar.Shown = false;
+                HideBar();
                 return;
             }
             bar ??= Services.DtrBar.Get(BarTitle);
             bar.OnClick ??= _ => window.ShowMain();
-            bar.Text = text;
-            bar.Tooltip = tip ?? string.Empty;
+            if (text != barText)
+            {
+                barText = text;
+                bar.Text = text;
+                bar.Tooltip = tip ?? string.Empty;
+            }
             bar.Shown = true;
         }
         catch (Exception ex)
         {
             Services.Log.Warning(ex, "Raid Planner couldn't update the server info bar");
-            config.ShowInBar = false;
+            barBroken = true;
         }
+    }
+
+    private void HideBar()
+    {
+        if (bar == null || barText == null) return;
+        bar.Shown = false;
+        barText = null;
     }
 
     public void Dispose()
@@ -147,6 +164,7 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => Services.PluginInterface.UiBuilder.OpenConfigUi -= window.ShowSettings);
         }
         Safely(() => Services.Commands.RemoveHandler(Command));
+        Safely(() => window?.Dispose());
         Safely(() => bar?.Remove());
         Safely(windows.RemoveAllWindows);
         Safely(() => recorder?.Dispose());

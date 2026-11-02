@@ -86,7 +86,8 @@ public sealed record CastEvent(double T, int Source, uint Action, float Duration
         w.WriteEndObject();
     }
 
-    internal static double Round(double v, int digits) => Math.Round(v, digits, MidpointRounding.AwayFromZero);
+    /// <summary>A number as it's written: rounded, and 0 for one that isn't a number at all (JSON can't hold NaN or infinity).</summary>
+    internal static double Round(double v, int digits) => double.IsFinite(v) ? Math.Round(v, digits, MidpointRounding.AwayFromZero) : 0;
 }
 
 /// <summary>
@@ -309,8 +310,48 @@ public sealed class Recording
         w.WriteEndObject();
     }
 
-    /// <summary>Reads a recording's file back. Throws <see cref="FormatException"/> for anything that isn't one.</summary>
+    /// <summary>
+    /// Reads a recording's file back. Throws <see cref="FormatException"/> for anything that isn't
+    /// one, and only that (a duplicate key, a value of the wrong kind: all the same to the caller).
+    /// </summary>
     public static Recording Parse(string json)
+    {
+        try
+        {
+            return ParseCore(json);
+        }
+        catch (FormatException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            throw new FormatException("That isn't a recording.", ex);
+        }
+    }
+
+    /// <summary>A copy with other frames (the rest shared): what's sent when the whole is too big.</summary>
+    public Recording WithFrames(IEnumerable<Frame> frames, bool partyPositions)
+    {
+        var r = new Recording
+        {
+            PluginVersion = PluginVersion,
+            RecordedAt = RecordedAt,
+            Duration = Duration,
+            Outcome = Outcome,
+            Pull = Pull,
+            Duty = Duty,
+            PartyPositions = partyPositions,
+        };
+        r.Party.AddRange(Party);
+        r.Actors.AddRange(Actors);
+        foreach (var (k, v) in Actions) r.Actions[k] = v;
+        r.Events.AddRange(Events);
+        r.Frames.AddRange(frames);
+        return r;
+    }
+
+    private static Recording ParseCore(string json)
     {
         JsonNode? root;
         try

@@ -12,6 +12,12 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Record every fight in a duty by itself, from the pull until combat ends.</summary>
     public bool AutoRecord { get; set; } = true;
 
+    /// <summary>
+    /// Record in every duty, dungeons and field operations too (off: only fights, like trials, raids,
+    /// ultimates and criterion dungeons, so trash packs don't push out the pulls you keep).
+    /// </summary>
+    public bool RecordAllDuties { get; set; }
+
     /// <summary>Keep where the party stands (off: only the enemies and the mechanics, to place the party yourself).</summary>
     public bool RecordParty { get; set; } = true;
 

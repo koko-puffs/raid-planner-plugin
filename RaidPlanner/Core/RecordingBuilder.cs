@@ -96,6 +96,9 @@ public sealed class RecordingBuilder
 
     public int? KnownActor(ulong key) => actorIds.TryGetValue(key, out var id) ? id : null;
 
+    /// <summary>Is its name still wanted: never seen, or seen without one?</summary>
+    public bool NeedsName(ulong key) => !actorIds.TryGetValue(key, out var id) || actorFacts[id].Name.Length == 0;
+
     /// <summary>Who someone is in the recording: a party member's number, an enemy's, or 0.</summary>
     public int Who(ulong key) => partyIds.TryGetValue(key, out var p) ? p : actorIds.TryGetValue(key, out var a) ? a : 0;
 
@@ -143,8 +146,10 @@ public sealed class RecordingBuilder
     }
 
     /// <summary>The tethers there are now: a new one is recorded as it appears, one gone as it goes.</summary>
-    public void Tethers(double t, IEnumerable<(int From, int To, uint Kind)> now)
+    public void Tethers(double t, IReadOnlyCollection<(int From, int To, uint Kind)> now)
     {
+        // Most frames: none then, none now.
+        if (now.Count == 0 && tethers.Count == 0) return;
         var current = now.Where(x => x.From != 0 && x.To != 0 && x.From != x.To).ToHashSet();
         foreach (var gone in tethers.Except(current).ToList())
         {
@@ -183,8 +188,11 @@ public sealed class RecordingBuilder
         if (kept.Count > 0) recording.Frames.Add(new Frame(t, kept));
     }
 
-    /// <summary>Is it worth keeping (long enough, something happened)?</summary>
-    public bool Worthwhile(double t) => t >= ShortestKept && Casts + recording.Events.OfType<HitEvent>().Count() > 0;
+    /// <summary>
+    /// Is it worth keeping: long enough, with a mechanic in it (an enemy's named cast, or a hit that
+    /// isn't an auto-attack)? A trash pack that only swung at the tank isn't.
+    /// </summary>
+    public bool Worthwhile(double t) => t >= ShortestKept && Timeline.Build(recording).Count > 0;
 
     /// <summary>
     /// The pull, finished: how long it took and how it ended; the enemies sorted into bosses (the
@@ -204,7 +212,7 @@ public sealed class RecordingBuilder
             else
             {
                 var hp = maxHp.TryGetValue(id, out var h) ? h : 0u;
-                kind = top == 0 || hp * 2 >= top ? ActorKind.Boss : ActorKind.Add;
+                kind = top == 0 || (ulong)hp * 2 >= top ? ActorKind.Boss : ActorKind.Add;
             }
             recording.Actors.Add(new Actor(id, name, kind, hitbox, dataId));
         }

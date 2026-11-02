@@ -10,7 +10,7 @@ Record the fights you're in, then make them into plans on
 
 ## What it does
 
-- **Records each pull by itself** in any duty, from the pull until the fight ends (a wipe, a
+- **Records each pull by itself** in trials, raids, ultimates and criterion dungeons, from the pull until the fight ends (a wipe, a
   clear, or combat simply over): the bosses' casts and where they were aimed, where each attack
   landed and whom it hit (which tells a stack from a spread), head markers, tethers, waymarks, the
   arena changing, and where the bosses and (if you like) your party stood. Names are never kept,
@@ -44,9 +44,10 @@ Record the fights you're in, then make them into plans on
 ### Settings
 
 - **Record fights by themselves**: on. Off, nothing is recorded.
+- **In every duty**: off. On, dungeons and field operations are recorded too.
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
   working out your own strats.
-- **Keep the last** 20 pulls (5 to 100).
+- **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.
 - **Show it in the server info bar**: on.
 
 ## Building it

@@ -54,6 +54,21 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>Stopped by hand while the fight went on: not started again until combat is over.</summary>
     private bool waitForCombatToEnd;
 
+    /// <summary>
+    /// A finished pull that ended without the game saying how, kept back for a moment before it's
+    /// saved: the game says "duty complete" (or wiped) a little after combat ends, and then it's a clear.
+    /// </summary>
+    private (RecordingBuilder B, double T, DateTime Until)? held;
+
+    /// <summary>How long a pull that just ended waits for the game to say it was a clear or a wipe.</summary>
+    private static readonly TimeSpan HoldFor = TimeSpan.FromSeconds(10);
+
+    private DateTime tickFailedAt;
+
+    /// <summary>Pulls being written on workers.</summary>
+    private readonly List<Task> saving = new();
+    private readonly List<(int, int, uint)> tetherBuffer = new();
+
     public FightRecorder(Configuration config, GameData data, RecordingStore store, string version)
     {
         this.config = config;
@@ -93,16 +108,66 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>Ends the pull now and keeps it (the window's Stop, /raidplan stop).</summary>
     public void Stop() => stopAsked = true;
 
-    private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => outcome = Outcome.Wipe;
+    private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Said(Outcome.Wipe));
 
-    private void OnCompleted(Dalamud.Game.DutyState.IDutyStateEventArgs _) => outcome = Outcome.Clear;
+    private void OnCompleted(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Said(Outcome.Clear));
 
-    private void OnTerritoryChanged(uint territory)
+    /// <summary>A game event's handler: what goes wrong is logged, never thrown back into the game.</summary>
+    private static void Guarded(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Raid Planner couldn't handle a game event");
+        }
+    }
+
+    /// <summary>The game said how it went: the pull going on, or the one just ended and held back.</summary>
+    private void Said(Outcome how)
+    {
+        if (current == null && held is { } h)
+        {
+            held = null;
+            Keep(h.B, h.T, how);
+            return;
+        }
+        outcome = how;
+    }
+
+    private void OnTerritoryChanged(uint territory) => Guarded(() =>
     {
         if (current != null) Finish(outcome ?? Outcome.Ended);
+        ReleaseHeld();
         pullInZone = 0;
         pullTerritory = territory;
+    });
+
+    /// <summary>The held pull, saved as it is (the game didn't say).</summary>
+    private void ReleaseHeld()
+    {
+        if (held is not { } h) return;
+        held = null;
+        Keep(h.B, h.T, Outcome.Ended);
     }
+
+    /// <summary>
+    /// Is the fight still on: you're in combat, or someone in your party is (you can be down while
+    /// they fight on, and that's still the same pull).
+    /// </summary>
+    private static bool FightGoesOn()
+    {
+        if (Services.Condition[ConditionFlag.InCombat]) return true;
+        foreach (var m in Services.Party)
+            if (m.EntityId != 0 && m.GameObject is ICharacter c && (c.StatusFlags & StatusFlags.InCombat) != 0)
+                return true;
+        return false;
+    }
+
+    /// <summary>Does this zone get its pulls recorded by itself?</summary>
+    private bool RecordsHere() => InDuty && (config.RecordAllDuties || data.IsFight(Services.ClientState.TerritoryType));
 
     private void OnUpdate(IFramework framework)
     {
@@ -112,13 +177,19 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            // A frame that can't be read is lost, not the pull, nor the game.
-            Services.Log.Error(ex, "Raid Planner couldn't read this frame");
+            // A frame that can't be read is lost, not the pull, nor the game (and said once in a while, not every frame).
+            if (DateTime.UtcNow - tickFailedAt > TimeSpan.FromSeconds(10))
+            {
+                Services.Log.Error(ex, "Raid Planner couldn't read this frame");
+                tickFailedAt = DateTime.UtcNow;
+            }
         }
     }
 
     private void Tick()
     {
+        // Released on time even at the title screen (a held pull is only in memory until then).
+        if (held is { } h && DateTime.UtcNow >= h.Until) ReleaseHeld();
         if (!Services.ClientState.IsLoggedIn || Services.Objects.LocalPlayer == null)
         {
             if (current != null) Finish(outcome ?? Outcome.Ended);
@@ -128,10 +199,11 @@ public sealed unsafe class FightRecorder : IDisposable
         if (current == null)
         {
             stopAsked = false;
-            if (!combat) waitForCombatToEnd = false;
-            if (config.AutoRecord && combat && InDuty && !waitForCombatToEnd) Start();
+            if (!combat && !FightGoesOn()) waitForCombatToEnd = false;
+            if (config.AutoRecord && combat && !waitForCombatToEnd && RecordsHere()) Start();
             return;
         }
+        combat = combat || FightGoesOn();
 
         var t = Elapsed;
         try
@@ -150,7 +222,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (stopAsked)
         {
             waitForCombatToEnd = combat;
-            Finish(outcome ?? Outcome.Ended);
+            Finish(outcome ?? Outcome.Ended, true);
             return;
         }
         if (combat && outcome == null)
@@ -167,6 +239,7 @@ public sealed unsafe class FightRecorder : IDisposable
 
     private void Start()
     {
+        ReleaseHeld();
         var territory = Services.ClientState.TerritoryType;
         if (territory != pullTerritory)
         {
@@ -219,7 +292,7 @@ public sealed unsafe class FightRecorder : IDisposable
         return list;
     }
 
-    private void Finish(Outcome how)
+    private void Finish(Outcome how, bool stopped = false)
     {
         var b = current;
         current = null;
@@ -231,13 +304,27 @@ public sealed unsafe class FightRecorder : IDisposable
         outcome = null;
         if (!b.Worthwhile(t))
         {
-            NotKept = (t < RecordingBuilder.ShortestKept ? "That pull was too short to keep." : "Nothing happened in that pull, so it wasn't kept.", DateTime.UtcNow);
+            NotKept = (t < RecordingBuilder.ShortestKept ? "That pull was too short to keep." : "No mechanics went off in that pull, so it wasn't kept.", DateTime.UtcNow);
             return;
         }
         NotKept = null;
+        // Ended without the game saying how: held a moment for its "duty complete".
+        if (how == Outcome.Ended && !stopped)
+        {
+            held = (b, t, DateTime.UtcNow + HoldFor);
+            return;
+        }
+        Keep(b, t, how);
+    }
+
+    /// <summary>A finished pull, written to the store.</summary>
+    private void Keep(RecordingBuilder b, double t, Outcome how)
+    {
         var recording = b.Finish(t, how);
         // Written on a worker (a long pull is a big file); the window hears of it back on the framework thread.
-        _ = Task.Run(() =>
+        // Kept track of, so unloading waits for it rather than leaving it half done.
+        saving.RemoveAll(x => x.IsCompleted);
+        saving.Add(Task.Run(() =>
         {
             try
             {
@@ -249,7 +336,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 Services.Log.Error(ex, "Raid Planner couldn't save the pull");
                 Services.Framework.RunOnFrameworkThread(() => NotKept = ("The pull couldn't be saved (see /xllog).", DateTime.UtcNow));
             }
-        });
+        }));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -259,7 +346,8 @@ public sealed unsafe class FightRecorder : IDisposable
     {
         var b = current!;
         var frame = b.WantsFrame(t) ? new Dictionary<int, (float, float, float)>() : null;
-        var tethers = new List<(int, int, uint)>();
+        var tethers = tetherBuffer;
+        tethers.Clear();
         foreach (var obj in Services.Objects)
         {
             if (obj == null || !obj.IsValid() || obj.EntityId is 0 or InvalidId) continue;
@@ -268,7 +356,8 @@ public sealed unsafe class FightRecorder : IDisposable
             if (b.PartyId(key) is { } p) id = p;
             else if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Combatant)
             {
-                id = b.Actor(key, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId);
+                // Its name read only while it's needed (a new enemy, or one still nameless): reading it makes a string.
+                id = b.Actor(key, b.NeedsName(key) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
                 if (npc.IsTargetable && !npc.IsDead) b.SeenTargetable(id, npc.MaxHp);
                 ReadCast(b, t, id, npc);
             }
@@ -337,12 +426,16 @@ public sealed unsafe class FightRecorder : IDisposable
     internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, uint action, IReadOnlyList<uint> targetIds)
     {
         var b = current;
-        if (b == null || b.IsParty(casterId)) return;
+        if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
         var src = b.KnownActor(casterId);
         if (src == null)
         {
-            // A helper never seen in the object table (it came and went between frames).
+            // A helper never seen in the object table (it came and went between frames): an enemy's,
+            // never a pet or a summon (theirs are the party's own actions).
             if (caster == null || caster->GameObject.ObjectKind != FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc) return;
+            var kind = (BattleNpcSubKind)caster->GameObject.SubKind;
+            if (kind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) return;
+            if (caster->GameObject.OwnerId is not (0 or InvalidId)) return;
             src = b.Actor(casterId, string.Empty, caster->GameObject.HitboxRadius, caster->GameObject.BaseId);
         }
         float x = hitX, z = hitZ, rot = 0;
@@ -370,26 +463,52 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>The arena changed.</summary>
     internal void OnMapEffect(byte index, uint state) => current?.MapEffect(Elapsed, index, state);
 
+    /// <summary>A pull is being recorded (the hooks read nothing otherwise).</summary>
+    internal bool Listening => current != null;
+
     public void Dispose()
     {
-        // Unloaded (an update, a reload) mid-pull: what was recorded is kept, written now.
-        if (current is { } b)
+        try
         {
-            current = null;
+            // The game's functions are let go of first, whatever happens after.
+            Guarded(hooks.Dispose);
+            Guarded(() => Services.Framework.Update -= OnUpdate);
+            Guarded(() => Services.DutyState.DutyWiped -= OnWiped);
+            Guarded(() => Services.DutyState.DutyCompleted -= OnCompleted);
+            Guarded(() => Services.ClientState.TerritoryChanged -= OnTerritoryChanged);
+        }
+        finally
+        {
+            // Unloaded (an update, a reload) mid-pull, or just after one: what was recorded is kept, written now,
+            // and the pulls still being written are waited for (a few seconds at most).
+            SaveNow(held is { } h ? (h.B, h.T) : null);
+            held = null;
+            if (current is { } b)
+            {
+                current = null;
+                SaveNow((b, Elapsed));
+            }
             try
             {
-                var t = Elapsed;
-                if (b.Worthwhile(t)) store.Save(b.Finish(t, Outcome.Ended));
+                Task.WaitAll(saving.ToArray(), TimeSpan.FromSeconds(5));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Services.Log.Error(ex, "Raid Planner couldn't save the pull while unloading");
+                // A save that failed has said so already.
             }
         }
-        Services.Framework.Update -= OnUpdate;
-        Services.DutyState.DutyWiped -= OnWiped;
-        Services.DutyState.DutyCompleted -= OnCompleted;
-        Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
-        hooks.Dispose();
+    }
+
+    private void SaveNow((RecordingBuilder B, double T)? pull)
+    {
+        if (pull is not { } p) return;
+        try
+        {
+            if (p.B.Worthwhile(p.T)) store.Save(p.B.Finish(p.T, Outcome.Ended));
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Raid Planner couldn't save the pull while unloading");
+        }
     }
 }

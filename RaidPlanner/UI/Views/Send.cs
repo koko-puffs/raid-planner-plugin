@@ -18,8 +18,6 @@ namespace RaidPlanner.UI;
 /// </summary>
 public sealed partial class MainWindow
 {
-    private static readonly HttpClient Http = new();
-
     /// <summary>A send under way (no result yet) or done, by the pull's file.</summary>
     private sealed record SendState(SendResult? Result);
 
@@ -38,14 +36,19 @@ public sealed partial class MainWindow
         if (!Linked || Sending(info)) return;
         var token = config.SiteToken;
         var file = info.File;
+        var cancel = closing.Token;
         sends[file] = new SendState(null);
         _ = Task.Run(async () =>
         {
             SendResult result;
             try
             {
-                var json = await File.ReadAllTextAsync(store.PathOf(info)).ConfigureAwait(false);
-                result = await SiteLink.SendAsync(Http, token, info.Name, json).ConfigureAwait(false);
+                var json = await File.ReadAllTextAsync(store.PathOf(info), cancel).ConfigureAwait(false);
+                result = await SiteLink.SendAsync(http, token, info.Name, json, SiteLink.ClientId(info.File, info.RecordedAt), cancel).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -57,6 +60,8 @@ public sealed partial class MainWindow
                 Services.Log.Error(ex, "Send to Raid Planner failed");
                 result = new SendResult(null, "Something went wrong sending it (see /xllog).");
             }
+            // Unloaded meanwhile: the plugin loaded again keeps the list now, so this one leaves it alone.
+            if (cancel.IsCancellationRequested) return;
             if (result.Sent) store.MarkSent(info, result.Id!, DateTimeOffset.UtcNow);
             sends[file] = new SendState(result);
             try
@@ -85,8 +90,10 @@ public sealed partial class MainWindow
                 File.Copy(store.PathOf(info), path, true);
                 Notify($"Saved {Path.GetFileName(path)}");
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex)
             {
+                // Run by the file dialog, outside the window's own catch: nothing may escape.
+                if (ex is not (IOException or UnauthorizedAccessException)) Services.Log.Error(ex, "Raid Planner couldn't save the file");
                 Notify("Couldn't save it there");
             }
         }, start, true);
@@ -153,6 +160,11 @@ public sealed partial class MainWindow
             runs = s.Result switch
             {
                 null => new[] { Run.Note("Sending it to your Raid Planner…") },
+                { Sent: true, Thinned: true } => new[]
+                {
+                    Run.Note("Sent, with the places kept less often (it was too big whole). It's waiting in your Raid Planner. ", Palette.Success),
+                    new Run("Open it", Face.SansMedium, 13, Palette.Ink, Link: "open"),
+                },
                 { Sent: true } => new[]
                 {
                     Run.Note("Sent. It's waiting in your Raid Planner. ", Palette.Success),

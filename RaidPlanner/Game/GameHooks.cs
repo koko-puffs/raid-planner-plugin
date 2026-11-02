@@ -32,8 +32,14 @@ public sealed unsafe class GameHooks : IDisposable
     private readonly Hook<PacketDispatcher.Delegates.HandleActorControlPacket>? control;
     private readonly Hook<PacketDispatcher.Delegates.HandleMapEffectPacket>? mapEffects;
 
-    /// <summary>The game's three handlers for several map effects at once (8, 16 or 32 in one message).</summary>
-    private delegate void BatchedMapEffects(nint director, byte* packet);
+    /// <summary>
+    /// The game's three handlers for several map effects at once (4, 8 or 12 in one message). Declared
+    /// with four plain arguments and a result, all handed on untouched: the game's function gets exactly
+    /// what it was called with (the first four arguments go in registers), even if a patch has changed
+    /// what it takes, so a wrong guess about it can never break the game's own call. Only the second
+    /// (the message) is read, and only while a pull is recorded.
+    /// </summary>
+    private delegate nint BatchedMapEffects(nint a1, nint a2, nint a3, nint a4);
 
     /// <summary>
     /// The batched handlers' code, as BossMod finds them (its WorldStateGameSync): three functions that
@@ -42,7 +48,10 @@ public sealed unsafe class GameHooks : IDisposable
     /// </summary>
     private const string BatchedMapEffectPattern = "40 55 41 57 48 83 EC ?? 48 83 B9";
 
-    /// <summary>Where each batched handler's states and indexes start in its message (BossMod's offsets).</summary>
+    /// <summary>
+    /// Where each batched handler's states and indexes start in its message (BossMod's offsets), and so
+    /// how many it holds: the high halves run from 2 to the low ones, two bytes each (4, 8 and 12).
+    /// </summary>
     private static readonly (byte Low, byte Index)[] BatchedLayout = { (10, 18), (18, 34), (26, 50) };
 
     private readonly List<Hook<BatchedMapEffects>> batched = new();
@@ -91,10 +100,11 @@ public sealed unsafe class GameHooks : IDisposable
                 {
                     var layout = BatchedLayout[i];
                     Hook<BatchedMapEffects>? hook = null;
-                    hook = Services.GameInterop.HookFromAddress<BatchedMapEffects>(found[i], (director, packet) =>
+                    hook = Services.GameInterop.HookFromAddress<BatchedMapEffects>(found[i], (a1, a2, a3, a4) =>
                     {
-                        hook!.Original(director, packet);
-                        OnBatchedMapEffects(packet, layout.Low, layout.Index);
+                        var result = hook!.Original(a1, a2, a3, a4);
+                        if (recorder.Listening) OnBatchedMapEffects((byte*)a2, layout.Low, layout.Index);
+                        return result;
                     });
                     batched.Add(hook);
                 }
@@ -187,7 +197,9 @@ public sealed unsafe class GameHooks : IDisposable
         try
         {
             if (data == null) return;
-            var count = Math.Min((int)*data, 32);
+            // More than the message holds: not the message this was taken for (the game changed); nothing's read.
+            var count = (int)*data;
+            if (count > (offLow - 2) / 2) return;
             for (var i = 0; i < count; i++)
             {
                 var low = *(ushort*)(data + 2 * i + offLow);

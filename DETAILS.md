@@ -13,16 +13,24 @@ quiet: it never acts in the game.
 
 ## What's recorded (`Game/FightRecorder.cs`, `Game/GameHooks.cs`, `Core/RecordingBuilder.cs`)
 
-A pull starts when combat does in a duty (bound by duty, any of the game's three flags) with
-_Record fights by themselves_ on, and ends when combat has been over for 2 seconds, at once when
-the duty is wiped or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the
-whole party down it waits up to 15 seconds for the game to call the wipe, which it does at the
-fade-out, and calls it a wipe itself after that), when you leave the zone, log out, or press Stop (`/raidplan stop`; it isn't started again until that
-combat ends). A pull shorter than 10 seconds, or with nothing in it, isn't kept (the window says
-so). Pulls are numbered from 1 each time you enter a zone.
+A pull starts when you go into combat in a fight (bound by duty, any of the game's three flags,
+in a Duty Finder duty that isn't a dungeon, guildhest, PvP, quest battle, treasure hunt, deep
+dungeon, Eureka or Bozja: `GameData.IsFight`, by the ContentType sheet's rows 2, 3, 6, 7, 9, 21,
+26, 29; _In every duty_ in Settings records those too) with _Record fights by themselves_ on.
+It goes on while you or anyone in your party is in combat (you can be down while they fight on:
+still the same pull), and ends when that's been over for 2 seconds, at once when the duty is wiped
+or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the whole party down it
+waits up to 15 seconds for the game to call the wipe, which it does at the fade-out, and calls it a
+wipe itself after that), when you leave the zone, log out, or press Stop (`/raidplan stop`; it
+isn't started again until that combat ends). A pull that ended on its own without the game saying
+how is held 10 seconds before it's saved: the game's "duty complete" comes a moment after the
+kill's combat ends, and then it's a clear. A pull shorter than 10 seconds, or with no mechanic in
+it (a named enemy cast, or a hit that isn't an auto-attack: a trash pack that only swung at the
+tank isn't), isn't kept (the window says so). Pulls are numbered from 1 each time you enter a zone.
 
-Unloading the plugin mid-pull (an update, a reload) keeps what was recorded. A frame that can't be
-read is skipped (logged at most every 10 seconds) and never stops the pull from ending.
+Unloading the plugin mid-pull (an update, a reload), or while one is held, keeps what was
+recorded; the hooks are let go of first. A frame that can't be read is skipped (logged at most
+every 10 seconds) and never stops the pull from ending.
 
 Every frame while it goes (on the framework thread):
 
@@ -49,13 +57,18 @@ each Dalamud release; each detour calls the game's own function first and change
   number: the state in the low half, the second half above it, as ACT logs and BossMod's modules
   compare). The game also sends several at once through three handlers FFXIVClientStructs doesn't
   name; they're found by BossMod's byte pattern (`40 55 41 57 48 83 EC ?? 48 83 B9`, three
-  matches) and read with its offsets. That's the plugin's only byte pattern: if it stops matching
-  after a patch, only batched arena changes are missed (Dalamud's log says so).
+  matches) and read with its offsets (4, 8 and 12 effects a message). That's the plugin's only
+  byte pattern: if it stops matching after a patch, only batched arena changes are missed
+  (Dalamud's log says so). Their hooks take four plain arguments and a result and hand them all on
+  untouched, so the game's call is never changed even if a patch changes what the function takes;
+  the message is read only while a pull is recorded, and not at all when its count is more than
+  the message holds.
 
 A hook that can't be made (the game changed under the plugin) is left out, the rest still
 records, and Settings → Recording says what's missing.
 
-Enemies are every combatant battle NPC seen. When the pull ends they're sorted: the targetable
+Enemies are every combatant battle NPC seen (a hit from one not seen yet counts only if it's a
+combatant or a part of one with no owner: pets and summons are the party's own). When the pull ends they're sorted: the targetable
 ones with the most HP (and any with half as much or more) are bosses, the other targetable ones
 adds, and those never targetable helpers (only their attacks are kept, not where they stood).
 The party is the party list (just you alone), each given a spot from their job's role
@@ -66,8 +79,8 @@ P9, P10…
 Each action's data is looked up once from the game's Action sheet (`Game/GameData.cs`): name,
 cast type, reach, width, floor marker path and cast time, and kept in the recording.
 
-At most 20,000 events and 4,800 frames are kept (a very long pull still makes a file the site
-takes, about 2 MB).
+At most 20,000 events and 4,800 frames are kept. A typical 20-minute pull is about 1.4 MB; one
+at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
 
 ## The file (`Core/Recording.cs`)
 
@@ -84,9 +97,23 @@ one back; the tests check a pull goes through its file unchanged.
 ## Kept pulls (`Core/RecordingStore.cs`)
 
 In the plugin's config folder, `recordings/`, a file each (named for when, the duty and the
-pull), and `index.json` listing them (so the window opens without reading every file; made again
-from the files when it's missing). Writes go to a temporary file first. Past _Keep the last_ the
-oldest go. A sent pull remembers its id on the site.
+pull), `index.json` listing them (so the window opens without reading every file; made again
+from the files when it's missing or can't be read), and `marks.json`, what can't be made again
+from the files: each sent pull's id on the site, and the files that couldn't be deleted yet (held
+open by something else: tried again at the next load, never listed again). Every write goes to a
+temporary file, flushed to the disk, then put in place, so a crash or a power cut never leaves
+half a file. A temporary file found at the load is put in place when it's a whole recording and
+its own file is missing or empty (a crash between the flush and the move), else deleted. Names in
+the index and the marks count only as plain file names ending `.raidrec.json` (never a folder, a
+drive or the index), and unloading waits a few seconds for pulls still being written. A file that can't be read (not a
+recording, a duplicate key, a value of the wrong kind) is left out of the list, never the list
+itself, and so is an index entry.
+
+Past _Keep the last_, as each new pull is kept, the oldest sent one the site still has goes first
+(the site keeps a person's newest 30 sends, so a sent pull older than those counts as unsent here),
+and only then the oldest of the rest. Lowering the number in Settings deletes nothing
+then and there. The window reads the list without waiting: the store hands out a copy made at
+each change, and a pull's file is written outside its lock.
 
 ## Sending (`Core/SiteLink.cs`, `UI/Views/Send.cs`)
 
@@ -94,9 +121,18 @@ As Housing Studio's plugin sends a house: the token from the site (`rpp_` and 43
 in Settings → Account, kept masked, never logged), and a POST to the site's database function
 `rp_plugin_send` with the site's publishable key, the token in the body. Its answer is the pull's
 id there (the window then offers _Open it_, `/raid-planner?from-game=<id>`), or a refusal in the
-site's own words with a hint: `token` (link again), `recording`, `size`, `off`, `rate`. Pulls
-over 3 MB aren't sent (save them as a file). The send reads the file and posts from a worker; it
-waits 40 seconds at most.
+site's own words with a hint: `token` (link again), `recording`, `size`, `off`, `rate`, `full`;
+any other message (the database's own) isn't shown, only a word on what happened.
+
+The site takes 3 MB, counted as the database writes the JSON out (`SiteLink.ServerSize`: a space
+after every colon and comma, about a sixth more than the file). A pull bigger than that is sent
+with its places kept less often (every second, then every two, then four), then the enemies'
+places only, then none, and the window says it was thinned; the file itself is left whole. Each
+send carries the pull's own id (`p_client_id`, from its file and when it was recorded), so a send
+that timed out after it arrived, sent again, is kept once; a site that doesn't take the id yet
+gets the send again without it. The send reads the file and posts from a worker; it waits half a
+minute and a quarter more for each MB, and stops when the plugin unloads (the list isn't touched
+after).
 
 ## The window (`UI/`)
 
@@ -151,6 +187,25 @@ docs/       PUBLISHING.md
   where it can (stack, spread, tankbuster…).
 
 ## Release notes
+
+### 0.1.1
+
+- Only fights are recorded by themselves now: trials, raids, ultimates and criterion dungeons.
+  Dungeons and field operations are left out unless you turn on _In every duty_, so trash packs
+  can't push out the pulls you keep. A pull of only auto-attacks isn't kept either.
+- Unsent pulls are no longer deleted while a sent one could go instead, and lowering _Keep the
+  last_ deletes nothing on the spot.
+- Going down while the party fights on no longer splits the pull in two.
+- A kill whose "duty complete" came a moment late is now saved as a clear.
+- Pets' and summons' actions are no longer recorded as the boss's.
+- Long pulls that were too big to send are now sent with fewer positions.
+- Sending the same pull twice after a timeout keeps it once on the site.
+- One unreadable file no longer empties the list, and sent marks survive a lost index.
+- The window no longer stalls while a pull is saved, draws only the timeline rows in view, and
+  sets the server info bar only when it changes.
+- Smaller fixes: the question box no longer outlives the window or takes focus from other
+  windows, a send stops when the plugin unloads, and a failing info bar no longer turns its
+  setting off for good.
 
 ### 0.1.0
 

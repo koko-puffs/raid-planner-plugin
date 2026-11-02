@@ -42,27 +42,34 @@ public static class Timeline
         var tanks = new HashSet<int>(r.Party.Where(p => p.Role == "tank").Select(p => p.Id));
         var partySize = Math.Max(1, r.Party.Count);
         var casts = r.Events.OfType<CastEvent>().Where(c => !partyIds.Contains(c.Source)).ToList();
-        var hits = r.Events.OfType<HitEvent>().Where(h => !partyIds.Contains(h.Source)).ToList();
+        // Each action's hits and casts' ends, in time order, so finding the ones near a moment is a
+        // look-up, not a pass over the whole pull (a long pull has thousands of each).
+        var hitsOf = r.Events.OfType<HitEvent>().Where(h => !partyIds.Contains(h.Source))
+            .GroupBy(h => h.Action).ToDictionary(g => g.Key, g => g.OrderBy(h => h.T).ToList());
+        var castEndsOf = casts.GroupBy(c => c.Action)
+            .ToDictionary(g => g.Key, g => g.Select(c => c.T + c.Duration).OrderBy(t => t).ToList());
 
         // Moments: (time it goes off, action, kind).
         var moments = new List<(double T, uint Action, MechanicKind Kind)>();
         foreach (var c in casts)
         {
             if (!r.Actions.TryGetValue(c.Action, out var info) || !Named(info)) continue;
-            var landed = hits.Where(h => h.Action == c.Action && Math.Abs(h.T - (c.T + c.Duration)) <= CastSlack).ToList();
-            moments.Add((c.T + c.Duration, c.Action, KindOf(info, c.Target, landed, tanks, partySize)));
+            var end = c.T + c.Duration;
+            var landed = hitsOf.TryGetValue(c.Action, out var own) ? Between(own, end - CastSlack, end + CastSlack) : new List<HitEvent>();
+            moments.Add((end, c.Action, KindOf(info, c.Target, landed, tanks, partySize)));
         }
-        foreach (var group in hits.GroupBy(h => h.Action))
+        foreach (var (action, group) in hitsOf)
         {
-            if (!r.Actions.TryGetValue(group.Key, out var info) || !Named(info)) continue;
+            if (!r.Actions.TryGetValue(action, out var info) || !Named(info)) continue;
+            castEndsOf.TryGetValue(action, out var ends);
             foreach (var h in group)
             {
                 // A cast's own hit is already its moment.
-                if (casts.Any(c => c.Action == h.Action && Math.Abs(h.T - (c.T + c.Duration)) <= CastSlack)) continue;
+                if (ends != null && AnyBetween(ends, h.T - CastSlack, h.T + CastSlack)) continue;
                 // A single-target hit with no cast and no shape: an auto-attack, or near enough.
                 if (info.CastType <= 1 && h.Targets.Count <= 1 && !(h.Targets.Count == 1 && tanks.Contains(h.Targets[0]) && info.Cast > 0)) continue;
-                var together = group.Where(x => Math.Abs(x.T - h.T) <= 0.3).ToList();
-                moments.Add((h.T, h.Action, KindOf(info, 0, together, tanks, partySize)));
+                var together = Between(group, h.T - 0.3, h.T + 0.3);
+                moments.Add((h.T, action, KindOf(info, 0, together, tanks, partySize)));
             }
         }
 
@@ -86,6 +93,33 @@ public static class Timeline
             entries.Add(new TimelineEntry(t, name, 1, new[] { kind }));
         }
         return entries;
+    }
+
+    /// <summary>The hits (in time order) from <paramref name="lo"/> to <paramref name="hi"/>, both included.</summary>
+    private static List<HitEvent> Between(List<HitEvent> sorted, double lo, double hi)
+    {
+        var list = new List<HitEvent>();
+        for (var i = First(sorted.Count, i => sorted[i].T >= lo); i < sorted.Count && sorted[i].T <= hi; i++) list.Add(sorted[i]);
+        return list;
+    }
+
+    private static bool AnyBetween(List<double> sorted, double lo, double hi)
+    {
+        var i = First(sorted.Count, i => sorted[i] >= lo);
+        return i < sorted.Count && sorted[i] <= hi;
+    }
+
+    /// <summary>The first index from 0 to <paramref name="count"/> where <paramref name="at"/> holds (it holds for all after).</summary>
+    private static int First(int count, Func<int, bool> at)
+    {
+        int lo = 0, hi = count;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) >>> 1;
+            if (at(mid)) hi = mid;
+            else lo = mid + 1;
+        }
+        return lo;
     }
 
     private static bool Named(ActionInfo info) =>

@@ -212,11 +212,53 @@ public class RecordingTests
     [Fact]
     public void Too_short_isnt_worth_keeping()
     {
-        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", _ => null);
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", id => Data.TryGetValue(id, out var a) ? a : null);
         Assert.False(b.Worthwhile(30));
-        b.Cast(1, 101, 5, 1, 0, 0, 0, 0, null, null);
+        b.Cast(1, 101, 100, 1, 0, 0, 0, 0, null, null);
         Assert.False(b.Worthwhile(5));
         Assert.True(b.Worthwhile(30));
+    }
+
+    [Fact]
+    public void A_pull_of_only_auto_attacks_isnt_kept()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", id => Data.TryGetValue(id, out var a) ? a : null);
+        b.SetParty(new[] { new Partier(11, "PLD", 1) });
+        var mob = b.Actor(900, "Trash", 1, 1);
+        for (var t = 1; t < 15; t += 3) b.Hit(t, mob, 500, 0, 0, 0, 0, 0, new[] { 1 });
+        Assert.False(b.Worthwhile(15));
+    }
+
+    [Fact]
+    public void Numbers_that_arent_numbers_are_written_as_0()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", id => Data.TryGetValue(id, out var a) ? a : null);
+        var boss = b.Actor(900, "Boss", float.NaN, 1);
+        b.Cast(1, boss, 100, 5, float.PositiveInfinity, float.NaN, float.NegativeInfinity, 0, float.NaN, 3);
+        b.Positions(0, new Dictionary<int, (float, float, float)> { [boss] = (float.NaN, 1, 2) });
+        var json = b.Finish(double.PositiveInfinity, Outcome.Wipe).ToJson();
+        var back = Recording.Parse(json);
+        Assert.Equal(0, back.Events.OfType<CastEvent>().Single().X);
+    }
+
+    [Fact]
+    public void Parse_says_FormatException_for_a_duplicate_key()
+    {
+        var json = Sample().ToJson();
+        var bad = "{\"format\":\"x\"," + json[1..];
+        Assert.Throws<FormatException>(() => Recording.Parse(bad));
+    }
+
+    [Fact]
+    public void A_huge_enemy_is_still_the_boss()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", _ => null);
+        var big = b.Actor(900, "Big", 5, 1);
+        var bigger = b.Actor(901, "Bigger", 5, 2);
+        b.SeenTargetable(big, 2_900_000_000);
+        b.SeenTargetable(bigger, 3_000_000_000);
+        var r = b.Finish(30, Outcome.Wipe);
+        Assert.All(r.Actors, a => Assert.Equal(ActorKind.Boss, a.Kind));
     }
 
     [Fact]
@@ -322,6 +364,56 @@ public class StoreTests : IDisposable
     }
 
     [Fact]
+    public void Unsent_pulls_outlast_sent_ones()
+    {
+        var store = new RecordingStore(folder) { Keep = 2 };
+        store.Load();
+        var first = store.Save(RecordingTests.Sample());
+        var sent = store.Save(RecordingTests.Sample());
+        store.MarkSent(sent, "6f1c9a52-8a43-4c4e-9d55-9a1f5c3b2a10", DateTimeOffset.UtcNow);
+        store.Save(RecordingTests.Sample());
+        Assert.Equal(2, store.All.Count);
+        Assert.True(store.All.Any(i => i.File == first.File));
+        Assert.False(store.All.Any(i => i.File == sent.File));
+    }
+
+    [Fact]
+    public void One_bad_file_doesnt_empty_the_list()
+    {
+        var store = new RecordingStore(folder);
+        store.Load();
+        store.Save(RecordingTests.Sample());
+        File.Delete(Path.Combine(folder, RecordingStore.IndexFile));
+        File.WriteAllText(Path.Combine(folder, "dup" + Words.Extension), "{\"format\":\"a\",\"format\":\"b\"}");
+        var again = new RecordingStore(folder);
+        again.Load();
+        Assert.Single(again.All);
+    }
+
+    [Fact]
+    public void A_bad_index_entry_costs_only_itself()
+    {
+        var store = new RecordingStore(folder);
+        store.Load();
+        var info = store.Save(RecordingTests.Sample());
+        var list = RecordingStore.ReadIndex($"[{{\"file\":5}},{{\"file\":\"{info.File}\",\"pull\":3.5}},{{\"file\":\"{info.File}\",\"pull\":3}}]");
+        Assert.Single(list);
+    }
+
+    [Fact]
+    public void Sent_marks_outlive_a_lost_index()
+    {
+        var store = new RecordingStore(folder);
+        store.Load();
+        var info = store.Save(RecordingTests.Sample());
+        store.MarkSent(info, "6f1c9a52-8a43-4c4e-9d55-9a1f5c3b2a10", DateTimeOffset.UtcNow);
+        File.Delete(Path.Combine(folder, RecordingStore.IndexFile));
+        var again = new RecordingStore(folder);
+        again.Load();
+        Assert.Equal("6f1c9a52-8a43-4c4e-9d55-9a1f5c3b2a10", again.All[0].SentId);
+    }
+
+    [Fact]
     public void Rebuilds_a_lost_index_from_the_files()
     {
         var store = new RecordingStore(folder);
@@ -371,6 +463,48 @@ public class SiteLinkTests
         var db = SiteLink.Read(HttpStatusCode.NotFound, "{\"message\":\"Could not find the function public.rp_plugin_send\"}");
         Assert.DoesNotContain("function", db.Why);
         Assert.Contains("busy", SiteLink.Read((HttpStatusCode)429, null).Why);
+    }
+
+    [Fact]
+    public void Only_the_sites_own_refusals_are_shown()
+    {
+        var raw = SiteLink.Read(HttpStatusCode.BadRequest, "{\"message\":\"canceling statement due to statement timeout\"}");
+        Assert.DoesNotContain("statement", raw.Why);
+        var full = SiteLink.Read(HttpStatusCode.BadRequest, "{\"message\":\"Your Raid Planner is full.\",\"hint\":\"full\"}");
+        Assert.Equal("Your Raid Planner is full.", full.Why);
+    }
+
+    [Fact]
+    public void Size_is_counted_as_the_database_counts_it()
+    {
+        Assert.Equal("{\"a\": 1, \"b\": [1, 2]}".Length, SiteLink.ServerSize("{\"a\":1,\"b\":[1,2]}"));
+        Assert.Equal("{\"a\": \"x:,\\\"y\"}".Length, SiteLink.ServerSize("{\"a\":\"x:,\\\"y\"}"));
+    }
+
+    [Fact]
+    public void A_pull_too_big_whole_is_sent_thinned()
+    {
+        var r = RecordingTests.Sample();
+        var frame = r.Frames[0];
+        var many = Enumerable.Range(0, 24000).Select(i => frame with { T = i * 0.5 }).ToList();
+        var big = r.WithFrames(many, true).ToJson();
+        Assert.True(SiteLink.ServerSize(big) > SiteLink.MaxBytes);
+        var fit = SiteLink.Fit(big);
+        Assert.NotNull(fit);
+        Assert.True(fit!.Value.Thinned);
+        Assert.True(SiteLink.ServerSize(fit.Value.Json) <= SiteLink.MaxBytes);
+        Assert.Equal(r.Events.Count, Recording.Parse(fit.Value.Json).Events.Count);
+        var small = r.ToJson();
+        Assert.False(SiteLink.Fit(small)!.Value.Thinned);
+    }
+
+    [Fact]
+    public void A_pulls_own_id_is_the_same_each_time()
+    {
+        var at = new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero);
+        Assert.Equal(SiteLink.ClientId("a.raidrec.json", at), SiteLink.ClientId("a.raidrec.json", at));
+        Assert.NotEqual(SiteLink.ClientId("a.raidrec.json", at), SiteLink.ClientId("b.raidrec.json", at));
+        Assert.Equal(32, SiteLink.ClientId("a.raidrec.json", at).Length);
     }
 
     [Fact]

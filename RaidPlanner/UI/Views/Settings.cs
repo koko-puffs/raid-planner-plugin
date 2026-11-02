@@ -51,10 +51,9 @@ public sealed partial class MainWindow
         else DrawRecordingTab();
 
         Frame.BeginBottom("settings-bottom");
-        var v = typeof(MainWindow).Assembly.GetName().Version;
         var runs = new[]
         {
-            new Run(v == null ? "Raid Planner · " : $"Raid Planner {v.Major}.{v.Minor}.{v.Build} · ", Face.Sans, 13, Palette.Faint),
+            new Run(VersionLine, Face.Sans, 13, Palette.Faint),
             new Run("What's new", Face.SansMedium, 13, Palette.Light, Link: "news"),
         };
         if (Txt.Para(runs, 19.5f, center: true) == "news") Dalamud.Utility.Util.OpenLink(ReleasesUrl);
@@ -62,14 +61,25 @@ public sealed partial class MainWindow
         Frame.EndBody();
     }
 
+    /// <summary>"Raid Planner 0.1.0 · ", read once (it's a reflection call).</summary>
+    private static readonly string VersionLine = typeof(MainWindow).Assembly.GetName().Version is { } v
+        ? $"Raid Planner {v.Major}.{v.Minor}.{v.Build} · "
+        : "Raid Planner · ";
+
     private void DrawRecordingTab()
     {
         Kit.BeginPanel("##set-recording", 0, 0, 0);
         var i = 0;
-        if (SwitchRow(i++, "##auto", "Record fights by themselves", "In any duty, from the pull until the fight ends", config.AutoRecord,
+        if (SwitchRow(i++, "##auto", "Record fights by themselves", "Trials, raids and ultimates, from the pull until the fight ends", config.AutoRecord,
                 "Each pull is recorded on its own: the bosses' casts and where they land, stacks, spreads, tankbusters, tethers, head markers and waymarks. Off: nothing is recorded."))
         {
             config.AutoRecord = !config.AutoRecord;
+            config.Save();
+        }
+        if (config.AutoRecord && SwitchRow(i++, "##everywhere", "In every duty", "Dungeons and field operations too", config.RecordAllDuties,
+                "Off, only fights are recorded (trials, raids, ultimates, criterion dungeons), so a run of trash packs never pushes out the pulls you want. On, every duty's pulls are."))
+        {
+            config.RecordAllDuties = !config.RecordAllDuties;
             config.Save();
         }
         if (SwitchRow(i++, "##party", "Record where the party stands",
@@ -81,13 +91,14 @@ public sealed partial class MainWindow
             config.Save();
         }
         var keepWords = Words.Count(config.Keep, "pull");
-        var delta = StepperRow(i++, "##keep", "Keep the last", "The oldest go after that", keepWords, config.Keep > 5, config.Keep < 100,
-            "Pulls are kept in the plugin's folder until there are more than this. One you've sent is safe on the site.");
+        var delta = StepperRow(i++, "##keep", "Keep the last", "Past that, the oldest sent ones go first", keepWords, config.Keep > 5, config.Keep < 100,
+            "Pulls are kept in the plugin's folder until there are more than this; then, as each new one is kept, the oldest you've sent goes first (the site keeps your newest 30 sends), and only then the oldest you haven't. Lowering it deletes nothing now.");
         if (delta != 0)
         {
             config.Keep = Math.Clamp(config.Keep + delta * 5, 5, 100);
             config.Save();
-            store.SetKeep(config.Keep);
+            // Nothing is deleted on a click: the next pull kept lets the extra ones go.
+            store.Keep = config.Keep;
         }
         if (SwitchRow(i++, "##bar", "Show it in the server info bar", "“Rec 2:31” while a pull is recorded", config.ShowInBar,
                 "The bar at the top right of the screen shows that a pull is being recorded, and for how long. Click it to open the plugin."))
