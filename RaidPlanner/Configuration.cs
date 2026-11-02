@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Dalamud.Configuration;
 
 namespace RaidPlanner;
@@ -26,6 +27,27 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>"● Rec 2:31" in the server info bar while a pull is recorded.</summary>
     public bool ShowInBar { get; set; } = true;
+
+    /// <summary>Each kept pull is sent to the Raid Planner by itself (when linked).</summary>
+    public bool SendEachPull { get; set; }
+
+    /// <summary>Each kept pull's summary (how far it got, who died to what) goes to the site's progress tracker (when linked).</summary>
+    public bool TrackProgress { get; set; } = true;
+
+    /// <summary>In a duty you have a plan for, its window opens.</summary>
+    public bool ShowPlanInDuties { get; set; } = true;
+
+    /// <summary>A few seconds before each step's mechanic, its name and first note in chat, with a soft sound.</summary>
+    public bool Callouts { get; set; } = true;
+
+    /// <summary>The step the plan window shows is shared with the site (Present can follow it).</summary>
+    public bool ShareStep { get; set; }
+
+    /// <summary>The plan window can't be moved or resized.</summary>
+    public bool PlanWindowLocked { get; set; }
+
+    /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
+    public Dictionary<uint, string> PlanForDuty { get; set; } = new();
 
     /// <summary>The token from the site (Settings → Raid Planner → In-game plugin) that sends pulls to your account. Never logged.</summary>
     public string SiteToken { get; set; } = string.Empty;

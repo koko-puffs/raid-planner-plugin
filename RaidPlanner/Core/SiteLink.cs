@@ -156,9 +156,6 @@ public static class SiteLink
         return body.ToJsonString();
     }
 
-    /// <summary>The refusals the site words for players (its hints); any other message is the database's own, not shown.</summary>
-    private static readonly string[] Hints = { "off", "rate", "size", "recording", "full" };
-
     /// <summary>
     /// What the site answered, in words: the new pull's id (a quoted id), or its refusal's message
     /// (the database's own words, written to be shown) with what to do about a refused token.
@@ -192,7 +189,7 @@ public static class SiteLink
         }
         if (hint == "token")
             return new SendResult(null, (message ?? "The site doesn't know this token.") + " Link again in Settings with a new one.", true);
-        if (hint != null && message != null && Array.IndexOf(Hints, hint) >= 0 && message.Length <= 300)
+        if (SiteRpc.Worded(hint) && message != null && message.Length <= 300)
             return new SendResult(null, message);
         return code switch
         {
@@ -205,18 +202,9 @@ public static class SiteLink
         };
     }
 
-    private static async Task<(HttpStatusCode Status, string Text)> PostAsync(HttpClient http, string body, CancellationToken cancel)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{SupabaseUrl}/rest/v1/rpc/rp_plugin_send")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Add("apikey", PublishableKey);
-        request.Headers.Accept.ParseAdd("application/json");
-        using var response = await http.SendAsync(request, cancel).ConfigureAwait(false);
-        var text = await response.Content.ReadAsStringAsync(cancel).ConfigureAwait(false);
-        return (response.StatusCode, text);
-    }
+    /// <summary>Posts through the plugin's one way of calling the site (<see cref="SiteRpc"/>).</summary>
+    private static Task<(HttpStatusCode Status, string Text)> PostAsync(HttpClient http, string body, CancellationToken cancel) =>
+        SiteRpc.PostAsync(http, "rp_plugin_send", body, cancel);
 
     private static string? Text(JsonNode? n) =>
         n is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
@@ -256,6 +244,10 @@ public static class SiteLink
             return new SendResult(null, "The site didn't answer in time. Look in the Raid Planner before sending it again.");
         }
         catch (OperationCanceledException)
+        {
+            return new SendResult(null, "Stopped.");
+        }
+        catch (ObjectDisposedException)
         {
             return new SendResult(null, "Stopped.");
         }

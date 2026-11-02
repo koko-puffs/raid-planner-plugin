@@ -30,13 +30,25 @@ public sealed partial class MainWindow
 
     private bool Sending(RecordingInfo info) => sends.TryGetValue(info.File, out var s) && s.Result == null;
 
+    /// <summary>
+    /// Sends a kept pull to your Raid Planner (Send each pull, /raidplan send last); <paramref name="done"/>
+    /// hears how it went, on the framework thread. False when it can't go now (not linked, already going).
+    /// </summary>
+    public bool SendPull(RecordingInfo info, Action<SendResult>? done = null)
+    {
+        if (!Linked || Sending(info)) return false;
+        Send(info, done);
+        return true;
+    }
+
     /// <summary>Sends a kept pull to your Raid Planner (it waits there under From the game).</summary>
-    private void Send(RecordingInfo info)
+    private void Send(RecordingInfo info, Action<SendResult>? done = null)
     {
         if (!Linked || Sending(info)) return;
         var token = config.SiteToken;
         var file = info.File;
-        var cancel = closing.Token;
+        var http = site.Http;
+        var cancel = site.Closing;
         sends[file] = new SendState(null);
         _ = Task.Run(async () =>
         {
@@ -66,7 +78,18 @@ public sealed partial class MainWindow
             sends[file] = new SendState(result);
             try
             {
-                _ = Services.Framework.RunOnFrameworkThread(() => Notify(result.Sent ? "Sent to your Raid Planner" : "Couldn't send it"));
+                _ = Services.Framework.RunOnFrameworkThread(() =>
+                {
+                    Notify(result.Sent ? "Sent to your Raid Planner" : "Couldn't send it");
+                    try
+                    {
+                        done?.Invoke(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        Services.Log.Error(ex, "Raid Planner couldn't say how the send went");
+                    }
+                });
             }
             catch (Exception)
             {

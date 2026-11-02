@@ -17,9 +17,15 @@ namespace RaidPlanner.Game;
 /// Records the fights you're in. In a duty, a pull starts when combat does and ends when it's been
 /// over for a moment (or the duty is wiped, completed or left). While it goes, every frame: each
 /// enemy's cast as it begins (from the cast bar the game keeps for it), tethers (from each
-/// character's own), the waymarks once a second, and where everyone is twice a second; the hits
-/// and head markers come from <see cref="GameHooks"/>. At the end, a pull worth keeping (long
+/// character's own), the statuses enemies put on the party, deaths, enemies going untargetable and
+/// back, the waymarks once a second, and where everyone is twice a second; the hits and head
+/// markers come from <see cref="GameHooks"/>. The plan window follows a pull through
+/// <see cref="PullStarted"/>, <see cref="CastBegan"/>, <see cref="HitLanded"/> and <see cref="PullEnded"/>. At the end, a pull worth keeping (long
 /// enough, something happened) is written to the store on a worker thread.
+///
+/// With recording off (or a duty it doesn't record), a pull is still followed when the plan window
+/// shows a plan for the duty (<see cref="FollowWanted"/>): the same pull, hooks and events, but
+/// follow-only, so it's never kept, sent or summed up, and the window and the bar don't show it.
 ///
 /// Everything here runs on the game's framework thread, the hooks' detours too, so nothing is shared
 /// with another thread but the finished recording.
@@ -47,6 +53,15 @@ public sealed unsafe class FightRecorder : IDisposable
     private int pullInZone;
     private bool stopAsked;
     private DateTime sampleFailedAt;
+
+    /// <summary>The pull going on is only followed (for the plan window), not recorded.</summary>
+    private bool followOnly;
+
+    /// <summary>In combat last frame: a pull is only followed from the frame combat begins (never mid-fight, from 0).</summary>
+    private bool wasInCombat;
+
+    /// <summary>Unloaded: nothing heard after this is acted on.</summary>
+    private volatile bool disposed;
 
     /// <summary>The id the game gives objects that exist only on your screen: never anyone in the fight.</summary>
     private const uint InvalidId = 0xE0000000;
@@ -85,16 +100,64 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>Why hits or head markers can't be read (the game changed under the plugin), or null.</summary>
     public string? HookProblem => hooks.Problem;
 
-    /// <summary>The pull being recorded, or null.</summary>
-    public RecordingBuilder? Current => current;
+    /// <summary>The pull being recorded, or null (a pull only followed isn't).</summary>
+    public RecordingBuilder? Current => followOnly ? null : current;
 
-    public bool Recording => current != null;
+    /// <summary>A pull is being recorded.</summary>
+    public bool Recording => current != null && !followOnly;
+
+    /// <summary>A pull is going on, recorded or only followed: the plan window follows either.</summary>
+    public bool InPull => current != null;
+
+    /// <summary>
+    /// Is a pull wanted followed though it won't be recorded (set by the plugin: the plan window
+    /// shows a plan for this duty)? Asked as combat begins.
+    /// </summary>
+    public Func<bool>? FollowWanted { get; set; }
 
     /// <summary>Seconds since the pull began.</summary>
     public double Elapsed => clock.Elapsed.TotalSeconds;
 
     /// <summary>A kept pull (on the framework thread, once it's written).</summary>
     public event Action<RecordingInfo>? Kept;
+
+    /// <summary>A kept pull's summary for the progress tracker (<see cref="PullSummary"/>, as JSON), just after <see cref="Kept"/>.</summary>
+    public event Action<RecordingInfo, string>? Summarised;
+
+    /// <summary>A pull began (on the framework thread, as every event here).</summary>
+    public event Action? PullStarted;
+
+    /// <summary>The pull ended.</summary>
+    public event Action? PullEnded;
+
+    /// <summary>An enemy's cast began: the action, seconds into the pull, and seconds until it goes off. Called once per cast.</summary>
+    public event Action<uint, double, double>? CastBegan;
+
+    /// <summary>An enemy's action landed: the action, seconds into the pull.</summary>
+    public event Action<uint, double>? HitLanded;
+
+    private DateTime listenerFailedAt;
+
+    /// <summary>A listener that threw: logged now and then, never thrown back into the game or the recording.</summary>
+    private void ListenerFailed(Exception ex)
+    {
+        if (DateTime.UtcNow - listenerFailedAt < TimeSpan.FromSeconds(10)) return;
+        listenerFailedAt = DateTime.UtcNow;
+        Services.Log.Error(ex, "Raid Planner's plan couldn't follow the pull");
+    }
+
+    private void Tell(Action? listeners)
+    {
+        if (listeners == null) return;
+        try
+        {
+            listeners();
+        }
+        catch (Exception ex)
+        {
+            ListenerFailed(ex);
+        }
+    }
 
     /// <summary>What became of the last pull that wasn't kept, for the window ("Too short to keep"), with when.</summary>
     public (string Why, DateTime At)? NotKept { get; private set; }
@@ -105,12 +168,21 @@ public sealed unsafe class FightRecorder : IDisposable
     private static bool InDuty =>
         Services.Condition[ConditionFlag.BoundByDuty] || Services.Condition[ConditionFlag.BoundByDuty56] || Services.Condition[ConditionFlag.BoundByDuty95];
 
-    /// <summary>Ends the pull now and keeps it (the window's Stop, /raidplan stop).</summary>
-    public void Stop() => stopAsked = true;
+    /// <summary>Ends the pull being recorded now and keeps it (the window's Stop, /raidplan stop).</summary>
+    public void Stop()
+    {
+        if (Recording) stopAsked = true;
+    }
 
-    private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Said(Outcome.Wipe));
+    private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() =>
+    {
+        if (!disposed) Said(Outcome.Wipe);
+    });
 
-    private void OnCompleted(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Said(Outcome.Clear));
+    private void OnCompleted(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() =>
+    {
+        if (!disposed) Said(Outcome.Clear);
+    });
 
     /// <summary>A game event's handler: what goes wrong is logged, never thrown back into the game.</summary>
     private static void Guarded(Action action)
@@ -139,6 +211,7 @@ public sealed unsafe class FightRecorder : IDisposable
 
     private void OnTerritoryChanged(uint territory) => Guarded(() =>
     {
+        if (disposed) return;
         if (current != null) Finish(outcome ?? Outcome.Ended);
         ReleaseHeld();
         pullInZone = 0;
@@ -171,6 +244,7 @@ public sealed unsafe class FightRecorder : IDisposable
 
     private void OnUpdate(IFramework framework)
     {
+        if (disposed) return;
         try
         {
             Tick();
@@ -192,15 +266,21 @@ public sealed unsafe class FightRecorder : IDisposable
         if (held is { } h && DateTime.UtcNow >= h.Until) ReleaseHeld();
         if (!Services.ClientState.IsLoggedIn || Services.Objects.LocalPlayer == null)
         {
+            wasInCombat = false;
             if (current != null) Finish(outcome ?? Outcome.Ended);
             return;
         }
         var combat = Services.Condition[ConditionFlag.InCombat];
+        var began = combat && !wasInCombat;
+        wasInCombat = combat;
         if (current == null)
         {
             stopAsked = false;
             if (!combat && !FightGoesOn()) waitForCombatToEnd = false;
-            if (config.AutoRecord && combat && !waitForCombatToEnd && RecordsHere()) Start();
+            if (!combat || waitForCombatToEnd) return;
+            if (config.AutoRecord && RecordsHere()) Start(false);
+            // Followed only from the pull: a plan opened (or read) mid-fight waits for the next one.
+            else if (began && InDuty && WantsFollowing()) Start(true);
             return;
         }
         combat = combat || FightGoesOn();
@@ -237,9 +317,29 @@ public sealed unsafe class FightRecorder : IDisposable
         if (!combat && (outcome != null || outOfCombat >= wait)) Finish(outcome ?? (PartyDown() ? Outcome.Wipe : Outcome.Ended));
     }
 
-    private void Start()
+    /// <summary>Would a pull starting here now be recorded (recording on, in a duty it records)?</summary>
+    public bool RecordsThisDuty => config.AutoRecord && RecordsHere();
+
+    /// <summary>Does the plan window want this pull followed (asked once, on the frame combat begins)?</summary>
+    private bool WantsFollowing()
+    {
+        if (FollowWanted is not { } wanted) return false;
+        try
+        {
+            return wanted();
+        }
+        catch (Exception ex)
+        {
+            ListenerFailed(ex);
+            return false;
+        }
+    }
+
+    /// <summary>A pull begins: recorded, or (<paramref name="follow"/>) only followed for the plan window.</summary>
+    private void Start(bool follow)
     {
         ReleaseHeld();
+        followOnly = follow;
         var territory = Services.ClientState.TerritoryType;
         if (territory != pullTerritory)
         {
@@ -248,7 +348,7 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         pullInZone++;
         var duty = data.Duty(territory) ?? new DutyInfo(data.PlaceName(territory), territory, 0);
-        current = new RecordingBuilder(duty, pullInZone, DateTimeOffset.Now, config.RecordParty, version, data.Action);
+        current = new RecordingBuilder(duty, pullInZone, DateTimeOffset.Now, config.RecordParty, version, data.Action, data.Status);
         current.SetParty(Party());
         casting.Clear();
         outcome = null;
@@ -257,8 +357,9 @@ public sealed unsafe class FightRecorder : IDisposable
         stopAsked = false;
         clock.Restart();
         hooks.Enable();
+        Tell(PullStarted);
         Sample(0);
-        Services.Log.Information($"Recording {duty.Name}, pull {pullInZone}");
+        Services.Log.Information(follow ? $"Following {duty.Name}, pull {pullInZone}, for the plan (not recorded)" : $"Recording {duty.Name}, pull {pullInZone}");
     }
 
     /// <summary>Is everyone in the party down (a wipe on its way)?</summary>
@@ -295,13 +396,18 @@ public sealed unsafe class FightRecorder : IDisposable
     private void Finish(Outcome how, bool stopped = false)
     {
         var b = current;
+        var follow = followOnly;
         current = null;
+        followOnly = false;
         hooks.Disable();
         if (b == null) return;
+        Tell(PullEnded);
         var t = Elapsed;
         clock.Stop();
         casting.Clear();
         outcome = null;
+        // Only followed: let go of, never kept.
+        if (follow) return;
         if (!b.Worthwhile(t))
         {
             NotKept = (t < RecordingBuilder.ShortestKept ? "That pull was too short to keep." : "No mechanics went off in that pull, so it wasn't kept.", DateTime.UtcNow);
@@ -321,6 +427,7 @@ public sealed unsafe class FightRecorder : IDisposable
     private void Keep(RecordingBuilder b, double t, Outcome how)
     {
         var recording = b.Finish(t, how);
+        var phase = b.Phase;
         // Written on a worker (a long pull is a big file); the window hears of it back on the framework thread.
         // Kept track of, so unloading waits for it rather than leaving it half done.
         saving.RemoveAll(x => x.IsCompleted);
@@ -329,12 +436,28 @@ public sealed unsafe class FightRecorder : IDisposable
             try
             {
                 var info = store.Save(recording);
-                Services.Framework.RunOnFrameworkThread(() => Kept?.Invoke(info));
+                string? summary = null;
+                try
+                {
+                    summary = PullSummary.Build(recording, phase).ToJsonString();
+                }
+                catch (Exception ex)
+                {
+                    Services.Log.Warning(ex, "Raid Planner couldn't sum the pull up");
+                }
+                if (disposed) return;
+                Services.Framework.RunOnFrameworkThread(() => Guarded(() =>
+                {
+                    // Unloaded meanwhile: no one's listening any more.
+                    if (disposed) return;
+                    Kept?.Invoke(info);
+                    if (summary != null) Summarised?.Invoke(info, summary);
+                }));
             }
             catch (Exception ex)
             {
                 Services.Log.Error(ex, "Raid Planner couldn't save the pull");
-                Services.Framework.RunOnFrameworkThread(() => NotKept = ("The pull couldn't be saved (see /xllog).", DateTime.UtcNow));
+                if (!disposed) Services.Framework.RunOnFrameworkThread(() => NotKept = ("The pull couldn't be saved (see /xllog).", DateTime.UtcNow));
             }
         }));
     }
@@ -348,17 +471,25 @@ public sealed unsafe class FightRecorder : IDisposable
         var frame = b.WantsFrame(t) ? new Dictionary<int, (float, float, float)>() : null;
         var tethers = tetherBuffer;
         tethers.Clear();
+        b.BeginStatuses();
         foreach (var obj in Services.Objects)
         {
             if (obj == null || !obj.IsValid() || obj.EntityId is 0 or InvalidId) continue;
             var key = (ulong)obj.EntityId;
             int id;
-            if (b.PartyId(key) is { } p) id = p;
+            var member = false;
+            if (b.PartyId(key) is { } p)
+            {
+                id = p;
+                member = true;
+            }
             else if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Combatant)
             {
                 // Its name read only while it's needed (a new enemy, or one still nameless): reading it makes a string.
                 id = b.Actor(key, b.NeedsName(key) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
-                if (npc.IsTargetable && !npc.IsDead) b.SeenTargetable(id, npc.MaxHp);
+                var targetable = npc.IsTargetable && !npc.IsDead;
+                if (targetable) b.SeenTargetable(id, npc.MaxHp);
+                b.Targetable(t, id, targetable);
                 ReadCast(b, t, id, npc);
             }
             else continue;
@@ -374,8 +505,15 @@ public sealed unsafe class FightRecorder : IDisposable
                     var to = b.Who(tether.TargetId.ObjectId);
                     if (to != 0) tethers.Add((id, to, tether.Id));
                 }
+                if (member)
+                {
+                    b.Alive(t, id, chara->CharacterData.Health == 0 && chara->CharacterData.MaxHealth > 0);
+                    if (obj is IBattleChara) ReadStatuses(b, t, id, (BattleChara*)chara);
+                }
             }
         }
+        b.EndStatuses(t);
+        b.EndTargets(t);
         if (frame != null) b.Positions(t, frame);
         b.Tethers(t, tethers);
         if (t >= nextWaymarks)
@@ -404,6 +542,53 @@ public sealed unsafe class FightRecorder : IDisposable
         var aimed = loc.X != 0 || loc.Z != 0;
         b.Cast(Math.Max(0, start), id, cast->ActionId, cast->TotalCastTime, npc.Position.X, npc.Position.Z, cast->Rotation, target,
             aimed ? loc.X : null, aimed ? loc.Z : null);
+        if (CastBegan is { } listeners)
+        {
+            try
+            {
+                listeners(cast->ActionId, t, cast->TotalCastTime - cast->CurrentCastTime);
+            }
+            catch (Exception ex)
+            {
+                ListenerFailed(ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A party member's statuses this frame: each new one put on them by an enemy, a helper or no one
+    /// is recorded (the party's own are only remembered, so they're not looked at again), and those
+    /// gone are recorded as gone. Only a new one's source is looked into.
+    /// </summary>
+    private static void ReadStatuses(RecordingBuilder b, double t, int on, BattleChara* chara)
+    {
+        // The field itself, not the virtual GetStatusManager (never a call through the game's table).
+        var sm = &chara->StatusManager;
+        b.StatusesOf(on);
+        var list = sm->Status;
+        for (var i = 0; i < list.Length; i++)
+        {
+            var id = (uint)list[i].StatusId;
+            if (id == 0 || b.StatusKnown(on, id)) continue;
+            var (keep, source) = StatusSource(b, list[i].SourceObject.ObjectId);
+            b.StatusGained(t, on, id, source, list[i].RemainingTime, keep);
+        }
+    }
+
+    /// <summary>
+    /// Who put a status on: no one (kept, source 0), the party (not kept), an enemy or a helper (kept,
+    /// its number), or another player or a pet (not kept). One gone from the game already is no one.
+    /// </summary>
+    private static (bool Keep, int Source) StatusSource(RecordingBuilder b, uint src)
+    {
+        if (src is 0 or InvalidId) return (true, 0);
+        if (b.IsParty(src)) return (false, 0);
+        if (b.KnownActor(src) is { } known) return (true, known);
+        var obj = Services.Objects.SearchByEntityId(src);
+        if (obj == null) return (true, 0);
+        if (obj is IBattleNpc npc && npc.BattleNpcKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart && npc.OwnerId is 0 or InvalidId)
+            return (true, b.Actor(src, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId));
+        return (false, 0);
     }
 
     private static readonly string[] MarkNames = WaymarksEvent.Names;
@@ -425,6 +610,7 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>An action landed: an enemy's (a party member's own aren't kept).</summary>
     internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, uint action, IReadOnlyList<uint> targetIds)
     {
+        if (disposed) return;
         var b = current;
         if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
         var src = b.KnownActor(casterId);
@@ -448,12 +634,25 @@ public sealed unsafe class FightRecorder : IDisposable
         var targets = new List<int>(targetIds.Count);
         foreach (var tid in targetIds)
             if (b.PartyId(tid) is { } p) targets.Add(p);
-        b.Hit(Elapsed, src.Value, action, x, z, rot, hitX, hitZ, targets);
+        var t = Elapsed;
+        b.Hit(t, src.Value, action, x, z, rot, hitX, hitZ, targets);
+        if (HitLanded is { } listeners)
+        {
+            try
+            {
+                listeners(action, t);
+            }
+            catch (Exception ex)
+            {
+                ListenerFailed(ex);
+            }
+        }
     }
 
     /// <summary>A head marker appeared over someone.</summary>
     internal void OnMarker(uint entityId, uint icon)
     {
+        if (disposed) return;
         var b = current;
         if (b == null) return;
         var on = b.Who(entityId);
@@ -461,13 +660,18 @@ public sealed unsafe class FightRecorder : IDisposable
     }
 
     /// <summary>The arena changed.</summary>
-    internal void OnMapEffect(byte index, uint state) => current?.MapEffect(Elapsed, index, state);
+    internal void OnMapEffect(byte index, uint state)
+    {
+        if (!disposed) current?.MapEffect(Elapsed, index, state);
+    }
 
-    /// <summary>A pull is being recorded (the hooks read nothing otherwise).</summary>
-    internal bool Listening => current != null;
+    /// <summary>A pull is going on, recorded or followed (the hooks read nothing otherwise).</summary>
+    internal bool Listening => current != null && !disposed;
 
     public void Dispose()
     {
+        if (disposed) return;
+        disposed = true;
         try
         {
             // The game's functions are let go of first, whatever happens after.
@@ -486,7 +690,9 @@ public sealed unsafe class FightRecorder : IDisposable
             if (current is { } b)
             {
                 current = null;
-                SaveNow((b, Elapsed));
+                // A pull only followed is never kept.
+                if (!followOnly) SaveNow((b, Elapsed));
+                followOnly = false;
             }
             try
             {

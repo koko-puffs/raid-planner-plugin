@@ -11,6 +11,7 @@ public sealed class GameData
     private readonly Dictionary<uint, DutyInfo?> duties = new();
     private readonly Dictionary<uint, (string Job, byte Role)> jobs = new();
     private readonly Dictionary<uint, bool> fights = new();
+    private readonly Dictionary<uint, StatusInfo?> statuses = new();
 
     /// <summary>
     /// Duty kinds (the ContentType sheet's rows) that aren't one fight to plan: dungeons, guildhests,
@@ -33,6 +34,17 @@ public sealed class GameData
             info = new ActionInfo(row.Name.ExtractText(), row.CastType, row.EffectRange, row.XAxisModifier, omen, row.Cast100ms / 10f);
         }
         actions[id] = info;
+        return info;
+    }
+
+    /// <summary>A status's name and icon, as the game's Status sheet has them; null for one it doesn't have.</summary>
+    public StatusInfo? Status(uint id)
+    {
+        if (statuses.TryGetValue(id, out var known)) return known;
+        StatusInfo? info = null;
+        if (Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Status>().TryGetRow(id, out var row))
+            info = new StatusInfo(row.Name.ExtractText(), row.Icon);
+        statuses[id] = info;
         return info;
     }
 

@@ -20,6 +20,9 @@ Record the fights you're in, then make them into plans on
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
 - **Or saves it as a file** to import on the site yourself (Import, on the planner's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
+- **Shows your plan in the duty.** A small window with the step, its board and its notes, which
+  moves along with the pull by itself. Callouts in chat a few seconds before each mechanic.
+- **Tracks your progress** (once linked): how far each pull got, for the site's progress tracker.
 - **Only watches.** It never acts in the game or sends anything to it.
 
 ## Installing it
@@ -39,16 +42,27 @@ Record the fights you're in, then make them into plans on
 3. On the site: _From the game_ → **Make a plan**. Pick where the party goes (where they stood,
    standard spots, or nowhere), check the arena, choose the steps, and it opens in the editor.
 
+In a duty you've made a plan for, its window opens by itself. Move it where you like and lock it
+there; its list button picks any of your plans.
+
 `/raidplan stop` ends the pull being recorded (and keeps it). `/raidplan settings` opens Settings.
+`/raidplan plan` shows the plan window; `/raidplan next` and `/raidplan prev` move its step.
+`/raidplan send last` sends the newest pull.
 
 ### Settings
 
-- **Record fights by themselves**: on. Off, nothing is recorded.
+- **Record fights by themselves**: on. Off, nothing is recorded (an open plan window still follows
+  the pull, without keeping it).
 - **In every duty**: off. On, dungeons and field operations are recorded too.
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
   working out your own strats.
 - **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.
+- **Send each pull**: off. On, each pull is sent to the Raid Planner by itself.
+- **Track my progress**: on. How far each pull got and who died to what (spots and jobs, no names).
 - **Show it in the server info bar**: on.
+- **Plans**: _Show my plan in duties_ (on), _Callouts_ (on), _Share my step with the site_ (off,
+  so Present can follow), and _Send my party to my roster_, which sends your party's names to your
+  own account, only when you press it (do it in the duty, where the game shows your whole party).
 
 ## Building it
 

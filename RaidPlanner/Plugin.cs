@@ -14,8 +14,9 @@ namespace RaidPlanner;
 
 /// <summary>
 /// Raid Planner: records the fights you're in and sends them to Koko's Raid Planner, where they
-/// become plans. /raidplan opens the window; /raidplan stop ends the pull being recorded;
-/// /raidplan settings opens Settings.
+/// become plans, and shows your plans in the game. /raidplan opens the window; /raidplan stop ends
+/// the pull being recorded; /raidplan settings opens Settings; /raidplan plan shows the plan
+/// window, /raidplan next and prev move its step; /raidplan send last sends the newest pull.
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
@@ -25,9 +26,13 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Configuration config;
     private readonly RecordingStore store;
     private readonly FightRecorder recorder;
+    private readonly SiteSession site;
+    private readonly PlanService plans;
+    private readonly Uploads uploads;
     private readonly Fonts fonts;
     private readonly WindowSystem windows = new("RaidPlanner");
     private readonly MainWindow window;
+    private readonly PlanWindow planWindow;
     private IDtrBarEntry? bar;
 
     /// <summary>The last pull kept, shown in the bar for a moment ("Pull 3 kept").</summary>
@@ -59,16 +64,29 @@ public sealed class Plugin : IDalamudPlugin
                     Services.Log.Error(ex, "Raid Planner couldn't read its recordings");
                 }
             });
-            recorder = new FightRecorder(config, new GameData(), store, version);
+            var data = new GameData();
+            recorder = new FightRecorder(config, data, store, version);
             recorder.Kept += OnKept;
+            site = new SiteSession(() => config.SiteToken);
+            plans = new PlanService(config, data, recorder, site);
+            uploads = new Uploads(config, data, recorder, site);
 
             fonts = new Fonts();
-            window = new MainWindow(config, store, recorder, fonts);
+            window = new MainWindow(config, store, recorder, site, plans, uploads, fonts);
+            planWindow = new PlanWindow(config, plans, fonts);
             windows.AddWindow(window);
+            windows.AddWindow(planWindow);
+            window.TogglePlanWindow = () => planWindow.Toggle();
+            window.PlanWindowOpen = () => planWindow.IsOpen;
+            planWindow.OpenSettings = window.ShowAccount;
+            plans.ShowWindow = open => planWindow.IsOpen = open;
+            // With recording off, a pull is still followed when the plan window shows this duty's plan.
+            recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;
 
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open Raid Planner. /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
+                HelpMessage = "Open Raid Planner. /raidplan plan shows your plan, /raidplan next and /raidplan prev move its step; "
+                    + "/raidplan send last sends the newest pull; /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
             });
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
             Services.PluginInterface.UiBuilder.OpenMainUi += window.ShowMain;
@@ -95,13 +113,58 @@ public sealed class Plugin : IDalamudPlugin
             case "config":
                 window.ShowSettings();
                 break;
+            case "plan":
+                planWindow.Toggle();
+                break;
+            case "next":
+                plans.Move(1);
+                break;
+            case "prev":
+            case "previous":
+                plans.Move(-1);
+                break;
+            case "send last":
+            case "send":
+                SendLast();
+                break;
             default:
                 window.Toggle();
                 break;
         }
     }
 
-    private void OnKept(RecordingInfo info) => justKept = (info, DateTime.UtcNow + TimeSpan.FromSeconds(10));
+    private void OnKept(RecordingInfo info)
+    {
+        justKept = (info, DateTime.UtcNow + TimeSpan.FromSeconds(10));
+        // Send each pull: by itself, quietly (the window says how it went).
+        if (config.SendEachPull && site.Linked) window.SendPull(info, r =>
+        {
+            if (!r.Sent) PlanService.Print($"Couldn't send pull {info.Pull}: {r.Why}");
+        });
+    }
+
+    /// <summary>/raidplan send last: the newest kept pull to the Raid Planner, said in chat.</summary>
+    private void SendLast()
+    {
+        if (!site.Linked)
+        {
+            PlanService.Print("Link your Raid Planner account first: /raidplan settings, then Account.");
+            return;
+        }
+        var all = store.All;
+        if (all.Count == 0)
+        {
+            PlanService.Print("There's no pull to send yet.");
+            return;
+        }
+        var info = all[0];
+        if (!window.SendPull(info, r => PlanService.Print(r.Sent ? $"Sent {info.Name} to your Raid Planner." : $"Couldn't send {info.Name}: {r.Why}")))
+        {
+            PlanService.Print("That pull is on its way already.");
+            return;
+        }
+        PlanService.Print($"Sending {info.Name}…");
+    }
 
     /// <summary>The server info bar: "● Rec 2:31" while a pull is recorded, "Pull 3 kept" for a moment after.</summary>
     private void OnUpdate(IFramework framework)
@@ -164,9 +227,14 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => Services.PluginInterface.UiBuilder.OpenConfigUi -= window.ShowSettings);
         }
         Safely(() => Services.Commands.RemoveHandler(Command));
+        if (recorder != null) Safely(() => recorder.Kept -= OnKept);
         Safely(() => window?.Dispose());
         Safely(() => bar?.Remove());
         Safely(windows.RemoveAllWindows);
+        Safely(() => plans?.Dispose());
+        Safely(() => uploads?.Dispose());
+        // Calls to the site under way stop here; a pull being saved is still waited for below.
+        Safely(() => site?.Dispose());
         Safely(() => recorder?.Dispose());
         Safely(() => fonts?.Dispose());
     }

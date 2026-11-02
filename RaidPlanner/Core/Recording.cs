@@ -53,6 +53,9 @@ public sealed record Actor(int Id, string Name, ActorKind Kind, float Hitbox, ui
 /// </summary>
 public sealed record ActionInfo(string Name, int CastType, float Range, float Width, string Omen, float Cast);
 
+/// <summary>What the game's data says about a status (a buff or debuff): its name and icon number.</summary>
+public sealed record StatusInfo(string Name, uint Icon);
+
 /// <summary>Something that happened, <see cref="T"/> seconds after the pull.</summary>
 public abstract record RecEvent(double T)
 {
@@ -187,6 +190,56 @@ public sealed record MapEffectEvent(double T, byte Index, uint State) : RecEvent
     }
 }
 
+/// <summary>
+/// A status put on a party member (<see cref="On"/>) by an enemy, a helper or no one (<see cref="Source"/>
+/// 0), gained or gone; <see cref="Duration"/> is the time it had left when gained (0 without a timer,
+/// and when it goes). The party's own buffs and debuffs aren't recorded.
+/// </summary>
+public sealed record StatusEvent(double T, int On, uint Id, int Source, float Duration, bool Gain) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "status");
+        w.WriteNumber("on", On);
+        w.WriteNumber("id", Id);
+        w.WriteNumber("src", Source);
+        w.WriteNumber("dur", CastEvent.Round(Math.Max(0, Duration), 2));
+        w.WriteBoolean("gain", Gain);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>A party member died; <see cref="By"/> and <see cref="From"/> are the last enemy action that hit them within 3 seconds before (0 for none).</summary>
+public sealed record DeathEvent(double T, int Who, uint By, int From) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "death");
+        w.WriteNumber("who", Who);
+        w.WriteNumber("by", By);
+        w.WriteNumber("from", From);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>An enemy that has been targetable in the pull became untargetable (<see cref="On"/> false) or targetable again: how phases are told apart.</summary>
+public sealed record TargetEvent(double T, int Actor, bool On) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "target");
+        w.WriteNumber("actor", Actor);
+        w.WriteBoolean("on", On);
+        w.WriteEndObject();
+    }
+}
+
 /// <summary>Where everyone was at one moment: by id, (x, z, facing).</summary>
 public sealed record Frame(double T, IReadOnlyDictionary<int, (float X, float Z, float Rotation)> At);
 
@@ -213,6 +266,10 @@ public sealed class Recording
 
     public List<Actor> Actors { get; } = new();
     public Dictionary<uint, ActionInfo> Actions { get; } = new();
+
+    /// <summary>The statuses the status events name, by id.</summary>
+    public Dictionary<uint, StatusInfo> Statuses { get; } = new();
+
     public List<RecEvent> Events { get; } = new();
     public List<Frame> Frames { get; } = new();
 
@@ -285,6 +342,16 @@ public sealed class Recording
         }
         w.WriteEndObject();
 
+        w.WriteStartObject("statuses");
+        foreach (var (id, st) in Statuses.OrderBy(kv => kv.Key))
+        {
+            w.WriteStartObject(id.ToString(CultureInfo.InvariantCulture));
+            w.WriteString("name", st.Name);
+            w.WriteNumber("icon", st.Icon);
+            w.WriteEndObject();
+        }
+        w.WriteEndObject();
+
         w.WriteStartArray("events");
         foreach (var e in Events.OrderBy(e => e.T)) e.Write(w);
         w.WriteEndArray();
@@ -346,6 +413,7 @@ public sealed class Recording
         r.Party.AddRange(Party);
         r.Actors.AddRange(Actors);
         foreach (var (k, v) in Actions) r.Actions[k] = v;
+        foreach (var (k, v) in Statuses) r.Statuses[k] = v;
         r.Events.AddRange(Events);
         r.Frames.AddRange(frames);
         return r;
@@ -390,6 +458,10 @@ public sealed class Recording
                 if (uint.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && value is JsonObject a)
                     r.Actions[id] = new ActionInfo(Str(a["name"]) ?? "", Int(a["castType"]) ?? 0, (float)(Num(a["range"]) ?? 0), (float)(Num(a["width"]) ?? 0),
                         Str(a["omen"]) ?? "", (float)(Num(a["cast"]) ?? 0));
+        if (o["statuses"] is JsonObject statuses)
+            foreach (var (key, value) in statuses)
+                if (uint.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && value is JsonObject st)
+                    r.Statuses[id] = new StatusInfo(Str(st["name"]) ?? "", UInt(st["icon"]) ?? 0);
         if (o["events"] is JsonArray events)
             foreach (var e in events.OfType<JsonObject>())
                 if (ReadEvent(e) is { } ev) r.Events.Add(ev);
@@ -425,6 +497,13 @@ public sealed class Recording
                 return new TetherEvent(t, Int(e["from"]) ?? 0, Int(e["to"]) ?? 0, (UInt(e["id"]) ?? 0), Str(e["k"]) == "tether");
             case "mapfx":
                 return new MapEffectEvent(t, (byte)Math.Clamp(Int(e["index"]) ?? 0, 0, 255), UInt(e["state"]) ?? 0);
+            case "status":
+                return new StatusEvent(t, Int(e["on"]) ?? 0, UInt(e["id"]) ?? 0, Int(e["src"]) ?? 0, (float)(Num(e["dur"]) ?? 0),
+                    e["gain"] is JsonValue gv && gv.TryGetValue<bool>(out var gain) && gain);
+            case "death":
+                return new DeathEvent(t, Int(e["who"]) ?? 0, UInt(e["by"]) ?? 0, Int(e["from"]) ?? 0);
+            case "target":
+                return new TargetEvent(t, Int(e["actor"]) ?? 0, e["on"] is JsonValue ov && ov.TryGetValue<bool>(out var on) && on);
             case "waymarks":
                 var marks = new Dictionary<string, (float, float)>();
                 if (e["marks"] is JsonObject m)

@@ -104,11 +104,25 @@ public class RecordingTests
         [700] = new ActionInfo("Exaflare", 2, 6, 0, "general_1bf", 0),
     };
 
-    /// <summary>A small made-up pull: a raidwide, a cone, a pair stack, spreads, autos, a buster and an exaflare chain.</summary>
-    public static Recording Sample(bool partyPositions = true)
+    public static readonly Dictionary<uint, StatusInfo> StatusData = new()
+    {
+        [1138] = new StatusInfo("Physical Vulnerability Up", 215532),
+        [1769] = new StatusInfo("Doom", 215502),
+        [1000] = new StatusInfo("Party Buff", 210001),
+    };
+
+    /// <summary>
+    /// A small made-up pull: a raidwide, a cone, a pair stack, spreads, autos, a buster and an exaflare
+    /// chain; the cone's vulnerability on the two it hit, Doom on two, H2 dying to the exaflare, the
+    /// boss going away and coming back (a second phase, with a second raidwide) and R2 dying to it.
+    /// The site's test fixture is this, written by the plugin's own code (rptest dump).
+    /// </summary>
+    public static Recording Sample(bool partyPositions = true) => SampleBuilder(partyPositions, out _);
+
+    public static Recording SampleBuilder(bool partyPositions, out int phase)
     {
         var b = new RecordingBuilder(new DutyInfo("Test Arena (Savage)", 1, 99999), 3, new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero), partyPositions, "0.1.0",
-            id => Data.TryGetValue(id, out var a) ? a : null);
+            id => Data.TryGetValue(id, out var a) ? a : null, id => StatusData.TryGetValue(id, out var st) ? st : null);
         var party = new[] { new Partier(11, "PLD", 1), new Partier(12, "WAR", 1), new Partier(13, "WHM", 4), new Partier(14, "SGE", 4),
             new Partier(15, "DRG", 2), new Partier(16, "NIN", 2), new Partier(17, "BRD", 3), new Partier(18, "BLM", 3) };
         b.SetParty(party);
@@ -137,10 +151,30 @@ public class RecordingTests
         foreach (var i in all) b.Hit(32, helper, 400, 90, 90, 0, 100 + i, 105, new[] { i });
         b.Cast(35, boss, 600, 5, 100, 100, 0, 1, null, null);
         b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 });
-        for (var k = 0; k < 5; k++) b.Hit(45 + k * 1.1, helper, 700, 90, 90, 0, 90 + k * 4, 90, Array.Empty<int>());
+        for (var k = 0; k < 5; k++) b.Hit(45 + k * 1.1, helper, 700, 90, 90, 0, 90 + k * 4, 90, k == 0 ? new[] { 4 } : Array.Empty<int>());
+        b.Cast(51, boss, 100, 5, 100, 100, 0, 0, null, null);
+        b.Hit(56, boss, 100, 100, 100, 0, 100, 100, new[] { 1, 2, 3, 5, 6, 7, 8 });
         b.Tethers(50, new[] { (boss, 2, 84u) });
         b.Tethers(55, Array.Empty<(int, int, uint)>());
         b.MapEffect(44, 0x10, 0x00020001);
+        // Every frame (and at the moments things happen): the party's statuses, who's down, the boss's targetability.
+        var frames = Enumerable.Range(0, 121).Select(i => i * 0.5).Concat(new[] { 16.9, 23, 31, 41, 45.5, 50, 56.2 }).Distinct().OrderBy(x => x);
+        foreach (var t in frames)
+        {
+            b.BeginStatuses();
+            for (var i = 1; i <= 8; i++)
+            {
+                b.StatusesOf(i);
+                if (i == 1 && !b.StatusKnown(1, 1000)) b.StatusGained(t, 1, 1000, 0, 30, keep: false);
+                if ((i == 1 || i == 5) && t >= 16.9 && !b.StatusKnown(i, 1138)) b.StatusGained(t, i, 1138, boss, 30, keep: true);
+                if ((i == 1 || i == 3) && t >= 23 && t < 31 && !b.StatusKnown(i, 1769)) b.StatusGained(t, i, 1769, boss, 8, keep: true);
+                b.Alive(t, i, (i == 4 && t >= 45.5) || (i == 8 && t >= 56.2));
+            }
+            b.EndStatuses(t);
+            b.Targetable(t, boss, t < 41 || t >= 50);
+            b.EndTargets(t);
+        }
+        phase = b.Phase;
         return b.Finish(61, Outcome.Wipe);
     }
 
@@ -285,7 +319,7 @@ public class TimelineTests
         var names = lines.Select(l => l.Name).ToList();
         // Autos ("attack") never show; each cast and hit-only mechanic does, in order.
         Assert.DoesNotContain("attack", names);
-        Assert.Equal(new[] { "Raidwide Roar", "Cleaving Arc", "Pairs", "Spread Out", "Crushing Blow", "Exaflare" }, names);
+        Assert.Equal(new[] { "Raidwide Roar", "Cleaving Arc", "Pairs", "Spread Out", "Crushing Blow", "Exaflare", "Raidwide Roar" }, names);
         Assert.Equal(MechanicKind.Raidwide, lines[0].Kinds[0]);
         Assert.Equal(MechanicKind.Cone, lines[1].Kinds[0]);
         Assert.Equal(MechanicKind.Stack, lines[2].Kinds[0]);
@@ -323,7 +357,7 @@ public class StoreTests : IDisposable
         Assert.EndsWith(Words.Extension, info.File);
         Assert.Single(store.All);
         Assert.Equal("Test Arena (Savage)", store.All[0].Duty);
-        Assert.Equal(6, store.All[0].Mechanics);
+        Assert.Equal(7, store.All[0].Mechanics);
         var back = store.Read(info);
         Assert.Equal(3, back.Pull);
 

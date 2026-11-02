@@ -6,24 +6,29 @@ using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
-/// <summary>Settings' tabs: how pulls are recorded, and the site.</summary>
+/// <summary>Settings' tabs: how pulls are recorded, your plans in the game, and the site.</summary>
 public enum SettingsTab
 {
     Recording,
+    Plans,
     Account,
 }
 
 /// <summary>
 /// Settings, laid out as Housing Studio's plugin lays its own: the back arrow at the top left, the
 /// title, the tabs under it, and a card of rows, each a setting's name, one line under it, and its
-/// control on the right (the longer words are its tooltip). Recording holds the four things worth
-/// choosing; Account links the plugin to the site. The version and What's new at the foot.
+/// control on the right (the longer words are its tooltip). Recording holds how pulls are recorded
+/// and what's sent of them; Plans, your plans in the game; Account links the plugin to the site.
+/// The version and What's new at the foot.
 /// </summary>
 public sealed partial class MainWindow
 {
     private const string ReleasesUrl = "https://github.com/koko-puffs/raid-planner-plugin/releases";
 
-    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Account") };
+    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Plans"), new("Account") };
+
+    /// <summary>How Send my party to my roster went, and when (shown for a while under the card).</summary>
+    private (string Text, bool Ok, DateTime At)? rosterNote;
 
     private SettingsTab settingsTab;
 
@@ -46,9 +51,24 @@ public sealed partial class MainWindow
         settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", SettingsTabs, (int)settingsTab);
         Frame.EndHeader();
 
-        Frame.BeginBody(settingsTab == SettingsTab.Account ? "##settings-account" : "##settings-recording", null, 18, 22);
-        if (settingsTab == SettingsTab.Account) DrawAccountTab();
-        else DrawRecordingTab();
+        Frame.BeginBody(settingsTab switch
+        {
+            SettingsTab.Account => "##settings-account",
+            SettingsTab.Plans => "##settings-plans",
+            _ => "##settings-recording",
+        }, null, 18, 22);
+        switch (settingsTab)
+        {
+            case SettingsTab.Account:
+                DrawAccountTab();
+                break;
+            case SettingsTab.Plans:
+                DrawPlansTab();
+                break;
+            default:
+                DrawRecordingTab();
+                break;
+        }
 
         Frame.BeginBottom("settings-bottom");
         var runs = new[]
@@ -100,6 +120,22 @@ public sealed partial class MainWindow
             // Nothing is deleted on a click: the next pull kept lets the extra ones go.
             store.Keep = config.Keep;
         }
+        if (SwitchRow(i++, "##send-each", "Send each pull", Linked ? "Each kept pull goes to your Raid Planner by itself" : "Link your account first (Account)",
+                config.SendEachPull,
+                "Each pull worth keeping is sent to your Raid Planner as soon as it's kept, so it's waiting under From the game. Off, you send the ones you want.",
+                !Linked))
+        {
+            config.SendEachPull = !config.SendEachPull;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##progress", "Track my progress", Linked ? "How far each pull got, for the site's progress tracker" : "Link your account first (Account)",
+                config.TrackProgress,
+                "After each kept pull, a few numbers go to your account: the duty, how long it lasted, the furthest phase, and who died to what (by spot and job, never names). The site charts your progress from them.",
+                !Linked))
+        {
+            config.TrackProgress = !config.TrackProgress;
+            config.Save();
+        }
         if (SwitchRow(i++, "##bar", "Show it in the server info bar", "“Rec 2:31” while a pull is recorded", config.ShowInBar,
                 "The bar at the top right of the screen shows that a pull is being recorded, and for how long. Click it to open the plugin."))
         {
@@ -114,6 +150,55 @@ public sealed partial class MainWindow
         {
             Kit.Gap(14);
             Txt.Note(problem, Palette.EmberText);
+        }
+    }
+
+    private void DrawPlansTab()
+    {
+        Kit.BeginPanel("##set-plans", 0, 0, 0);
+        var i = 0;
+        if (SwitchRow(i++, "##plan-show", "Show my plan in duties", "Its window opens in a duty you have a plan for", config.ShowPlanInDuties,
+                "In a duty you've made a plan for on the site, its window opens: the step, its board and its notes, moving along with the pull. /raidplan plan shows it anywhere."))
+        {
+            config.ShowPlanInDuties = !config.ShowPlanInDuties;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##plan-callouts", "Callouts", "Each step's notes in chat, a few seconds before", config.Callouts,
+                "A few seconds before each step's mechanic, its name and the first line of its notes are said in chat, with a soft sound. Once a step, each pull."))
+        {
+            config.Callouts = !config.Callouts;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##plan-share", "Share my step with the site", "Present on the site can follow along", config.ShareStep,
+                "Each time the plan window's step changes, the site hears which plan and step, so Present on kokos-tools.com (on your stream, or a second screen) can follow the fight. Only the plan and the step are sent.",
+                !Linked))
+        {
+            config.ShareStep = !config.ShareStep;
+            config.Save();
+        }
+        if (ButtonRow(i++, "##plan-window", "Plan window", plans.Plan is { } p ? p.Name : "Your plan, anywhere on screen",
+                PlanWindowOpen?.Invoke() == true ? "Hide" : "Show", Btn.Glass))
+            TogglePlanWindow?.Invoke();
+        if (ButtonRow(i, "##roster", "Send my party to my roster", "Their names, by spot, to your Raid Planner",
+                uploads.RosterSending ? "Sending…" : "Send", Btn.Glass, !Linked || uploads.RosterSending,
+                Linked ? null : "Link your account first",
+                "Your party's names go to your roster on the site, each in their spot (MT, OT, H1…), so your plans show who stands where. It replaces the roster there. Only when you press this."))
+        {
+            uploads.SendRoster((text, ok) => rosterNote = (text, ok, DateTime.UtcNow));
+        }
+        Kit.EndPanel();
+        Kit.Gap(14);
+        if (rosterNote is { } note && DateTime.UtcNow - note.At < TimeSpan.FromMinutes(1))
+        {
+            Txt.Note(note.Text, note.Ok ? Palette.Success : Palette.Danger);
+            Kit.Gap(8);
+        }
+        Txt.Note("Send my party sends names to your own account only, and only when you press it. Nothing else the plugin sends has names in it.", Palette.Faint);
+        if (!Linked)
+        {
+            Kit.Gap(8);
+            if (Txt.Para(new[] { Run.Note("Your plans come from your Raid Planner account. "), new Run("Link it", Face.SansMedium, 13, Palette.Ink, Link: "link") }) == "link")
+                settingsTab = SettingsTab.Account;
         }
     }
 

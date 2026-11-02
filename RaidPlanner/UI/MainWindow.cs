@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Numerics;
-using System.Threading;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Interface.Windowing;
@@ -31,6 +29,9 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly Configuration config;
     private readonly RecordingStore store;
     private readonly FightRecorder recorder;
+    private readonly SiteSession site;
+    private readonly PlanService plans;
+    private readonly Uploads uploads;
     private readonly Fonts fonts;
     private readonly FileDialogManager dialogs = new();
     private readonly List<Action> later = new();
@@ -39,19 +40,17 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>The pull open on its own screen (by its file).</summary>
     private string? openFile;
 
-    /// <summary>Cancelled when the plugin unloads: a send under way stops, and nothing after it runs.</summary>
-    private readonly CancellationTokenSource closing = new();
-
-    private readonly HttpClient http = new();
-
     private DateTime dialogFailedAt;
 
-    public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, Fonts fonts)
+    public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, PlanService plans, Uploads uploads, Fonts fonts)
         : base("Raid Planner###RaidPlannerMain")
     {
         this.config = config;
         this.store = store;
         this.recorder = recorder;
+        this.site = site;
+        this.plans = plans;
+        this.uploads = uploads;
         this.fonts = fonts;
         Txt.Fonts = fonts;
 
@@ -79,6 +78,16 @@ public sealed partial class MainWindow : Window, IDisposable
         IsOpen = true;
     }
 
+    /// <summary>Opens Settings on Account (the plan window's Link your account).</summary>
+    public void ShowAccount()
+    {
+        Dismiss();
+        settingsFrom = Screen.Home;
+        screen = Screen.Settings;
+        settingsTab = SettingsTab.Account;
+        IsOpen = true;
+    }
+
     /// <summary>Opens a pull's own screen.</summary>
     public void ShowPull(RecordingInfo info)
     {
@@ -94,13 +103,17 @@ public sealed partial class MainWindow : Window, IDisposable
         Dismiss();
     }
 
-    /// <summary>The plugin unloads: a send under way is stopped (it won't mark or say anything after).</summary>
+    /// <summary>The plugin unloads: a send under way is stopped by the site session (it won't mark or say anything after).</summary>
     public void Dispose()
     {
-        closing.Cancel();
-        http.Dispose();
-        closing.Dispose();
+        Dismiss();
     }
+
+    /// <summary>Shows or hides the plan window (set by the plugin).</summary>
+    public Action? TogglePlanWindow { get; set; }
+
+    /// <summary>Is the plan window open (set by the plugin), so its button says Show or Hide.</summary>
+    public Func<bool>? PlanWindowOpen { get; set; }
 
     public override void PreDraw()
     {

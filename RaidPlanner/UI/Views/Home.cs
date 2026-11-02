@@ -24,6 +24,9 @@ public sealed partial class MainWindow
     {
         if (recorder.Current is { } b)
             return ($"Recording · pull {b.Pull} · {Words.Clock(recorder.Elapsed)}", Tone.Live, true);
+        // A pull only followed for the plan (recording was off as it began): it stays that way.
+        if (recorder.InPull)
+            return (recorder.RecordsThisDuty ? "Following your plan · recording starts with the next pull" : "Following your plan · not recorded", Tone.Waiting, false);
         if (!config.AutoRecord) return ("Recording is off", Tone.Neutral, false);
         if (recorder.DutyHere is { } duty) return ($"Ready · records the next pull in {duty.Name}", Tone.Waiting, false);
         return ("Records each pull in a duty by itself", Tone.Neutral, false);
