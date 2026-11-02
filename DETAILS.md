@@ -15,10 +15,14 @@ quiet: it never acts in the game.
 
 A pull starts when combat does in a duty (bound by duty, any of the game's three flags) with
 _Record fights by themselves_ on, and ends when combat has been over for 2 seconds, at once when
-the duty is wiped or completed (then that's its outcome: `wipe`, `clear`; else `ended`), when you
-leave the zone, log out, or press Stop (`/raidplan stop`; it isn't started again until that
+the duty is wiped or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the
+whole party down it waits up to 15 seconds for the game to call the wipe, which it does at the
+fade-out, and calls it a wipe itself after that), when you leave the zone, log out, or press Stop (`/raidplan stop`; it isn't started again until that
 combat ends). A pull shorter than 10 seconds, or with nothing in it, isn't kept (the window says
 so). Pulls are numbered from 1 each time you enter a zone.
+
+Unloading the plugin mid-pull (an update, a reload) keeps what was recorded. A frame that can't be
+read is skipped (logged at most every 10 seconds) and never stops the pull from ending.
 
 Every frame while it goes (on the framework thread):
 
@@ -43,8 +47,10 @@ each Dalamud release; each detour calls the game's own function first and change
   icon number, read after the game has unscrambled it, as BossMod reads it).
 - **`PacketDispatcher.HandleMapEffectPacket`**: the arena changing (its index and state, as one
   number: the state in the low half, the second half above it, as ACT logs and BossMod's modules
-  compare). The game has three more map-effect handlers (several effects at once) that
-  FFXIVClientStructs doesn't name; they aren't read.
+  compare). The game also sends several at once through three handlers FFXIVClientStructs doesn't
+  name; they're found by BossMod's byte pattern (`40 55 41 57 48 83 EC ?? 48 83 B9`, three
+  matches) and read with its offsets. That's the plugin's only byte pattern: if it stops matching
+  after a patch, only batched arena changes are missed (Dalamud's log says so).
 
 A hook that can't be made (the game changed under the plugin) is left out, the rest still
 records, and Settings → Recording says what's missing.
@@ -143,8 +149,6 @@ docs/       PUBLISHING.md
 - Not run in the game yet: everything in `Game/` is compiled against Dalamud 15 but untested.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
-- The game's batched map effects (three handlers FFXIVClientStructs doesn't name) aren't read, so
-  an arena change sent that way is missed.
 
 ## Release notes
 

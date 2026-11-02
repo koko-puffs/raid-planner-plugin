@@ -29,6 +29,9 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>Out of combat this long ends the pull (a raise, a brief gap between phases doesn't).</summary>
     private const double EndAfter = 2.0;
 
+    /// <summary>With everyone down, how long to wait for the game to call it a wipe.</summary>
+    private const double WipeWait = 15.0;
+
     private readonly Configuration config;
     private readonly GameData data;
     private readonly RecordingStore store;
@@ -43,6 +46,10 @@ public sealed unsafe class FightRecorder : IDisposable
     private uint pullTerritory;
     private int pullInZone;
     private bool stopAsked;
+    private DateTime sampleFailedAt;
+
+    /// <summary>The id the game gives objects that exist only on your screen: never anyone in the fight.</summary>
+    private const uint InvalidId = 0xE0000000;
 
     /// <summary>Stopped by hand while the fight went on: not started again until combat is over.</summary>
     private bool waitForCombatToEnd;
@@ -127,7 +134,19 @@ public sealed unsafe class FightRecorder : IDisposable
         }
 
         var t = Elapsed;
-        Sample(t);
+        try
+        {
+            Sample(t);
+        }
+        catch (Exception ex)
+        {
+            // A frame that can't be read is lost, never the end of the pull.
+            if (DateTime.UtcNow - sampleFailedAt > TimeSpan.FromSeconds(10))
+            {
+                Services.Log.Error(ex, "Raid Planner couldn't read this frame");
+                sampleFailedAt = DateTime.UtcNow;
+            }
+        }
         if (stopAsked)
         {
             waitForCombatToEnd = combat;
@@ -140,8 +159,10 @@ public sealed unsafe class FightRecorder : IDisposable
             return;
         }
         outOfCombat += Services.Framework.UpdateDelta.TotalSeconds;
-        // A wipe or a clear ends it once combat is over; else a little after.
-        if (!combat && (outcome != null || outOfCombat >= EndAfter)) Finish(outcome ?? Outcome.Ended);
+        // A wipe or a clear ends it once combat is over; else a little after, or, with the whole
+        // party down, once the game has had time to say it's a wipe (it says so at the fade-out).
+        var wait = outcome == null && PartyDown() ? WipeWait : EndAfter;
+        if (!combat && (outcome != null || outOfCombat >= wait)) Finish(outcome ?? (PartyDown() ? Outcome.Wipe : Outcome.Ended));
     }
 
     private void Start()
@@ -165,6 +186,19 @@ public sealed unsafe class FightRecorder : IDisposable
         hooks.Enable();
         Sample(0);
         Services.Log.Information($"Recording {duty.Name}, pull {pullInZone}");
+    }
+
+    /// <summary>Is everyone in the party down (a wipe on its way)?</summary>
+    private static bool PartyDown()
+    {
+        var any = false;
+        foreach (var m in Services.Party)
+        {
+            if (m.EntityId == 0) continue;
+            any = true;
+            if (m.CurrentHP > 0) return false;
+        }
+        return any ? true : Services.Objects.LocalPlayer is { IsDead: true };
     }
 
     /// <summary>The party as the game lists it (just you when you're alone).</summary>
@@ -228,7 +262,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var tethers = new List<(int, int, uint)>();
         foreach (var obj in Services.Objects)
         {
-            if (obj == null || !obj.IsValid()) continue;
+            if (obj == null || !obj.IsValid() || obj.EntityId is 0 or InvalidId) continue;
             var key = (ulong)obj.EntityId;
             int id;
             if (b.PartyId(key) is { } p) id = p;
@@ -240,7 +274,7 @@ public sealed unsafe class FightRecorder : IDisposable
             }
             else continue;
 
-            frame?.Add(id, (obj.Position.X, obj.Position.Z, obj.Rotation));
+            if (frame != null) frame[id] = (obj.Position.X, obj.Position.Z, obj.Rotation);
             if (obj is ICharacter)
             {
                 var chara = (Character*)obj.Address;
@@ -338,6 +372,20 @@ public sealed unsafe class FightRecorder : IDisposable
 
     public void Dispose()
     {
+        // Unloaded (an update, a reload) mid-pull: what was recorded is kept, written now.
+        if (current is { } b)
+        {
+            current = null;
+            try
+            {
+                var t = Elapsed;
+                if (b.Worthwhile(t)) store.Save(b.Finish(t, Outcome.Ended));
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error(ex, "Raid Planner couldn't save the pull while unloading");
+            }
+        }
         Services.Framework.Update -= OnUpdate;
         Services.DutyState.DutyWiped -= OnWiped;
         Services.DutyState.DutyCompleted -= OnCompleted;

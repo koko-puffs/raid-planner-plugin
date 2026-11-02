@@ -31,6 +31,21 @@ public sealed unsafe class GameHooks : IDisposable
     private readonly Hook<ActionEffectHandler.Delegates.Receive>? effects;
     private readonly Hook<PacketDispatcher.Delegates.HandleActorControlPacket>? control;
     private readonly Hook<PacketDispatcher.Delegates.HandleMapEffectPacket>? mapEffects;
+
+    /// <summary>The game's three handlers for several map effects at once (8, 16 or 32 in one message).</summary>
+    private delegate void BatchedMapEffects(nint director, byte* packet);
+
+    /// <summary>
+    /// The batched handlers' code, as BossMod finds them (its WorldStateGameSync): three functions that
+    /// begin alike. FFXIVClientStructs doesn't name them, so this is the plugin's one byte pattern; if
+    /// it stops matching after a patch, only arena changes sent in batches are missed.
+    /// </summary>
+    private const string BatchedMapEffectPattern = "40 55 41 57 48 83 EC ?? 48 83 B9";
+
+    /// <summary>Where each batched handler's states and indexes start in its message (BossMod's offsets).</summary>
+    private static readonly (byte Low, byte Index)[] BatchedLayout = { (10, 18), (18, 34), (26, 50) };
+
+    private readonly List<Hook<BatchedMapEffects>> batched = new();
     private readonly List<uint> targetBuffer = new(32);
 
     public GameHooks(FightRecorder recorder)
@@ -67,6 +82,32 @@ public sealed unsafe class GameHooks : IDisposable
             missing.Add("arena changes");
             Services.Log.Error(ex, "Raid Planner couldn't hook map effects");
         }
+        try
+        {
+            var found = Services.SigScanner.ScanAllText(BatchedMapEffectPattern);
+            if (found.Length == BatchedLayout.Length)
+            {
+                for (var i = 0; i < found.Length; i++)
+                {
+                    var layout = BatchedLayout[i];
+                    Hook<BatchedMapEffects>? hook = null;
+                    hook = Services.GameInterop.HookFromAddress<BatchedMapEffects>(found[i], (director, packet) =>
+                    {
+                        hook!.Original(director, packet);
+                        OnBatchedMapEffects(packet, layout.Low, layout.Index);
+                    });
+                    batched.Add(hook);
+                }
+            }
+            else
+            {
+                Services.Log.Warning($"Raid Planner found {found.Length} batched map-effect handlers, not 3; arena changes sent in batches aren't recorded");
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, "Raid Planner couldn't hook batched map effects");
+        }
         if (missing.Count > 0)
             Problem = $"This version of the game hides {string.Join(" and ", missing)} from the plugin, so pulls are recorded without them. An update to the plugin should bring them back.";
     }
@@ -78,6 +119,7 @@ public sealed unsafe class GameHooks : IDisposable
         effects?.Enable();
         control?.Enable();
         mapEffects?.Enable();
+        foreach (var h in batched) h.Enable();
     }
 
     public void Disable()
@@ -85,6 +127,7 @@ public sealed unsafe class GameHooks : IDisposable
         effects?.Disable();
         control?.Disable();
         mapEffects?.Disable();
+        foreach (var h in batched) h.Disable();
     }
 
     private void OnEffect(uint casterEntityId, Character* casterPtr, Vector3* targetPos, ActionEffectHandler.Header* header,
@@ -138,10 +181,31 @@ public sealed unsafe class GameHooks : IDisposable
         }
     }
 
+    /// <summary>Several map effects at once: their count first, then each one's state halves and index (BossMod's reading).</summary>
+    private void OnBatchedMapEffects(byte* data, byte offLow, byte offIndex)
+    {
+        try
+        {
+            if (data == null) return;
+            var count = Math.Min((int)*data, 32);
+            for (var i = 0; i < count; i++)
+            {
+                var low = *(ushort*)(data + 2 * i + offLow);
+                var high = *(ushort*)(data + 2 * i + 2);
+                recorder.OnMapEffect(data[i + offIndex], low | ((uint)high << 16));
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Raid Planner couldn't read batched map effects");
+        }
+    }
+
     public void Dispose()
     {
         effects?.Dispose();
         control?.Dispose();
         mapEffects?.Dispose();
+        foreach (var h in batched) h.Dispose();
     }
 }
