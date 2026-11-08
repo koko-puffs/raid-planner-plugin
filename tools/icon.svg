@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 30 30">
-  <!-- crossed swords on its rounded tile (kokos-tools: src/features/marks.ts, every tool's mark the same shape; npm run marks -- --icons draws icon.png) -->
+  <!-- crossed swords in a telegraph’s ring on its tile (src/features/marks.ts: npm run marks writes this) -->
   <defs><radialGradient id="shine" cx="50%" cy="58%" r="62%"><stop offset="0" stop-color="#ffffff" stop-opacity=".26"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient></defs>
-  <rect width="30" height="30" rx="8" fill="#e0601a"/>
-  <rect width="30" height="30" rx="8" fill="url(#shine)"/>
-  <g transform="translate(5.64 5.64) scale(0.78)" fill="none" stroke="#ffffff" stroke-width="2.179" stroke-linecap="round" stroke-linejoin="round"><path d="m13 19 6-6"/><path d="M14.5 17.5 3.586 6.586A2 2 0 013 5.172V3h2.172a2 2 0 011.414.586L17.5 14.5"/><path d="m14.828 6.172 2.586-2.586A2 2 0 0118.828 3H21v2.172a2 2 0 01-.586 1.414l-2.586 2.586"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="m5 14 4 4"/><path d="m5 21-2-2"/><path d="M7.5 16.5 4 20"/></g>
+  <path d="M15 .6a14.4 14.4 0 1 1 0 28.8 14.4 14.4 0 1 1 0-28.8z" fill="#e0601a"/>
+  <path d="M15 .6a14.4 14.4 0 1 1 0 28.8 14.4 14.4 0 1 1 0-28.8z" fill="url(#shine)"/>
+  <circle cx="15" cy="15" r="11.6" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1.1" stroke-dasharray="2.4 2"/><g transform="translate(7.56 7.56) scale(0.62)" fill="none" stroke="#ffffff" stroke-width="2.742" stroke-linecap="round" stroke-linejoin="round"><path d="m13 19 6-6"/><path d="M14.5 17.5 3.586 6.586A2 2 0 013 5.172V3h2.172a2 2 0 011.414.586L17.5 14.5"/><path d="m14.828 6.172 2.586-2.586A2 2 0 0118.828 3H21v2.172a2 2 0 01-.586 1.414l-2.586 2.586"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/><path d="m5 14 4 4"/><path d="m5 21-2-2"/><path d="M7.5 16.5 4 20"/></g>
 </svg>
