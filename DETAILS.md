@@ -283,7 +283,8 @@ it went.
 With _Track my progress_ on (the default; it does nothing until you're linked), each kept pull's
 summary goes to `rp_plugin_pull` with the pull's own id (`SiteLink.ClientId`, so a repeat is kept
 once): `{ content, territory, duty, pull, recordedAt, duration, outcome, reached, phase, deaths }`,
-where `reached` is the length, `phase` the furthest phase (from the builder's count, above) and
+where `reached` is the length (the site reads a wipe's as its last death, when that's within 20 s
+of the end: the recording runs on past the wipe), `phase` the furthest phase (from the builder's count, above) and
 `deaths` at most 48 of `{ t, slot, job, by }` (`by` the action's name, or a lethal tick's status's,
 or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
 
