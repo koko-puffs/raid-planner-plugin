@@ -64,8 +64,11 @@ Every frame while it goes (on the framework thread):
 And from three hooks, on only while a pull goes (FFXIVClientStructs' addresses, kept current with
 each Dalamud release; each detour calls the game's own function first and changes nothing):
 
-- **`ActionEffectHandler.Receive`**: an enemy's action landing, with where the caster stood and
-  faced, where the hit was centred, and the party members it hit. This is how a stack is told from
+- **`ActionEffectHandler.Receive`**: an enemy's action landing, with where the caster stood, which
+  way the action faced (the effect header's own `RotationInt`, 0 to 65535 for −π to π, as BossMod
+  reads it; before 0.2.1 the caster's facing as the message was handled, which is wrong for a boss
+  that turns as soon as a cone is snapshotted and south for a caster already gone), where the hit
+  was centred, and the party members it hit. This is how a stack is told from
   a spread, and how the many mechanics with no cast bar (the game's invisible helpers resolving a
   head marker, a chain of exaflares) are seen at all.
 - **`PacketDispatcher.HandleActorControlPacket`**, category 34: a head marker over someone (its
@@ -85,7 +88,19 @@ A hook that can't be made (the game changed under the plugin) is left out, the r
 records, and Settings → Recording says what's missing.
 
 Enemies are every combatant battle NPC seen (a hit from one not seen yet counts only if it's a
-combatant or a part of one with no owner: pets and summons are the party's own). When the pull ends they're sorted: the targetable
+combatant or a part of one with no owner: pets and summons are the party's own). In a field
+operation's open zone (`GameData.IsFieldZone`: the TerritoryType sheet's TerritoryIntendedUse 41
+Eureka, 48 the Bozjan Southern Front and Zadnor, 61 Occult Crescent's South and North Horn) the
+object table also holds mobs other players are fighting and the next CE's or FATE's enemies, so
+since 0.2.1 only the party's own fight is recorded there (`FightRecorder.Engaged`): an enemy is
+written down from the frame it targets one of the party, one of the party targeted it or was
+tethered to it the frame before, it's casting at one of the party or tethered to one, or it can't
+be targeted (a helper casting the boss's mechanics, a boss away for a moment) and is within 70
+yalms of you (across the biggest CE or Forked Tower arena); or when an action of its hits one of
+the party, or comes from within 70 yalms of you (`OnHit`). Once in, it stays in. Everywhere else
+(trials, raids, dungeons, Delubrum Reginae) every enemy is recorded, as before: there everything is
+the fight, and a helper whose attack everyone dodged must not be lost. The site does the same for
+recordings made before (its `fightOf`). When the pull ends they're sorted: the targetable
 ones with the most HP (and any with half as much or more) are bosses, the other targetable ones
 adds, and those never targetable helpers (only their attacks are kept, not where they stood).
 The party is the party list (just you alone), each given a spot from their job's role
@@ -383,6 +398,15 @@ being recorded (and keeps it); `/raidplan plan` shows or hides the plan window; 
   where it can (stack, spread, tankbuster…).
 
 ## Release notes
+
+### 0.2.1
+
+- **Field zones place right on the site.** In Occult Crescent (its CEs, FATEs and the Forked
+  Tower), the Bozjan Southern Front, Zadnor and Eureka, a pull records only the enemies in your
+  party's fight, not the mobs other players are fighting nearby or the next CE's enemies, so the
+  site's board no longer draws them, makes steps of their attacks or moves the arena off the fight.
+- An attack with no cast bar is drawn facing the way it went off (the game's own direction for the
+  action), not the way its caster turned a moment later.
 
 ### 0.2.0
 

@@ -78,6 +78,26 @@ public sealed class GameData
         return fight;
     }
 
+    /// <summary>
+    /// The field operations' open zones, by the TerritoryType sheet's TerritoryIntendedUse: Eureka (41),
+    /// the Bozjan Southern Front and Zadnor (48), Occult Crescent's South and North Horn (61). Many
+    /// fights go on there at once, its CEs and FATEs among the mobs others are fighting; Delubrum
+    /// Reginae (52, 53) and the duties are one fight each.
+    /// </summary>
+    private static readonly HashSet<uint> FieldUses = new() { 41, 48, 61 };
+
+    private readonly Dictionary<uint, bool> fields = new();
+
+    /// <summary>Is the zone a field operation's open zone (<see cref="FieldUses"/>), where only the party's own fight is recorded?</summary>
+    public bool IsFieldZone(uint territory)
+    {
+        if (fields.TryGetValue(territory, out var known)) return known;
+        var field = Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t)
+            && FieldUses.Contains(t.TerritoryIntendedUse.RowId);
+        fields[territory] = field;
+        return field;
+    }
+
     /// <summary>A zone's own name, for a fight recorded outside a duty.</summary>
     public string PlaceName(uint territory) =>
         Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t) && t.PlaceName.ValueNullable is { } place

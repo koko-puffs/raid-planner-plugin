@@ -84,6 +84,29 @@ public sealed unsafe class FightRecorder : IDisposable
     private readonly List<Task> saving = new();
     private readonly List<(int, int, uint)> tetherBuffer = new();
 
+    /// <summary>
+    /// Only the enemies in the party's own fight are recorded (<see cref="Engaged"/>): in a field
+    /// operation's open zone (<see cref="GameData.IsFieldZone"/>: Occult Crescent, Bozja, Eureka) the
+    /// object table also holds mobs other players are fighting and the next CE's or FATE's enemies.
+    /// Set as the pull starts; everywhere else (trials, raids, dungeons, Delubrum Reginae) every enemy
+    /// is recorded, as ever.
+    /// </summary>
+    private bool onlyEngaged;
+
+    /// <summary>
+    /// Within this of you (yalms, on the ground), an enemy that can't be targeted is in your fight in a
+    /// field zone (a helper casting the boss's mechanics, a boss away for a moment): across the
+    /// biggest CE or Forked Tower arena (a 31.5 circle, a 30 by 66 rectangle) from its far edge.
+    /// </summary>
+    private const float HelperNear = 70f;
+
+    /// <summary>
+    /// Whom the party targeted or was tethered to last frame (entity ids), and this frame so far: an
+    /// enemy you're fighting is in your fight even before it turns to you.
+    /// </summary>
+    private readonly HashSet<uint> partyTouched = new();
+    private readonly HashSet<uint> partyTouching = new();
+
     public FightRecorder(Configuration config, GameData data, RecordingStore store, string version)
     {
         this.config = config;
@@ -350,6 +373,9 @@ public sealed unsafe class FightRecorder : IDisposable
         var duty = data.Duty(territory) ?? new DutyInfo(data.PlaceName(territory), territory, 0);
         current = new RecordingBuilder(duty, pullInZone, DateTimeOffset.Now, config.RecordParty, version, data.Action, data.Status);
         current.SetParty(Party());
+        onlyEngaged = data.IsFieldZone(territory);
+        partyTouched.Clear();
+        partyTouching.Clear();
         casting.Clear();
         outcome = null;
         outOfCombat = 0;
@@ -471,6 +497,8 @@ public sealed unsafe class FightRecorder : IDisposable
         var frame = b.WantsFrame(t) ? new Dictionary<int, (float, float, float)>() : null;
         var tethers = tetherBuffer;
         tethers.Clear();
+        partyTouching.Clear();
+        var you = Services.Objects.LocalPlayer?.Position;
         b.BeginStatuses();
         foreach (var obj in Services.Objects)
         {
@@ -482,9 +510,13 @@ public sealed unsafe class FightRecorder : IDisposable
             {
                 id = p;
                 member = true;
+                // Whom they're fighting (the low half of a target's id is its entity id).
+                if (onlyEngaged && (uint)obj.TargetObjectId is var aim and not (0 or InvalidId)) partyTouching.Add(aim);
             }
             else if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Combatant)
             {
+                // A field zone: an enemy not in the party's fight is left out until it is (then kept).
+                if (onlyEngaged && b.KnownActor(key) == null && !Engaged(b, npc, you)) continue;
                 // Its name read only while it's needed (a new enemy, or one still nameless): reading it makes a string.
                 id = b.Actor(key, b.NeedsName(key) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
                 var targetable = npc.IsTargetable && !npc.IsDead;
@@ -502,6 +534,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 foreach (var tether in chara->Vfx.Tethers)
                 {
                     if (tether.Id == 0) continue;
+                    if (member && onlyEngaged) partyTouching.Add(tether.TargetId.ObjectId);
                     var to = b.Who(tether.TargetId.ObjectId);
                     if (to != 0) tethers.Add((id, to, tether.Id));
                 }
@@ -514,6 +547,8 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         b.EndStatuses(t);
         b.EndTargets(t);
+        partyTouched.Clear();
+        partyTouched.UnionWith(partyTouching);
         if (frame != null) b.Positions(t, frame);
         b.Tethers(t, tethers);
         if (t >= nextWaymarks)
@@ -521,6 +556,33 @@ public sealed unsafe class FightRecorder : IDisposable
             nextWaymarks = t + 1;
             ReadWaymarks(b, t);
         }
+    }
+
+    /// <summary>
+    /// Is an enemy not yet recorded in the party's fight (asked in a field zone only)? It is when it
+    /// targets one of the party, one of them targeted it or was tethered to it last frame, it's casting
+    /// at one of them or tethered to one, or it can't be targeted (a helper casting the boss's
+    /// mechanics) and is within <see cref="HelperNear"/> of you. Its hits on the party count too
+    /// (<see cref="OnHit"/>). Once in, it stays in.
+    /// </summary>
+    private bool Engaged(RecordingBuilder b, IBattleNpc npc, System.Numerics.Vector3? you)
+    {
+        if (b.IsParty((uint)npc.TargetObjectId) || partyTouched.Contains(npc.EntityId)) return true;
+        var chara = (Character*)npc.Address;
+        if (chara == null) return false;
+        var cast = ((BattleChara*)chara)->GetCastInfo();
+        if (cast != null && cast->IsCasting && b.IsParty(cast->TargetId.ObjectId)) return true;
+        foreach (var tether in chara->Vfx.Tethers)
+            if (tether.Id != 0 && b.IsParty(tether.TargetId.ObjectId)) return true;
+        return !npc.IsTargetable && you is { } me && Near(me, npc.Position);
+    }
+
+    /// <summary>Within <see cref="HelperNear"/> of each other, on the ground (height left out).</summary>
+    private static bool Near(System.Numerics.Vector3 a, System.Numerics.Vector3 b)
+    {
+        var dx = a.X - b.X;
+        var dz = a.Z - b.Z;
+        return dx * dx + dz * dz <= HelperNear * HelperNear;
     }
 
     /// <summary>A cast that's begun since the last frame: recorded once, from when it began.</summary>
@@ -607,12 +669,19 @@ public sealed unsafe class FightRecorder : IDisposable
     // ---------------------------------------------------------------------------------------------
     // From the hooks (on the framework thread).
 
-    /// <summary>An action landed: an enemy's (a party member's own aren't kept).</summary>
-    internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, uint action, IReadOnlyList<uint> targetIds)
+    /// <summary>
+    /// An action landed: an enemy's (a party member's own aren't kept), facing
+    /// <paramref name="rotation"/> (the action's own, from the message; the caster's facing only if
+    /// that isn't a number).
+    /// </summary>
+    internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, float rotation, uint action, IReadOnlyList<uint> targetIds)
     {
         if (disposed) return;
         var b = current;
         if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
+        var targets = new List<int>(targetIds.Count);
+        foreach (var tid in targetIds)
+            if (b.PartyId(tid) is { } p) targets.Add(p);
         var src = b.KnownActor(casterId);
         if (src == null)
         {
@@ -622,18 +691,19 @@ public sealed unsafe class FightRecorder : IDisposable
             var kind = (BattleNpcSubKind)caster->GameObject.SubKind;
             if (kind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) return;
             if (caster->GameObject.OwnerId is not (0 or InvalidId)) return;
+            // A field zone: one that hit none of the party, away from you, is someone else's fight.
+            if (onlyEngaged && targets.Count == 0
+                && !(Services.Objects.LocalPlayer?.Position is { } you && Near(you, caster->GameObject.Position)))
+                return;
             src = b.Actor(casterId, string.Empty, caster->GameObject.HitboxRadius, caster->GameObject.BaseId);
         }
-        float x = hitX, z = hitZ, rot = 0;
+        float x = hitX, z = hitZ, rot = float.IsFinite(rotation) ? rotation : 0;
         if (caster != null)
         {
             x = caster->GameObject.Position.X;
             z = caster->GameObject.Position.Z;
-            rot = caster->GameObject.Rotation;
+            if (!float.IsFinite(rotation)) rot = caster->GameObject.Rotation;
         }
-        var targets = new List<int>(targetIds.Count);
-        foreach (var tid in targetIds)
-            if (b.PartyId(tid) is { } p) targets.Add(p);
         var t = Elapsed;
         b.Hit(t, src.Value, action, x, z, rot, hitX, hitZ, targets);
         if (HitLanded is { } listeners)

@@ -94,8 +94,9 @@ public sealed record CastEvent(double T, int Source, uint Action, float Duration
 }
 
 /// <summary>
-/// An enemy's action landed: where the caster stood and faced, where the hit was centred, and the
-/// party members it hit (their ids).
+/// An enemy's action landed: where the caster stood, which way the action faced (its own direction
+/// from the game's message since 0.2.1; the caster's facing before), where the hit was centred, and
+/// the party members it hit (their ids).
 /// </summary>
 public sealed record HitEvent(double T, int Source, uint Action, float X, float Z, float Rotation, float HitX, float HitZ, IReadOnlyList<int> Targets)
     : RecEvent(T)

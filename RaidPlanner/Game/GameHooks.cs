@@ -12,8 +12,8 @@ namespace RaidPlanner.Game;
 /// <summary>
 /// The three things a recording needs from the game's network messages, through FFXIVClientStructs'
 /// own addresses (kept current with each Dalamud release): an action landing (who it came from,
-/// where, and whom it hit: how a stack is told from a spread, and how the many mechanics with no
-/// cast bar are seen at all), the actor-control message that puts a head marker over someone (read
+/// where, which way it faced, and whom it hit: how a stack is told from a spread, and how the many
+/// mechanics with no cast bar are seen at all), the actor-control message that puts a head marker over someone (read
 /// after the game has unscrambled it), and a map effect (the arena changing).
 /// The plugin only listens: each detour calls the game's own function first and changes nothing.
 /// The hooks are on only while a pull is recorded. If one can't be made (the game changed), the
@@ -152,7 +152,11 @@ public sealed unsafe class GameHooks : IDisposable
                 for (var i = 0; i < header->NumTargets && i < 32; i++)
                     targetBuffer.Add(targetEntityIds[i].ObjectId);
             var at = targetPos != null ? *targetPos : Vector3.Zero;
-            recorder.OnHit(casterEntityId, casterPtr, at.X, at.Z, header->ActionId, targetBuffer);
+            // The action's own direction, as the server sent it (0 to 65535 for -pi to pi, BossMod's
+            // reading): not the caster's facing by the time the message is handled (a boss can turn
+            // as soon as a cone is snapshotted, and a helper may be gone already).
+            var rotation = header->RotationInt / 65535f * (2 * MathF.PI) - MathF.PI;
+            recorder.OnHit(casterEntityId, casterPtr, at.X, at.Z, rotation, header->ActionId, targetBuffer);
         }
         catch (Exception ex)
         {

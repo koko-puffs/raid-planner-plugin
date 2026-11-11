@@ -372,6 +372,26 @@ public class PlanJsonTests
     }
 
     [Fact]
+    public void Keys_it_doesnt_know_in_the_link_to_the_game_are_passed_over()
+    {
+        // The site keeps the world centre the plan was made on (game.origin, for its Review), and may
+        // add more: the plan still reads, its cues and all.
+        const string json = """
+            { "id": "p", "name": "x", "phases": [ { "id": "a", "name": "A" }, { "id": "b", "name": "B" } ],
+              "game": { "content": 1018, "territory": 1252, "duty": "The Occult Crescent",
+                "origin": { "cx": 620.5, "cz": 800 }, "someday": [1, { "x": "y" }],
+                "cues": [ { "phase": "b", "step": 1, "action": 7, "t": 12, "extra": true } ] } }
+            """;
+        var p = PlanJson.Read(json)!;
+        Assert.NotNull(p);
+        Assert.Equal(1018u, p.Game!.Content);
+        Assert.Equal(1252u, p.Game.Territory);
+        var cue = Assert.Single(p.Game.Cues);
+        Assert.Equal(1, cue.Step);
+        Assert.Equal(7u, cue.Action);
+    }
+
+    [Fact]
     public void A_cue_follows_its_phase_id_when_steps_moved()
     {
         // The phases were reordered after the plan was made: "c" is now first, and "gone" was deleted.
