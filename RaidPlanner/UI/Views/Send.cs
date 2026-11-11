@@ -35,6 +35,22 @@ public sealed partial class MainWindow
     private bool Sending(RecordingInfo info) => sends.TryGetValue(info.File, out var s) && s.Result == null;
 
     /// <summary>
+    /// Stops a send under way. Its worker disposes the stop when it's done, which can be on the very
+    /// frame Stop is pressed (the answer came meanwhile): then there's nothing left to stop.
+    /// </summary>
+    private static void StopSend(SendState s)
+    {
+        try
+        {
+            s.Stop?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It finished as Stop was pressed: how it went is said as usual.
+        }
+    }
+
+    /// <summary>
     /// Sends a kept pull to your Raid Planner (Send each pull, /raidplan send last); <paramref name="done"/>
     /// hears how it went, on the framework thread. False when it can't go now (not linked, already going).
     /// </summary>
@@ -213,7 +229,7 @@ public sealed partial class MainWindow
         if (s is { Result: null })
         {
             var (_, stop) = ButtonPair(id, "Sending…", Btn.Tele, Icon.Send, "Stop", Btn.Quiet, null, false, 0.55f, true);
-            if (stop) s.Stop?.Cancel();
+            if (stop) StopSend(s);
             Kit.Gap(10);
             var at = Kit.At;
             var h = Kit.Cast(Kit.Dl, at, Kit.Width, $"Sending pull {Math.Max(1, info.Pull)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
@@ -390,6 +406,9 @@ public sealed partial class MainWindow
             {
                 config.SiteToken = string.Empty;
                 config.Save();
+                // A send on its way with the token just forgotten stops too.
+                foreach (var under in sends.Values)
+                    if (under.Result == null) StopSend(under);
                 sends.Clear();
                 Notify("Unlinked from the Raid Planner", ToastKind.News, Icon.Link);
             }

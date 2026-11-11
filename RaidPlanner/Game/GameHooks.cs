@@ -246,7 +246,11 @@ public sealed unsafe class GameHooks : IDisposable
         return owner is InvalidId ? 0 : owner;
     }
 
-    /// <summary>A target's HP, max HP and whether it's an enemy (a combatant battle NPC no one owns), into the buffer.</summary>
+    /// <summary>
+    /// A target's HP, max HP and whether it's an enemy (a combatant battle NPC no one owns that the game
+    /// calls hostile: a FATE's escort or a quest's ally is a combatant too, and the party may heal it), into
+    /// the buffer.
+    /// </summary>
     private void ReadTarget(int k, uint entityId)
     {
         var bc = Look(entityId);
@@ -256,7 +260,8 @@ public sealed unsafe class GameHooks : IDisposable
         batch.MaxHp[k] = c->CharacterData.MaxHealth;
         batch.Hostile[k] = c->GameObject.ObjectKind == ObjectKind.BattleNpc
             && (SubKind)c->GameObject.SubKind is SubKind.Combatant or SubKind.BNpcPart
-            && c->GameObject.OwnerId is 0 or InvalidId;
+            && c->GameObject.OwnerId is 0 or InvalidId
+            && c->CharacterData.IsHostile;
     }
 
     private void OnActorControl(uint entityId, uint category, uint arg1, uint arg2, uint arg3, uint arg4, uint arg5, uint arg6, uint arg7, uint arg8,
@@ -339,11 +344,25 @@ public sealed unsafe class GameHooks : IDisposable
         }
     }
 
+    /// <summary>Every hook let go of, each whatever happens to the others (one left in the game would call into an unloaded plugin).</summary>
     public void Dispose()
     {
-        effects?.Dispose();
-        control?.Dispose();
-        mapEffects?.Dispose();
-        foreach (var h in batched) h.Dispose();
+        enabled = false;
+        Release(effects);
+        Release(control);
+        Release(mapEffects);
+        foreach (var h in batched) Release(h);
+    }
+
+    private static void Release(IDisposable? hook)
+    {
+        try
+        {
+            hook?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error(ex, "Raid Planner couldn't let go of a hook");
+        }
     }
 }

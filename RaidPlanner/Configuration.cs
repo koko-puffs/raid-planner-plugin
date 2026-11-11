@@ -38,7 +38,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>In a duty you have a plan for, its window opens.</summary>
     public bool ShowPlanInDuties { get; set; } = true;
 
-    /// <summary>A few seconds before each step's mechanic, its name and first note in chat, with a soft sound.</summary>
+    /// <summary>Say each step in chat: a few seconds before its mechanic, its name and callout (<c>PlanJson.ChatLine</c>), with a soft sound.</summary>
     public bool Callouts { get; set; } = true;
 
     /// <summary>The step the plan window shows is shared with the site (Present can follow it).</summary>
@@ -84,6 +84,12 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>The meter's tab last shown.</summary>
     public MeterTab MeterTab { get; set; } = MeterTab.Damage;
+
+    /// <summary>
+    /// The meter's height when it shows a fight (CSS px, before Dalamud's scale; 0 not set yet): it
+    /// folds to one line between pulls and opens to this again.
+    /// </summary>
+    public float MeterHeight { get; set; }
 
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();

@@ -419,13 +419,19 @@ public static partial class Kit
 
     private static readonly Dictionary<(string Text, int Px, int Width, int Lines), List<string>> CalloutCache = new();
 
-    /// <summary>The callout's lines for a width: in capitals, wrapped, at most <paramref name="maxLines"/> (the last cut with "…"). Kept, so a frame measures nothing.</summary>
+    /// <summary>
+    /// The callout's lines for a width: in capitals, wrapped, at most <paramref name="maxLines"/> (the
+    /// last cut with "…"). Kept, so a frame measures nothing; but not while the face isn't built yet
+    /// (measured in Dalamud's font then, the lines would stay wrong once it is).
+    /// </summary>
     public static List<string> CalloutLines(string text, int px, float width, int maxLines)
     {
         var key = (text, px, (int)width, maxLines);
         if (CalloutCache.TryGetValue(key, out var lines)) return lines;
+        lines = Txt.Wrap(Txt.CalloutCaps(text), Face.Callout, px, width, maxLines);
+        if (!Txt.Ready(Face.Callout, px)) return lines;
         if (CalloutCache.Count > 256) CalloutCache.Clear();
-        return CalloutCache[key] = Txt.Wrap(Txt.Caps(text), Face.Callout, px, width, maxLines);
+        return CalloutCache[key] = lines;
     }
 
     /// <summary>

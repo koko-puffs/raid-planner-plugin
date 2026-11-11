@@ -67,6 +67,9 @@ Every frame while it goes (on the framework thread):
   last enemy action that hit them within 3 seconds (from the hits, below): since 0.3.0 one that did
   something (damage, or an instant death; a dodge or a hit they were invulnerable to isn't a cause),
   or the bleed whose tick did it (its status, `byStatus`; a tick that names no status isn't one).
+  Of those, the last that could kill comes first (an instant death, or as much as the HP they had
+  before it): the game takes a hit's damage off a moment after it says it landed, so a bleed's small
+  tick can come between a lethal hit and the HP reaching 0, and that tick isn't the cause.
 - **Targetability**: an enemy becoming targetable (the first time too, so the site sees a new boss
   come in), and one that has been targetable going untargetable (dead, gone, or a phase change);
   one that leaves the game is untargetable. One never targetable (a helper) isn't recorded. The
@@ -263,7 +266,8 @@ comma, about a sixth more than the file). A pull bigger than that is sent with i
 often (every second, then every two, then four), then the enemies' places only, then none; then
 without the combat block's casts, then without its ticks too (never its effects or statuses), the
 block saying what it lost (`combat.thinned`); and the window says it was thinned. The file itself
-is left whole. Each
+is left whole, and goes into the request as it's written (checked as it's copied, never read into a
+tree of nodes: a big pull's would be a hundred MB for the game's process to collect). Each
 send carries the pull's own id (`p_client_id`, from its file and when it was recorded), so a send
 that timed out after it arrived, sent again, is kept once; a site that doesn't take the id yet
 gets the send again without it. The send reads the file and posts from a worker; it waits half a
@@ -286,9 +290,10 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
 - `boss_hp`: the HP % left (two decimals) of the fight's main boss at the end: of the bosses, the
   one targetable last (the most max HP among those), from the last frame with its HP; 0 on a clear,
   null when it isn't known.
-- `phases`: when each phase began, whole seconds, the first 0 (the site's `phaseStarts`).
-- `stats` (at most 6 KB): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in spot
-  order: `dmg` (their damage, their pets' and DoTs' included; a tick the game sent without saying
+- `phases`: when each phase began, whole seconds, the first 0 (the site's `phaseStarts`), as the
+  recorder counted them while it recorded (the same count as `phase`, even past the events' cap).
+- `stats` (at most 6 KB): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
+  recording's order (the party list's), each with its spot: `dmg` (their damage, their pets' and DoTs' included; a tick the game sent without saying
   whose is shared between the party's DoTs on the target then, as the meter does), `heal` (what their
   heals restored: the heal less what went past the HP missing then; a HoT's from the frames' HP),
   `over`, `taken` (enemy hits and bleeds), `crit` and `dh` (of their direct hits, 0–1), `active`
@@ -297,11 +302,14 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   with their stacks: a new one counts its stacks, one put on again the stacks it gained or 1).
   `lb`, the limit break's damage. `hits`, the enemies' hits on the party (autos left out, as the
   timeline leaves them out; 400 at most) as `[deciseconds, action, slot mask, damage]`, the mask's
-  bit i the i-th of `slots`; `debuffs`, the damage downs and vulnerability ups as they were gained
+  bit i the i-th of `slots`, only those it landed on (a miss, a dodge or an invulnerable target isn't
+  in it, as the site reads a recording's hits; a hit that landed on no one isn't sent); `debuffs`, the damage downs and vulnerability ups as they were gained
   (200 at most) as `[deciseconds, status, slot mask]`; `names`, those actions' and statuses' names
   by id. Over 6 KB, the latest hits go first, then the latest debuffs. Damage downs and
   vulnerability ups are the statuses so named on the game's Status sheet in English
-  (`GameData.FailKinds`: every row named "Damage Down", or ending "Vulnerability Up").
+  (`GameData.FailKinds`: every row named exactly "Damage Down" or "Vulnerability Up", as the site's
+  `model/debuffs.ts` lists them; "Physical Vulnerability Up" and "Magic Vulnerability Up" aren't
+  failures: tankbusters put them on the tanks on purpose).
 
 No names. The
 summary is made on the worker that writes the pull, so it's there whatever happens to the file.
@@ -614,8 +622,11 @@ nor anything between two others; a barrier (a status named on `CombatLists.Shiel
 English Status sheet) is a shield put on, never healing. A tick (actor control 23) goes to the party
 member the game names (a pet's owner); one that names no one, on an enemy, is shared evenly between
 the party members with a DoT (`CombatLists.DotNames`) put on it within the last minute, and marked
-estimated; another player's is never the party's. Nonsense is dropped and counted: a heal from the
-party landing on an enemy, or a hit over five million that isn't a limit break.
+estimated; another player's is never the party's. Nonsense is dropped and counted: a hit or a heal
+over five million that isn't a limit break. A heal landing on an enemy (a combatant no one owns that
+the game calls hostile) is dropped too, never the party's healing, but isn't nonsense: an enemy that
+absorbs an element (as some of Eureka's do) is healed by the party's attacks. A FATE's escort or a
+quest's ally isn't an enemy, and healing it is healing.
 
 **Encounters** (`MeterSession`): one starts on the first damage between the party and an enemy, either
 way (a DoT's tick never starts one); in combat before it, the meter is _waiting_. The party's heals,
@@ -643,8 +654,10 @@ party's row is the sum of the rows, the limit break's included):
   boss's DoTs), as the game took it off (mitigation already in); a miss or an invulnerable hit is
   nothing.
 - **Deaths**: HP reaching 0 (seen each frame; a raise and another 0 is another death), with a recap:
-  their last ten hits, ticks, heals and shields, each with the HP before it, frozen at the death; the
-  killing blow is the last hit or tick in it, and the overkill is its amount past the HP before it.
+  their last ten hits, ticks, heals and shields, each with the HP before it, and their max HP, frozen
+  at the death; the killing blow is the last hit or tick in the 3 seconds before that could kill (an
+  instant death, or as much as the HP before it: the recording's rule, above), else the last hit or
+  tick, and the overkill is its amount past the HP before it.
   In a wiped encounter, the deaths within 6 seconds of the last are the wipe, counted against no one.
 - **By ability**, for one player and tab: each action (a pet's flagged), a DoT's or HoT's ticks on a
   line of their own (named by the action that put it on, else its status; marked estimated when any
@@ -716,8 +729,9 @@ Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `Com
   slim bar each, the rest summed as "9 more". On **Deaths**, the deaths (the wipe's muted, "The
   wipe") and the picked one's recap: "Odette died at 2:51" as a small callout, the killing blow and
   how far over, then its last hits and heals oldest first (the time to a tenth, what it was with its
-  note, the amount red for a hit and green for a heal, the HP before as a bar against the most the
-  recap saw, amber when low, red at none), the killing blow on a red wash. A line under each tab
+  note, the amount red for a hit and green for a heal, the HP before as a bar against their max HP
+  (`DeathEntry.MaxHp`; the most the recap saw when it isn't known), amber when low, red at none), the
+  killing blow (the line the death names, not always the last) on a red wash. A line under each tab
   says how its numbers are worked out.
 - **Settings → Meter**: _Show the meter_ (`/raidplan meter` too) with _Where_ (In duties,
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
@@ -778,7 +792,11 @@ preview` shows a made-up fight in it (again to stop).
   the pull; HoT overheal; a wipe and a clear each ending one encounter. Also: the enemies' HP in
   frames, a hit's HP before, `CharacterData.InCombat`, statuses' `Param` as stacks and a refresh
   seen by the time left going up, the party's casts (cancelled ones too), the shield and DoT names
-  found on the English Status sheet, and the cost of the hooks being on everywhere.
+  found on the English Status sheet, and the cost of the hooks being on everywhere. And: the game's
+  hostile flag (`CharacterData.IsHostile`) set on bosses and adds and not on a FATE's escort (an enemy
+  healed is left out, an ally healed is healing), an element-absorbing enemy in Eureka healed by a hit
+  (left out, the meter going on), and a death to a big hit with a bleed ticking just after it (the
+  hit is the cause, in the recording and the meter's recap).
 - Summaries waiting to be sent are lost when the game closes.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).

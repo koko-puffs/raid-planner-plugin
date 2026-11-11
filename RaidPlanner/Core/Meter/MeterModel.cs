@@ -101,7 +101,11 @@ public sealed record AbilityRow(
 /// <summary>A line of a death's recap: a hit (negative amount), a heal or shield (positive), with the HP before it.</summary>
 public sealed record RecapLine(double At, string What, long Amount, long HpBefore, string Note);
 
-/// <summary>A death: who, when, the killing blow, how far over it went, and the recap (oldest first).</summary>
+/// <summary>
+/// A death: who, when, the killing blow, how far over it went, the recap (oldest first), and the
+/// dying member's max HP as they died (<see cref="MaxHp"/>, 0 when not known: what the recap's HP
+/// bars are drawn against; added in the review round).
+/// </summary>
 public sealed record DeathEntry(
     int PartyId,
     string Slot,
@@ -111,7 +115,8 @@ public sealed record DeathEntry(
     long Amount,
     long Overkill,
     bool PartOfWipe,
-    IReadOnlyList<RecapLine> Recap);
+    IReadOnlyList<RecapLine> Recap,
+    long MaxHp = 0);
 
 /// <summary>
 /// Pace: the party's damage since the current phase began, against the compared encounter's at the
@@ -176,8 +181,9 @@ public interface IMeterSource
     /// <summary>
     /// Why the meter has stopped, in words for the Meter tab's warning box, or null while it works:
     /// it turns itself off rather than show nonsense when what it reads makes no sense (a single
-    /// hit over five million that isn't a limit break, the party's heals landing on enemies: the game
-    /// has moved something). Added by the data engineer (round three), for the mock-up's warning.
+    /// hit or heal over five million that isn't a limit break: the game has moved something). Added
+    /// by the data engineer (round three), for the mock-up's warning. (A heal landing on an enemy is
+    /// only left out: an enemy that absorbs an element, as Eureka's do, is healed by the party's hits.)
     /// </summary>
     string? Problem { get; }
 }

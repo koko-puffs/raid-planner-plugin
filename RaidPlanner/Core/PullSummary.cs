@@ -15,12 +15,21 @@ namespace RaidPlanner.Core;
 /// </summary>
 public static class PullSummary
 {
+    /// <summary>The most phase starts a summary carries: the site keeps the first 50.</summary>
+    public const int MaxPhases = 50;
+
     /// <summary>The most deaths sent (the site keeps as many).</summary>
     public const int MaxDeaths = 48;
 
     /// <param name="failKind">A status's kind as a failure debuff (<see cref="Meter.CombatLists.FailKind"/>); by default from its name in the recording.</param>
     /// <param name="isDot">Is a status one of the jobs' DoTs (to share out a tick that named no one)?</param>
-    public static JsonObject Build(Recording r, int phase, Func<uint, int>? failKind = null, Func<uint, bool>? isDot = null)
+    /// <param name="phaseStarts">
+    /// When each phase began as the builder counted them (<see cref="RecordingBuilder.PhaseStarts"/>, the same rule
+    /// as <paramref name="phase"/>); by default worked out again from the recording's events, which can miss some
+    /// when a very long pull reached the events' cap.
+    /// </param>
+    public static JsonObject Build(Recording r, int phase, Func<uint, int>? failKind = null, Func<uint, bool>? isDot = null,
+        IReadOnlyList<double>? phaseStarts = null)
     {
         var party = r.Party.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
         var deaths = new JsonArray();
@@ -54,7 +63,10 @@ public static class PullSummary
             ["phase"] = Math.Max(1, phase),
             ["deaths"] = deaths,
             ["boss_hp"] = bossHp,
-            ["phases"] = new JsonArray(PullStats.PhaseStarts(r).Select(t => (JsonNode)(int)Math.Round(t, MidpointRounding.AwayFromZero)).ToArray()),
+            // The first 50, as the site keeps them (rp_plugin_pull).
+            ["phases"] = new JsonArray((phaseStarts is { Count: > 0 } ? phaseStarts : PullStats.PhaseStarts(r))
+                .Take(MaxPhases)
+                .Select(t => (JsonNode)(int)Math.Round(double.IsFinite(t) ? Math.Max(0, t) : 0, MidpointRounding.AwayFromZero)).ToArray()),
             ["stats"] = PullStats.Stats(r, failKind, isDot),
         };
     }

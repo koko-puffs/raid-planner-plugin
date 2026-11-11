@@ -247,7 +247,7 @@ public sealed partial class MainWindow
         else
         {
             rowH = MathF.Max(S(22), S(17 * 1.05f));
-            var tw = Txt.Line(dl, at, Txt.Caps(title), Face.Callout, 17, Palette.White, rowH / S(1));
+            var tw = Txt.Line(dl, at, Txt.CalloutCaps(title), Face.Callout, 17, Palette.White, rowH / S(1));
             Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
             Txt.LineRight(dl, at.X + w, at.Y, length, Face.MonoSemibold, 16, Palette.White, rowH / S(1));
         }

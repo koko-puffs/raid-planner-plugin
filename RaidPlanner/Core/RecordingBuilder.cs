@@ -86,9 +86,11 @@ public sealed class RecordingBuilder
         public uint Action;
     }
 
-    // Deaths: who's down now, and the last enemy action (or status, by a tick) that hit each.
+    // Deaths: who's down now, and the last enemy action (or status, by a tick) that hit each, and the
+    // last that could kill them (an instant death, or as much as the HP they had before it).
     private readonly Dictionary<int, bool> down = new();
     private readonly Dictionary<int, (double T, uint By, int Source, bool ByStatus)> lastHit = new();
+    private readonly Dictionary<int, (double T, uint By, int Source, bool ByStatus)> lastLethal = new();
 
     // Targetability of the enemies that have been targetable, and those reported this frame.
     private readonly Dictionary<int, bool> canTarget = new();
@@ -241,8 +243,9 @@ public sealed class RecordingBuilder
         for (var k = 0; k < hit.Count; k++)
         {
             if (hit[k] > 100) continue;
-            var did = dmg == null || dmg[k] > 0 || (flags != null && (flags[k] & Meter.Effects.FxInstantDeath) != 0);
-            if (did) lastHit[hit[k]] = (t, action, source, false);
+            var instant = flags != null && (flags[k] & Meter.Effects.FxInstantDeath) != 0;
+            var did = dmg == null || dmg[k] > 0 || instant;
+            if (did) Struck(hit[k], (t, action, source, false), instant || (dmg != null && before != null && before[k] >= 0 && dmg[k] >= before[k]));
         }
         recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before));
     }
@@ -376,14 +379,15 @@ public sealed class RecordingBuilder
 
     /// <summary>
     /// A DoT or HoT tick: on whom, credited to whom (0 when the game didn't say). A damage tick on a party
-    /// member with its status known can be what killed them (<see cref="DeathEvent.ByStatus"/>).
+    /// member with its status known can be what killed them (<see cref="DeathEvent.ByStatus"/>), with
+    /// their HP before it when known (<paramref name="hpBefore"/>, −1 not: a tick as big as it could kill).
     /// </summary>
-    public void CombatTick(double t, int on, int source, uint status, long amount, bool heal)
+    public void CombatTick(double t, int on, int source, uint status, long amount, bool heal, long hpBefore = -1)
     {
         if (on == 0 || amount <= 0) return;
         if (!heal && on <= 100 && status != 0 && partyIds.ContainsValue(on))
         {
-            lastHit[on] = (t, status, source > 100 ? source : 0, true);
+            Struck(on, (t, status, source > 100 ? source : 0, true), hpBefore >= 0 && amount >= hpBefore);
             RememberStatus(status);
         }
         if (combat.Ticks.Count >= CombatLog.MaxRows) return;
@@ -434,8 +438,20 @@ public sealed class RecordingBuilder
         if (was == dead) return;
         down[who] = dead;
         if (!dead || !Room) return;
-        var (by, from, byStatus) = lastHit.TryGetValue(who, out var h) && t - h.T <= DeathCause && t >= h.T - 0.5 ? (h.By, h.Source, h.ByStatus) : (0u, 0, false);
-        recording.Events.Add(new DeathEvent(t, who, by, from, byStatus));
+        // What killed them: the last that could (it landed within the time, and was as big as their HP
+        // or an instant death), else the last that hit them. A hit's damage is taken off a moment after the
+        // game says it landed, so a bleed's tick can come between it and their HP reaching 0.
+        var c = lastLethal.TryGetValue(who, out var l) && Within(l.T) ? l : lastHit.TryGetValue(who, out var h) && Within(h.T) ? h : default;
+        recording.Events.Add(new DeathEvent(t, who, c.By, c.Source, c.ByStatus));
+
+        bool Within(double at) => t - at <= DeathCause && t >= at - 0.5;
+    }
+
+    /// <summary>Something that did them harm: the last to hit them, and (<paramref name="lethal"/>) the last that could kill.</summary>
+    private void Struck(int who, (double T, uint By, int Source, bool ByStatus) what, bool lethal)
+    {
+        lastHit[who] = what;
+        if (lethal) lastLethal[who] = what;
     }
 
     /// <summary>

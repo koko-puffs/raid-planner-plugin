@@ -24,6 +24,8 @@ public sealed class MeterDetailWindow : Window
     private readonly Fonts fonts;
     private DateTime drawFailedAt;
 
+    private static readonly string[] Ranks = { "ENCDPS", "DPS" };
+
     private MeterTab tab = MeterTab.Damage;
     private int? fight;
     private int? player;
@@ -36,7 +38,8 @@ public sealed class MeterDetailWindow : Window
         this.fonts = fonts;
         Size = new Vector2(1180, 560);
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(760, 360), MaximumSize = new Vector2(2400, 1600) };
+        // At least as wide as the tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100.
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(840, 360), MaximumSize = new Vector2(2400, 1600) };
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse;
     }
 
@@ -127,10 +130,9 @@ public sealed class MeterDetailWindow : Window
             IsOpen = false;
             ShowSmall?.Invoke();
         }
-        var ranks = new[] { "ENCDPS", "DPS" };
-        var rw = Kit.SegmentedWidth(ranks);
+        var rw = Kit.SegmentedWidth(Ranks);
         x -= S(12) + rw;
-        var rank = Kit.Segmented("##detail-rank", new Vector2(x, cy - S(HSm) / 2), ranks, (int)config.MeterRank);
+        var rank = Kit.Segmented("##detail-rank", new Vector2(x, cy - S(HSm) / 2), Ranks, (int)config.MeterRank);
         if (rank != (int)config.MeterRank)
         {
             config.MeterRank = (MeterRank)rank;
@@ -144,20 +146,28 @@ public sealed class MeterDetailWindow : Window
             if (Kit.Button("##detail-pick", new Vector2(x, cy - S(HSm) / 2), pick, Btn.Outline, BtnSize.Sm, null, pw)) ImGui.OpenPopup("##detail-picker");
             Icons.Draw(dl, Icon.ChevronDown, new Vector2(x + pw - S(11.2f) - S(15), cy - S(15) / 2), S(15), Palette.White);
             DrawPicker(m, e);
-            // A rule, then where in the fight and the clock.
+            // A rule, then where in the fight and the clock, as they fit beside the tabs (the clock first).
+            var tabsRight = left + Kit.TabsWidth(tabs, TabSize.Md) + S(12);
             x -= S(12);
             dl.AddLine(new Vector2(x, cy - S(10)), new Vector2(x, cy + S(10)), Palette.U32(Palette.Line2), 1f);
+            var clock = Format.Clock(e.Duration);
+            var cw = Txt.Width(clock, Face.MonoSemibold, 18);
+            var clockRoom = S(12) + cw + S(7) + S(6);
             if (MeterView.Where(e) is { } where)
             {
                 var ww = Txt.Width(where, Face.Sans, 13);
-                x -= S(12) + ww;
-                Txt.Line(dl, new Vector2(x, y), where, Face.Sans, 13, Palette.Muted, H);
+                if (x - S(12) - ww - clockRoom >= tabsRight)
+                {
+                    x -= S(12) + ww;
+                    Txt.Line(dl, new Vector2(x, y), where, Face.Sans, 13, Palette.Muted, H);
+                }
             }
-            var clock = Format.Clock(e.Duration);
-            var cw = Txt.Width(clock, Face.MonoSemibold, 18);
-            x -= S(12) + cw;
-            Txt.Line(dl, new Vector2(x, y), clock, Face.MonoSemibold, 18, Palette.White, H);
-            Kit.BeatDot(dl, new Vector2(x - S(7) - S(3), cy), e.Live ? Palette.Ember : Palette.Faint, e.Live);
+            if (x - clockRoom >= tabsRight)
+            {
+                x -= S(12) + cw;
+                Txt.Line(dl, new Vector2(x, y), clock, Face.MonoSemibold, 18, Palette.White, H);
+                Kit.BeatDot(dl, new Vector2(x - S(7) - S(3), cy), e.Live ? Palette.Ember : Palette.Faint, e.Live);
+            }
         }
         y += S(H) + S(12);
 
@@ -171,14 +181,25 @@ public sealed class MeterDetailWindow : Window
             return;
         }
 
-        var leftW = MathF.Round(inner * 0.6f);
-        var rightX = left + leftW + S(18);
-        var rightW = left + inner - rightX;
-        if (tab == MeterTab.Deaths) DrawDeaths(dl, e, new Vector2(left, y), leftW, bottom - y, new Vector2(rightX, y), rightW);
+        if (tab == MeterTab.Deaths)
+        {
+            // The deaths beside the picked one's recap (the recap has the more to say).
+            var listW = MathF.Round(inner * 0.4f);
+            var recapX = left + listW + S(18);
+            DrawDeaths(dl, e, new Vector2(left, y), listW, bottom - y, new Vector2(recapX, y), left + inner - recapX);
+        }
         else
         {
+            // The table beside the picked player by ability when there's room for both (the table's
+            // columns want about 700, the abilities' 400); narrower, the table alone, all its columns readable.
+            var both = inner >= S(1060);
+            var leftW = both ? MathF.Round(Math.Clamp(inner * 0.6f, S(640), inner - S(18) - S(400))) : inner;
             DrawTable(dl, m!, e, new Vector2(left, y), leftW, bottom - y);
-            DrawAbilities(dl, m!, e, new Vector2(rightX, y), rightW, bottom - y);
+            if (both)
+            {
+                var rightX = left + leftW + S(18);
+                DrawAbilities(dl, m!, e, new Vector2(rightX, y), left + inner - rightX, bottom - y);
+            }
         }
 
         // The footnote: what Crit, DH and DPS mean.
@@ -238,7 +259,7 @@ public sealed class MeterDetailWindow : Window
     {
         dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.Slab), S(Palette.RadiusLg));
         dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), S(Palette.RadiusLg), ImDrawFlags.None, 1f);
-        var cols = Columns(e);
+        var (cols, list, cells, partyCells) = TableOf(e);
         var left = at.X + S(6) + S(12);
         var right = at.X + w - S(6) - S(12);
         var gap = S(10);
@@ -264,11 +285,9 @@ public sealed class MeterDetailWindow : Window
         }
         y += S(30);
         Kit.Rule(dl, at.X + S(6), at.X + w - S(6), y - 1);
-        var rows = MeterView.Ranked(e.Rows, tab, config.MeterRank);
-        if (player == null && rows.Count > 0) player = rows[0].PartyId;
+        // The player picked, else (none yet, or not in this fight: another pull picked) the top one.
+        if (list.Count > 0 && !list[0].IsLimitBreak && !list.Exists(r => r.PartyId == player && !r.IsLimitBreak)) player = list[0].PartyId;
         var rowH = S(34);
-        var list = new List<MeterRow>(rows);
-        if (tab == MeterTab.Damage && MeterView.LimitBreak(e.Rows) is { } lb) list.Add(lb);
         for (var i = 0; i < list.Count; i++)
         {
             var r = list[i];
@@ -285,35 +304,63 @@ public sealed class MeterDetailWindow : Window
             if (r.IsLimitBreak) Kit.LimitMark(dl, new Vector2(left, y + (rowH - S(18)) / 2));
             else Kit.Spot(dl, new Vector2(left + S(10), y + rowH / 2), 20, r.Slot, Palette.RoleColor(r.Role));
             var name = r.IsLimitBreak ? "Limit break" : config.MeterJobsOnly ? r.Job : r.Name;
-            var nw = Txt.Line(dl, new Vector2(nameX, y), Txt.Fit(name, Face.SansMedium, 14, jobX - S(10) - nameX - (r.Dead ? S(18) : 0)), Face.SansMedium, 14,
-                r.Dead ? Palette.Muted : Palette.White, 34);
+            var nameRoom = jobX - S(10) - nameX - (r.Dead ? S(18) : 0);
+            var nw = Txt.Line(dl, new Vector2(nameX, y), Txt.Fit(name, Face.SansMedium, 14, nameRoom), Face.SansMedium, 14, r.Dead ? Palette.Muted : Palette.White, 34);
             if (r.Dead) Icons.Draw(dl, Icon.Skull, new Vector2(nameX + nw + S(6), y + (rowH - S(12)) / 2), S(12), Palette.Danger);
+            // The limit break's own action after its name, quieter (the mock-up's "LB2 at 0:58": the model has its biggest hit's).
+            if (r.IsLimitBreak && r.MaxHitName.Length > 0 && nameRoom - nw - S(8) > S(30))
+                Txt.Line(dl, new Vector2(nameX + nw + S(8), y), Txt.Fit(r.MaxHitName, Face.Sans, 12, nameRoom - nw - S(8)), Face.Sans, 12, Palette.Muted, 34);
             if (!r.IsLimitBreak && !config.MeterJobsOnly) Kit.Label(dl, new Vector2(jobX, y + (rowH - Txt.Natural(Face.Mono, 10)) / 2), r.Job, 10, 0.06f, Palette.Faint);
             for (var c = 0; c < cols.Length; c++)
             {
                 var col = cols[c];
-                var text = col.Text(r);
                 var color = col.Red?.Invoke(r) == true ? Palette.Danger : col.Strong ? Palette.White : Palette.Text;
-                Txt.LineRight(dl, edges[c], y, text, col.Strong ? Face.MonoSemibold : Face.Mono, 13, color, 34);
+                Txt.LineRight(dl, edges[c], y, cells[i][c], col.Strong ? Face.MonoSemibold : Face.Mono, 13, color, 34);
             }
             y += rowH;
         }
         // The party at the foot.
         Kit.Rule(dl, at.X + S(6), at.X + w - S(6), y, Palette.Line3);
         Txt.Line(dl, new Vector2(nameX, y), "Party", Face.SansMedium, 14, Palette.White, 34);
-        var p = e.Party;
         for (var c = 0; c < cols.Length; c++)
+            Txt.LineRight(dl, edges[c], y, partyCells[c], cols[c].Strong ? Face.MonoSemibold : Face.Mono, 13, Palette.White, 34);
+    }
+
+    private (MeterEncounter? Of, MeterTab Tab, MeterRank Rank, Col[] Cols, List<MeterRow> Rows, string[][] Cells, string[] Party) table =
+        (null, MeterTab.Damage, MeterRank.EncDps, Array.Empty<Col>(), new List<MeterRow>(), Array.Empty<string[]>(), Array.Empty<string>());
+
+    /// <summary>
+    /// The table's columns, its rows in order (the limit break last) and every cell in words, worked out
+    /// once a snapshot (a few times a second while a fight is on), not each frame. The party's row leaves
+    /// out what doesn't add up (crit, DH, the biggest hit, DPS: as the mock-up leaves them).
+    /// </summary>
+    private (Col[] Cols, List<MeterRow> Rows, string[][] Cells, string[] Party) TableOf(MeterEncounter e)
+    {
+        var rank = config.MeterRank;
+        if (!ReferenceEquals(table.Of, e) || table.Tab != tab || table.Rank != rank)
         {
-            var col = cols[c];
-            var text = col.Head switch
+            var cols = Columns(e);
+            var rows = MeterView.Ranked(e.Rows, tab, rank);
+            if (tab == MeterTab.Damage && MeterView.LimitBreak(e.Rows) is { } lb) rows.Add(lb);
+            var cells = new string[rows.Count][];
+            for (var i = 0; i < rows.Count; i++)
             {
-                "Deaths" => MeterView.Deaths(e).Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                "%" => "100.0",
-                "Crit" or "DH" or "Max hit" or "Max heal" or "Over" => string.Empty,
-                _ => col.Text(p),
-            };
-            Txt.LineRight(dl, edges[c], y, text, col.Strong ? Face.MonoSemibold : Face.Mono, 13, Palette.White, 34);
+                cells[i] = new string[cols.Length];
+                for (var c = 0; c < cols.Length; c++) cells[i][c] = cols[c].Text(rows[i]);
+            }
+            var deaths = MeterView.Deaths(e).Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var party = new string[cols.Length];
+            for (var c = 0; c < cols.Length; c++)
+                party[c] = cols[c].Head switch
+                {
+                    "Deaths" => deaths,
+                    "%" => "100.0",
+                    "DPS" or "Crit" or "DH" or "Max hit" or "Max heal" or "Over" => string.Empty,
+                    _ => cols[c].Text(e.Party),
+                };
+            table = (e, tab, rank, cols, rows, cells, party);
         }
+        return (table.Cols, table.Rows, table.Cells, table.Party);
     }
 
     /// <summary>
@@ -339,26 +386,23 @@ public sealed class MeterDetailWindow : Window
             MeterTab.Taken => row.Taken,
             _ => row.Damage,
         };
-        var totalText = Format.Thousands(total);
-        var totalW = Txt.Width(totalText, Face.MonoSemibold, 13);
+        var view = AbilitiesOf(abilities, total);
+        var totalW = Txt.Width(view.Total, Face.MonoSemibold, 13);
         var title = config.MeterJobsOnly ? row.Job : $"{row.Name} · {row.Job}";
         Txt.Line(dl, new Vector2(tx, y), Txt.Fit(title, Face.SansSemibold, 15, right - totalW - S(12) - tx), Face.SansSemibold, 15, Palette.White, 15 * 1.25f);
-        var hits = abilities.Sum(a => a.Hits);
-        var by = tab == MeterTab.Taken ? "By what hit them" : "By ability";
-        var sub = $"{by} · {CountOf(abilities.Count, "ability", "abilities")}, {CountOf(hits, "hit", "hits")}";
-        Txt.Line(dl, new Vector2(tx, y + S(15 * 1.25f)), Txt.Fit(sub, Face.Sans, 13, right - tx), Face.Sans, 13, Palette.Muted, 19.5f);
-        Txt.LineRight(dl, right, y, totalText, Face.MonoSemibold, 13, Palette.White, 15 * 1.25f);
+        Txt.Line(dl, new Vector2(tx, y + S(15 * 1.25f)), Txt.Fit(view.Sub, Face.Sans, 13, right - tx), Face.Sans, 13, Palette.Muted, 19.5f);
+        Txt.LineRight(dl, right, y, view.Total, Face.MonoSemibold, 13, Palette.White, 15 * 1.25f);
         y += S(38) + S(10);
 
-        // Heads: Ability · Damage · % · Hits · Crit · DH · Max.
-        var heads = new[] { tab == MeterTab.Healing ? "Healing" : tab == MeterTab.Taken ? "Taken" : "Damage", "%", "Hits", "Crit", "DH", "Max" };
-        var widths = new[] { 64f, 36, 30, 36, 36, 56 };
-        if (tab != MeterTab.Damage)
+        // Heads: Ability · Damage · % · Hits · Crit · DH · Max (no DH but for damage).
+        var heads = tab switch
         {
-            heads = heads.Where(hd => hd != "DH").ToArray();
-            widths = new[] { 64f, 36, 30, 36, 56 };
-        }
-        var edges = new float[heads.Length];
+            MeterTab.Healing => HealingHeads,
+            MeterTab.Taken => TakenHeads,
+            _ => DamageHeads,
+        };
+        var widths = tab == MeterTab.Damage ? DamageWidths : OtherWidths;
+        Span<float> edges = stackalloc float[heads.Length];
         var ex = right;
         for (var i = heads.Length - 1; i >= 0; i--)
         {
@@ -375,37 +419,82 @@ public sealed class MeterDetailWindow : Window
         y += S(26);
         Kit.Rule(dl, at.X + S(8), at.X + w - S(8), y - 1);
         var rowH = S(30);
-        var room = (int)Math.Max(1, (at.Y + h - S(8) - y) / rowH) - 1;
-        var biggest = abilities.Count > 0 ? abilities.Max(a => a.Amount) : 0;
-        var shown = abilities.Take(abilities.Count > room ? Math.Max(0, room) : abilities.Count).ToList();
-        foreach (var a in shown)
+        // As many as fit; the rest summed on the last line ("9 more") when they don't all fit.
+        var fits = (int)Math.Max(1, (at.Y + h - S(8) - y) / rowH);
+        var shown = abilities.Count <= fits ? abilities.Count : Math.Max(0, fits - 1);
+        for (var n = 0; n < shown; n++)
         {
+            var a = abilities[n];
             var nameRoom = ex - x;
             var nx = x;
             nx += Txt.Line(dl, new Vector2(nx, y), Txt.Fit(a.Name, Face.SansMedium, 13, nameRoom - (a.IsTick ? S(40) : 0) - (a.Estimated ? S(40) : 0)), Face.SansMedium, 13, Palette.White, 30);
             if (a.IsTick) nx += S(6) + Kit.Tag(dl, new Vector2(nx + S(6), y + (rowH - S(16)) / 2), "DoT", TagKind.Plain, 16);
             if (a.Estimated) Kit.Tag(dl, new Vector2(nx + S(6), y + (rowH - S(16)) / 2), "est.", TagKind.Plain, 16);
-            var cells = tab == MeterTab.Damage
-                ? new[] { Format.Thousands(a.Amount), Format.Share(a.Share), a.Hits.ToString(System.Globalization.CultureInfo.InvariantCulture), Rate(a.CritRate), Rate(a.DirectHitRate), Format.Thousands(a.Max) }
-                : new[] { Format.Thousands(a.Amount), Format.Share(a.Share), a.Hits.ToString(System.Globalization.CultureInfo.InvariantCulture), Rate(a.CritRate), Format.Thousands(a.Max) };
-            for (var i = 0; i < cells.Length; i++)
+            var cells = view.Cells[n];
+            for (var i = 0; i < cells.Length && i < edges.Length; i++)
                 Txt.LineRight(dl, edges[i], y, cells[i], Face.Mono, 12, i == 0 ? Palette.White : Palette.Text, 30);
             // The bar under it, to the biggest.
             var ba = new Vector2(at.X + S(8) + S(10), y + rowH - S(2) - S(2));
             var bb = new Vector2(at.X + w - S(8) - S(10), y + rowH - S(2));
             dl.AddRectFilled(ba, bb, Palette.U32(Palette.Rgba(255, 255, 255, 0.04f)));
-            if (biggest > 0) dl.AddRectFilled(ba, new Vector2(ba.X + (bb.X - ba.X) * a.Amount / biggest, bb.Y), Palette.U32(Palette.Rgba(255, 255, 255, 0.22f)));
+            if (view.Biggest > 0) dl.AddRectFilled(ba, new Vector2(ba.X + (bb.X - ba.X) * a.Amount / view.Biggest, bb.Y), Palette.U32(Palette.Rgba(255, 255, 255, 0.22f)));
             y += rowH;
         }
-        if (abilities.Count > shown.Count)
+        if (abilities.Count > shown)
         {
-            var rest = abilities.Skip(shown.Count).ToList();
-            Txt.Line(dl, new Vector2(x, y), $"{rest.Count} more", Face.SansMedium, 13, Palette.Muted, 30);
-            Txt.LineRight(dl, edges[0], y, Format.Thousands(rest.Sum(r => r.Amount)), Face.Mono, 12, Palette.Muted, 30);
-            Txt.LineRight(dl, edges[1], y, Format.Share(rest.Sum(r => r.Share)), Face.Mono, 12, Palette.Muted, 30);
-            Txt.LineRight(dl, edges[2], y, rest.Sum(r => r.Hits).ToString(System.Globalization.CultureInfo.InvariantCulture), Face.Mono, 12, Palette.Muted, 30);
+            long amount = 0;
+            double share = 0;
+            var hits = 0;
+            for (var n = shown; n < abilities.Count; n++)
+            {
+                amount += abilities[n].Amount;
+                share += abilities[n].Share;
+                hits += abilities[n].Hits;
+            }
+            Txt.Line(dl, new Vector2(x, y), $"{abilities.Count - shown} more", Face.SansMedium, 13, Palette.Muted, 30);
+            Txt.LineRight(dl, edges[0], y, Format.Thousands(amount), Face.Mono, 12, Palette.Muted, 30);
+            Txt.LineRight(dl, edges[1], y, Format.Share(share), Face.Mono, 12, Palette.Muted, 30);
+            Txt.LineRight(dl, edges[2], y, hits.ToString(System.Globalization.CultureInfo.InvariantCulture), Face.Mono, 12, Palette.Muted, 30);
         }
         if (abilities.Count == 0) Txt.Line(dl, new Vector2(x, y), "Nothing yet.", Face.Sans, 13, Palette.Muted, 30);
+    }
+
+    private static readonly string[] DamageHeads = { "Damage", "%", "Hits", "Crit", "DH", "Max" };
+    private static readonly string[] HealingHeads = { "Healing", "%", "Hits", "Crit", "Max" };
+    private static readonly string[] TakenHeads = { "Taken", "%", "Hits", "Crit", "Max" };
+    private static readonly float[] DamageWidths = { 64, 36, 30, 36, 36, 56 };
+    private static readonly float[] OtherWidths = { 64, 36, 30, 36, 56 };
+
+    private (IReadOnlyList<AbilityRow>? Of, MeterTab Tab, long Amount, string[][] Cells, long Biggest, string Sub, string Total) abilityView =
+        (null, MeterTab.Damage, 0, Array.Empty<string[]>(), 0, string.Empty, string.Empty);
+
+    /// <summary>
+    /// The picked player's abilities in words (each line's cells, how many and how big, the total):
+    /// worked out again only when the source gives a new list (it keeps one, a few times a second
+    /// while a fight is on) or the tab changes, not each frame.
+    /// </summary>
+    private (string[][] Cells, long Biggest, string Sub, string Total) AbilitiesOf(IReadOnlyList<AbilityRow> abilities, long total)
+    {
+        if (!ReferenceEquals(abilityView.Of, abilities) || abilityView.Tab != tab || abilityView.Amount != total)
+        {
+            var cells = new string[abilities.Count][];
+            long biggest = 0;
+            var hits = 0;
+            for (var i = 0; i < abilities.Count; i++)
+            {
+                var a = abilities[i];
+                biggest = Math.Max(biggest, a.Amount);
+                hits += a.Hits;
+                var count = a.Hits.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                cells[i] = tab == MeterTab.Damage
+                    ? new[] { Format.Thousands(a.Amount), Format.Share(a.Share), count, Rate(a.CritRate), Rate(a.DirectHitRate), Format.Thousands(a.Max) }
+                    : new[] { Format.Thousands(a.Amount), Format.Share(a.Share), count, Rate(a.CritRate), Format.Thousands(a.Max) };
+            }
+            var by = tab == MeterTab.Taken ? "By what hit them" : "By ability";
+            var sub = $"{by} · {CountOf(abilities.Count, "ability", "abilities")}, {CountOf(hits, "hit", "hits")}";
+            abilityView = (abilities, tab, total, cells, biggest, sub, Format.Thousands(total));
+        }
+        return (abilityView.Cells, abilityView.Biggest, abilityView.Sub, abilityView.Total);
     }
 
     private static string Rate(double? r) => r is { } v ? Format.Share(v) : "–";
@@ -457,8 +546,8 @@ public sealed class MeterDetailWindow : Window
     /// <summary>
     /// A death's recap (`.rc`): "Odette died at 2:51" as a small callout, the killing blow and how far
     /// over; then its last hits and heals, oldest first: the time to a tenth, what it was (and from whom,
-    /// what made it worse), its amount (a hit red, a heal green), the HP before it as a bar; the killing
-    /// blow on a red wash.
+    /// what made it worse), its amount (a hit red, a heal green), the HP before it as a bar against their
+    /// max HP (<see cref="MeterView.RecapMax(DeathEntry)"/>); the killing blow on a red wash (<see cref="MeterView.KillingLine"/>).
     /// </summary>
     private void Recap(ImDrawListPtr dl, MeterEncounter e, DeathEntry d, Vector2 at, float w, float h)
     {
@@ -488,13 +577,14 @@ public sealed class MeterDetailWindow : Window
         var hw = Txt.SpacedWidth(Txt.Caps("HP before"), Face.Mono, 9, 0.08f);
         Kit.Label(dl, new Vector2(right - hw, hy), "HP before", 9, 0.08f, Palette.Faint);
         y += S(26);
-        var max = MeterView.RecapMax(d.Recap);
+        var max = MeterView.RecapMax(d);
+        var killing = MeterView.KillingLine(d);
         var rowH = S(40);
         for (var i = 0; i < d.Recap.Count; i++)
         {
             var l = d.Recap[i];
             if (y + rowH > at.Y + h - S(30)) break;
-            var kill = i == d.Recap.Count - 1 && l.Amount < 0;
+            var kill = i == killing;
             var min = new Vector2(at.X + S(6), y);
             var rmax = new Vector2(at.X + w - S(6), y + rowH);
             if (kill) dl.AddRectFilled(min, rmax, Palette.U32(Palette.DangerWash), S(Palette.RadiusSm));

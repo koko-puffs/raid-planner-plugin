@@ -253,10 +253,17 @@ public class CombatParserTests
     }
 
     [Fact]
-    public void A_heal_on_an_enemy_is_nonsense()
+    public void A_heal_on_an_enemy_isnt_the_partys_but_isnt_nonsense_a_heal_too_big_is()
     {
         var p = Parser(out var heard);
+        // An enemy healed by the party (one that absorbs the element it was hit with): left out, the
+        // meter not stopped for it (three in a row would have turned it off for the session).
         p.Action(Batch(1, Healer, 135, 0, (Boss, new[] { E(4, value: 10_000) }, 500, 1000, true)));
+        for (var i = 0; i < 5; i++) p.Action(Batch(2 + i, Dps, 142, 0, (Boss, new[] { E(4, value: 30_000) }, 500, 1000, true)));
+        Assert.Empty(heard.Effects);
+        Assert.Equal(0, p.Anomalies);
+        // A heal over five million on anyone is (the game moved something); a limit break's isn't checked.
+        p.Action(Batch(9, Healer, 135, 0, (Tank, new[] { E(4, p3: 0x60, p4: 0x40, value: 1) }, 500, 1000, false)));
         Assert.Empty(heard.Effects);
         Assert.Equal(1, p.Anomalies);
     }

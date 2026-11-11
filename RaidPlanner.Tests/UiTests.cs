@@ -360,6 +360,28 @@ public class PullViewTests
         Assert.Equal(new[] { 0d, 160 }, PullView.PhaseStarts(events));
         Assert.Equal(new[] { 0d }, PullView.PhaseStarts(Array.Empty<TargetEvent>()));
     }
+
+    [Fact]
+    public void The_wipe_counts_back_from_the_last_death_not_the_recordings_end()
+    {
+        // The recording runs on 12 s past the last death while the duty calls the wipe: the deaths in
+        // the 6 s before the last one are still the wipe (as the summary, the meter and the site say).
+        var r = new Recording { Duration = 212, Outcome = Outcome.Wipe };
+        r.Party.Add(new PartyMember(1, "MT", "PLD", "tank"));
+        r.Party.Add(new PartyMember(2, "H2", "SCH", "healer"));
+        r.Party.Add(new PartyMember(3, "R1", "BRD", "dps"));
+        r.Events.Add(new DeathEvent(171.3, 2, 0, 0));
+        r.Events.Add(new DeathEvent(195, 3, 0, 0));
+        r.Events.Add(new DeathEvent(200, 1, 0, 0));
+        var view = PullView.Build(r);
+        Assert.Equal(new[] { 171.3 }, view.Deaths);
+        Assert.Equal(2, view.WipeDeaths);
+        Assert.Equal(new[] { "H2" }, view.Rows.Where(x => x.Death).Select(x => x.DeathSlot));
+
+        // A pull that didn't end in a wipe has no wipe: every death is someone's.
+        r.Outcome = Outcome.Clear;
+        Assert.Equal(3, PullView.Build(r).Deaths.Count);
+    }
 }
 
 public class PlanCalloutTests

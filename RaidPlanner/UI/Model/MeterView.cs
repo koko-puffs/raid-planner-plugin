@@ -9,6 +9,9 @@ namespace RaidPlanner.UI.Model;
 /// <summary>One of the picker's rows: an encounter, whether it's the one shown, live, or the best.</summary>
 public sealed record PickerRow(MeterEncounter Fight, bool Shown, bool Live, bool Best);
 
+/// <summary>A row of the small meter as it's drawn: the row, its number and second column in words, its bar (0–1), its id.</summary>
+public sealed record MeterLine(MeterRow Row, string Value, string Second, float Bar, string Id);
+
 /// <summary>
 /// What the meter's windows show of an encounter, worked out away from ImGui so it's tested: the
 /// rows in order for a tab (biggest first, the limit break apart), each row's number and its second
@@ -39,11 +42,33 @@ public static class MeterView
         _ => rank == MeterRank.Dps && !r.IsLimitBreak ? r.Dps : r.EncDps,
     };
 
-    /// <summary>A row's number as the meter writes it: "27,840"; a big total in a narrow column "13.1M".</summary>
+    /// <summary>
+    /// A row's number as the meter writes it: "27,840", "3,912,400" (as the mock-up's Taken tab); a
+    /// total of ten million or more in the small meter's 66px column "13.1M" (whole, it would run into the job).
+    /// </summary>
     public static string ValueText(MeterRow r, MeterTab tab, MeterRank rank, bool narrow = false)
     {
         var v = (long)Math.Round(Value(r, tab, rank));
-        return narrow && tab == MeterTab.Taken ? Format.Compact(v) : Format.Thousands(v);
+        return narrow && Math.Abs(v) >= 10_000_000 ? Format.Compact(v) : Format.Thousands(v);
+    }
+
+    /// <summary>
+    /// The small meter's rows for a tab as it draws them: biggest first, each with its number and its
+    /// second column in words, its bar's length and its hit-test id; the limit break's apart (on the
+    /// Damage tab, when it was used). Worked out once a snapshot (a few times a second while a fight is
+    /// on), not each frame.
+    /// </summary>
+    public static (List<MeterLine> Rows, MeterLine? LimitBreak) Lines(MeterEncounter e, MeterTab tab, MeterRank rank)
+    {
+        var ranked = Ranked(e.Rows, tab, rank);
+        var top = ranked.Count > 0 ? Value(ranked[0], tab, rank) : 0;
+        var rows = new List<MeterLine>(ranked.Count);
+        foreach (var r in ranked)
+            rows.Add(new MeterLine(r, ValueText(r, tab, rank, true), Second(r, tab), Bar(r, top, tab, rank), "##mr" + r.PartyId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        MeterLine? lb = null;
+        if (tab == MeterTab.Damage && LimitBreak(e.Rows) is { } l)
+            lb = new MeterLine(l, Format.Thousands((long)Math.Round(l.EncDps)), Format.Share(l.DamageShare), top > 0 ? (float)Math.Clamp(l.EncDps / top, 0, 1) : 0, "##mr-lb");
+        return (rows, lb);
     }
 
     /// <summary>The second column: the share of the party's damage ("16.9"), overheal ("31%"), the share of what the party took.</summary>
@@ -116,7 +141,24 @@ public static class MeterView
         return ((float)(a / (double)top), (float)(b / (double)top));
     }
 
-    /// <summary>A recap's HP bar: the HP before against the most the recap saw (the model doesn't carry max HP).</summary>
+    /// <summary>A recap's HP bars are drawn against this: the dying member's max HP (<see cref="DeathEntry.MaxHp"/>), else the most the recap saw.</summary>
+    public static long RecapMax(DeathEntry death) => death.MaxHp > 0 ? death.MaxHp : RecapMax(death.Recap);
+
+    /// <summary>
+    /// Which line of a recap is the killing blow (on a red wash): the last hit that's the one the death
+    /// names (<see cref="DeathEntry.KilledBy"/> and its amount: it needn't be the last line, a bleed's tick
+    /// can come after it), else the last line when it's a hit; −1 for none.
+    /// </summary>
+    public static int KillingLine(DeathEntry death)
+    {
+        var recap = death.Recap;
+        for (var i = recap.Count - 1; i >= 0; i--)
+            if (recap[i].Amount <= 0 && -recap[i].Amount == death.Amount && recap[i].What == death.KilledBy)
+                return i;
+        return recap.Count > 0 && recap[^1].Amount < 0 ? recap.Count - 1 : -1;
+    }
+
+    /// <summary>A recap's HP bar without the max HP known: the HP before against the most the recap saw.</summary>
     public static long RecapMax(IReadOnlyList<RecapLine> recap)
     {
         long max = 0;
@@ -126,6 +168,18 @@ public static class MeterView
             if (l.Amount > 0) max = Math.Max(max, l.HpBefore + l.Amount);
         }
         return max;
+    }
+
+    /// <summary>
+    /// The line under "The meter has stopped" (<see cref="IMeterSource.Problem"/>): the source's words,
+    /// without saying it has stopped again ("What it reads from the game made no sense…").
+    /// </summary>
+    public static string StoppedLine(string problem)
+    {
+        const string lead = "The meter has stopped";
+        var t = problem.Trim();
+        if (t.StartsWith(lead, StringComparison.OrdinalIgnoreCase)) t = t[lead.Length..].TrimStart(':', '.', ',', ' ');
+        return t.Length == 0 ? "An update to the plugin should bring it back." : char.ToUpperInvariant(t[0]) + t[1..];
     }
 
     /// <summary>An outcome's tag on the meter: Wipe, Clear, or none for a fight that just ended.</summary>

@@ -69,8 +69,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private uint territory;
     private int recordedPull;
     private List<MeterEncounter>? kept;
-    private (int Fight, int Member, MeterTab Tab, double At, IReadOnlyList<AbilityRow> Rows)? abilities;
-    private (int Fight, PaceAgainst Against, double At, PaceLine? Line)? pace;
+    // The last breakdown and pace worked out, with when and whether their encounter was live then: one
+    // worked out live is worked out again a moment later (and once more after its end), one worked out
+    // after its end is kept as it is.
+    private (int Fight, int Member, MeterTab Tab, double At, bool Live, IReadOnlyList<AbilityRow> Rows)? abilities;
+    private (int Fight, PaceAgainst Against, double At, bool Live, PaceLine? Line)? pace;
 
     /// <param name="actionName">An action's name (the game's Action sheet).</param>
     /// <param name="statusName">A status's name (the game's Status sheet).</param>
@@ -145,6 +148,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             if (live == null) continue;
             var m = live.Join(p);
             m.Dead = dead;
+            if (p.MaxHp > 0) m.MaxHp = p.MaxHp;
             if (known && !was && dead) live.Died(m, t, this);
         }
         anyAlive = !allDown;
@@ -304,12 +308,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     public IReadOnlyList<AbilityRow> Abilities(int encounterId, int partyId, MeterTab tab)
     {
-        if (abilities is { } a && a.Fight == encounterId && a.Member == partyId && a.Tab == tab
-            && (Find(encounterId) is not { } stillLive || !stillLive.IsLive || now - a.At < RefreshEvery))
-            return a.Rows;
         var f = Find(encounterId);
+        if (abilities is { } a && a.Fight == encounterId && a.Member == partyId && a.Tab == tab && Fresh(f, a.At, a.Live))
+            return a.Rows;
         IReadOnlyList<AbilityRow> rows = f == null ? Array.Empty<AbilityRow>() : f.Abilities(partyId, tab, this);
-        abilities = (encounterId, partyId, tab, now, rows);
+        abilities = (encounterId, partyId, tab, now, f is { IsLive: true }, rows);
         return rows;
     }
 
@@ -331,10 +334,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     /// </summary>
     public PaceLine? Pace(int encounterId, PaceAgainst against)
     {
-        if (pace is { } c && c.Fight == encounterId && c.Against == against && (Find(encounterId) is not { IsLive: true } || now - c.At < RefreshEvery))
-            return c.Line;
+        var f = Find(encounterId);
+        if (pace is { } c && c.Fight == encounterId && c.Against == against && Fresh(f, c.At, c.Live)) return c.Line;
         var line = WorkOutPace(encounterId, against);
-        pace = (encounterId, against, now, line);
+        pace = (encounterId, against, now, f is { IsLive: true }, line);
         return line;
     }
 
@@ -357,6 +360,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         if (theirs <= 0) return null;
         return new PaceLine(other.Pull, against, $"P{phase + 1}", into, mine, theirs, (double)mine / theirs - 1);
     }
+
+    /// <summary>
+    /// Is what was worked out for an encounter at <paramref name="at"/> still right: it's gone (nothing
+    /// to work out again), or it was over then (and so is now), or it's live and that was a moment ago.
+    /// One worked out while live and over since is worked out again, with its last moments.
+    /// </summary>
+    private bool Fresh(Fight? f, double at, bool wasLive) => f == null || (!wasLive && !f.IsLive) || (f.IsLive && now - at < RefreshEvery);
 
     public void Clear()
     {
@@ -387,6 +397,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public required string Slot;
         public bool You;
         public bool Dead;
+
+        /// <summary>Their max HP as last seen (the party list's; 0 not known): what a death's recap is drawn against.</summary>
+        public long MaxHp;
+
         public double LastDied = double.NaN;
         public readonly Recap[] Recent = new Recap[RecapLength];
         public int RecentCount;
@@ -407,14 +421,18 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         }
     }
 
-    /// <summary>A line of a recap as it's kept: when (session time), what (an action or a status), the amount (hits negative), HP before.</summary>
-    private readonly record struct Recap(double T, AbilityKey What, long Amount, long HpBefore, string Note, bool Hit);
+    /// <summary>A line of a recap as it's kept: when (session time), what (an action or a status), the amount (hits negative), HP before; an instant death.</summary>
+    private readonly record struct Recap(double T, AbilityKey What, long Amount, long HpBefore, string Note, bool Hit, bool Instant = false);
 
     private sealed class Death
     {
         public required Member Who;
         public required double T;
         public required Recap[] Recent;
+
+        /// <summary>Their max HP as they died (0 not known).</summary>
+        public long MaxHp;
+
         public bool PartOfWipe;
     }
 
@@ -467,7 +485,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
         public Member Add(PartyState p, string slot)
         {
-            var m = new Member { Id = Members.Count + 1, Entity = p.Id, Name = p.Name, Job = p.Job, Role = Roles.RoleWord(p.Role), Slot = slot, You = p.You };
+            var m = new Member
+            {
+                Id = Members.Count + 1, Entity = p.Id, Name = p.Name, Job = p.Job, Role = Roles.RoleWord(p.Role), Slot = slot, You = p.You,
+                MaxHp = Math.Max(0, p.MaxHp),
+            };
             Members.Add(m);
             ByEntity[p.Id] = m;
             return m;
@@ -504,7 +526,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         {
             m.LastDied = t - Start;
             LastDeath = Math.Max(LastDeath, t);
-            Deaths.Add(new Death { Who = m, T = t - Start, Recent = m.RecentInOrder() });
+            Deaths.Add(new Death { Who = m, T = t - Start, Recent = m.RecentInOrder(), MaxHp = m.MaxHp });
         }
 
         /// <summary>A wiped encounter: the deaths within <see cref="WipeWindow"/> of the last are the wipe.</summary>
@@ -575,7 +597,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             Enemies.Add(e.Source);
             LastEvent = Math.Max(LastEvent, e.T);
             var note = (e.Fx & Effects.FxInstantDeath) != 0 ? "Instant death" : (e.Fx & Effects.FxCrit) != 0 ? "Critical" : string.Empty;
-            m.Remember(new Recap(e.T, new AbilityKey(e.Action, false, false, false), -e.Amount, e.HpBefore, note, true));
+            m.Remember(new Recap(e.T, new AbilityKey(e.Action, false, false, false), -e.Amount, e.HpBefore, note, true, (e.Fx & Effects.FxInstantDeath) != 0));
         }
 
         public void Tick(in TickEvent e, ReadOnlySpan<TickShare> shares, MeterSession s)
@@ -682,17 +704,31 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         private DeathEntry DeathOf(Death d, MeterSession s)
         {
             var recap = d.Recent.Select(r => new RecapLine(r.T - Start, s.Name(r.What), r.Amount, r.HpBefore, r.Note)).ToList();
-            // The killing blow: the last hit before it.
-            Recap? blow = null;
-            for (var i = d.Recent.Length - 1; i >= 0; i--)
-                if (d.Recent[i].Hit)
-                {
-                    blow = d.Recent[i];
-                    break;
-                }
+            var blow = KillingBlow(d.Recent, Start + d.T);
             var amount = blow is { } b ? -b.Amount : 0;
             var overkill = blow is { } k && k.HpBefore >= 0 ? Math.Max(0, amount - k.HpBefore) : 0;
-            return new DeathEntry(d.Who.Id, d.Who.Slot, d.Who.Name, d.T, blow is { } w ? s.Name(w.What) : "Unknown", amount, overkill, d.PartOfWipe, recap);
+            return new DeathEntry(d.Who.Id, d.Who.Slot, d.Who.Name, d.T, blow is { } w ? s.Name(w.What) : "Unknown", amount, overkill, d.PartOfWipe, recap,
+                d.MaxHp);
+        }
+
+        /// <summary>
+        /// The killing blow: the last hit (or bleed's tick) in the few seconds before the death that could
+        /// kill, an instant death or one whose amount was at least the HP they had before it; else the
+        /// last hit. A hit's damage is taken off a moment after the game says it landed, so a bleed's small
+        /// tick can come between a lethal hit and the HP reaching 0: that tick isn't what killed them. (The
+        /// recording's rule for a death's cause, <see cref="RecordingBuilder.Alive"/>.)
+        /// </summary>
+        private static Recap? KillingBlow(Recap[] recent, double diedAt)
+        {
+            Recap? last = null;
+            for (var i = recent.Length - 1; i >= 0; i--)
+            {
+                var r = recent[i];
+                if (!r.Hit) continue;
+                last ??= r;
+                if (diedAt - r.T <= RecordingBuilder.DeathCause && (r.Instant || (r.HpBefore >= 0 && -r.Amount >= r.HpBefore))) return r;
+            }
+            return last;
         }
 
         public IReadOnlyList<AbilityRow> Abilities(int partyId, MeterTab tab, MeterSession s)

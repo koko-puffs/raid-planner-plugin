@@ -13,14 +13,12 @@ public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<Mec
 
 /// <summary>
 /// What a pull's screen shows of its recording, worked out once on a worker: its mechanics in
-/// order with its deaths among them (not the wipe's), where its phases began (the recorder's rule:
-/// every enemy that had been targetable gone 8 seconds or more, then one back), and its counts.
+/// order with its deaths among them (not the wipe's: <see cref="PullStats.WipeDeaths"/>, the one rule
+/// the summary, the meter and the site keep too), where its phases began (the recorder's rule: every
+/// enemy that had been targetable gone 8 seconds or more, then one back), and its counts.
 /// </summary>
 public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double> Phases, IReadOnlyList<double> Deaths, int Waymarks, int Tethers, int WipeDeaths)
 {
-    /// <summary>The seconds at the end of a wiped pull whose deaths are the wipe, not anyone's (the spec's rule).</summary>
-    public const double WipeWindow = 6;
-
     /// <summary>Seconds every enemy must be gone for the next one back to start a phase (RecordingBuilder.PhaseGap).</summary>
     public const double PhaseGap = 8;
 
@@ -30,9 +28,12 @@ public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double>
         var slots = r.Party.ToDictionary(p => p.Id);
         var deaths = new List<double>();
         var wipe = 0;
+        // The wipe: a wiped pull's deaths within six seconds of its last death (counted back from that
+        // death, not from the recording's end, which runs on past the wipe while the duty calls it).
+        var wipeDeaths = PullStats.WipeDeaths(r);
         foreach (var d in r.Events.OfType<DeathEvent>())
         {
-            if (r.Outcome == Outcome.Wipe && d.T >= r.Duration - WipeWindow)
+            if (wipeDeaths.Contains(d))
             {
                 wipe++;
                 continue;

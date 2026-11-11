@@ -86,10 +86,10 @@ public sealed unsafe class FightRecorder : IDisposable
     /// A finished pull that ended without the game saying how, kept back for a moment before it's
     /// saved: the game says "duty complete" (or wiped) a little after combat ends, and then it's a clear.
     /// </summary>
-    private (RecordingBuilder B, double T, DateTime Until)? held;
+    private (RecordingBuilder B, double T, double Until)? held;
 
-    /// <summary>How long a pull that just ended waits for the game to say it was a clear or a wipe.</summary>
-    private static readonly TimeSpan HoldFor = TimeSpan.FromSeconds(10);
+    /// <summary>How long a pull that just ended waits for the game to say it was a clear or a wipe (seconds, by <see cref="Now"/>: the computer's clock being set doesn't move it).</summary>
+    private const double HoldFor = 10;
 
     private DateTime tickFailedAt;
 
@@ -341,7 +341,7 @@ public sealed unsafe class FightRecorder : IDisposable
     private void Tick()
     {
         // Released on time even at the title screen (a held pull is only in memory until then).
-        if (held is { } h && DateTime.UtcNow >= h.Until) ReleaseHeld();
+        if (held is { } h && Now >= h.Until) ReleaseHeld();
         if (!Services.ClientState.IsLoggedIn || Services.Objects.LocalPlayer == null)
         {
             wasInCombat = false;
@@ -505,7 +505,7 @@ public sealed unsafe class FightRecorder : IDisposable
         // Ended without the game saying how: held a moment for its "duty complete".
         if (how == Outcome.Ended && !stopped)
         {
-            held = (b, t, DateTime.UtcNow + HoldFor);
+            held = (b, t, Now + HoldFor);
             return;
         }
         Keep(b, t, how);
@@ -516,6 +516,8 @@ public sealed unsafe class FightRecorder : IDisposable
     {
         var recording = b.Finish(t, how);
         var phase = b.Phase;
+        // The phases as the builder counted them (the summary's phases, with its furthest phase), copied for the worker.
+        var starts = b.PhaseStarts.ToArray();
         // The status lists, made on this thread (once) and only read on the worker.
         var fails = data.FailKinds;
         var dots = data.DotIds;
@@ -530,7 +532,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 string? summary = null;
                 try
                 {
-                    summary = PullSummary.Build(recording, phase, id => fails.TryGetValue(id, out var kind) ? kind : CombatLists.NotAFail, dots.Contains)
+                    summary = PullSummary.Build(recording, phase, id => fails.TryGetValue(id, out var kind) ? kind : CombatLists.NotAFail, dots.Contains, starts)
                         .ToJsonString();
                 }
                 catch (Exception ex)
@@ -894,7 +896,7 @@ public sealed unsafe class FightRecorder : IDisposable
             else if (e.TargetParty) src = e.Source == 0 ? 0 : b.KnownActor(e.Source) ?? 0;
             else if (e.Source == 0) src = 0;
             else return; // someone else's DoT on an enemy
-            b.CombatTick(e.T - r.pullStart, on, src, e.Status, e.Amount, e.Heal);
+            b.CombatTick(e.T - r.pullStart, on, src, e.Status, e.Amount, e.Heal, e.TargetParty ? e.HpBefore : -1);
         }
     }
 

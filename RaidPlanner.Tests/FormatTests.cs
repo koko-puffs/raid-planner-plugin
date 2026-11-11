@@ -374,7 +374,8 @@ public class SummaryAdditionTests
         Assert.Equal(47.5, mt["active"]!.GetValue<double>(), 1);
         // The hits on the MT (the dodged one 0) and the bleed.
         Assert.Equal(30_000 + 45_000 + 8_000 + 20_000 + 15_000 + 90_000 + 30_000 + 3_000, mt["taken"]!.GetValue<long>());
-        Assert.Equal(1, mt["vuln"]!.GetValue<int>());
+        // The cone's Physical Vulnerability Up isn't a failure (a buster's, put on to make the tanks swap).
+        Assert.Equal(0, mt["vuln"]!.GetValue<int>());
         Assert.Equal(0, mt["dd"]!.GetValue<int>());
         var whm = slots[2];
         // Cure II: 25,000 with 20,000 missing.
@@ -397,11 +398,10 @@ public class SummaryAdditionTests
         Assert.DoesNotContain(hits, h => h[1] == 500);
         Assert.Equal(new long[] { 100, 100, 255, 8 * 30_000 }, hits[0]);
         Assert.Equal(new long[] { 400, 600, 1, 90_000 }, hits.Single(h => h[1] == 600));
-        var debuffs = stats["debuffs"]!.AsArray().Select(h => h!.AsArray().Select(x => x!.GetValue<long>()).ToArray()).ToList();
-        Assert.Equal(new long[] { 169, 1138, 1 | 16 }, Assert.Single(debuffs));
+        Assert.Empty(stats["debuffs"]!.AsArray());
         var names = stats["names"]!.AsObject();
         Assert.Equal("Exaflare", names["700"]!.GetValue<string>());
-        Assert.Equal("Physical Vulnerability Up", names["1138"]!.GetValue<string>());
+        Assert.False(names.ContainsKey("1138"));
         Assert.True(PullStats.Size(stats) <= PullStats.MaxBytes);
     }
 

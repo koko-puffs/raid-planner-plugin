@@ -36,7 +36,8 @@ public sealed unsafe class CombatMeter : IDisposable
     private readonly GameData data;
     private readonly FightRecorder recorder;
     private readonly PartyState[] party = new PartyState[24];
-    private readonly Dictionary<uint, (string Name, string Job, byte Role)> known = new();
+    /// <summary>Party members' names, jobs and roles by entity id, with the ClassJob they were read for (a job changed is read again).</summary>
+    private readonly Dictionary<uint, (uint ClassJob, string Name, string Job, byte Role)> known = new();
     private readonly Dictionary<uint, string> places = new();
     private bool listening;
     private double nextTargets;
@@ -95,7 +96,19 @@ public sealed unsafe class CombatMeter : IDisposable
         Services.Log.Error(ex, "Raid Planner's meter couldn't read this frame");
     }
 
-    private void OnUpdate(IFramework framework) => Guarded(Update);
+    /// <summary>Every frame: <see cref="Update"/>, guarded (not through <see cref="Guarded"/>, which would make a delegate each frame).</summary>
+    private void OnUpdate(IFramework framework)
+    {
+        if (disposed) return;
+        try
+        {
+            Update();
+        }
+        catch (Exception ex)
+        {
+            Failed(ex);
+        }
+    }
 
     private void Update()
     {
@@ -113,7 +126,7 @@ public sealed unsafe class CombatMeter : IDisposable
         if (recorder.Combat.Anomalies >= TooOdd)
         {
             Session.Stop();
-            Session.Problem = "The meter has stopped: what it reads from the game made no sense (a hit too big to be real, or the party healing an enemy), "
+            Session.Problem = "The meter has stopped: what it reads from the game made no sense (a hit or a heal too big to be real), "
                 + "so the game has probably moved something. An update to the plugin should bring it back.";
             Detach();
             return;
@@ -151,31 +164,21 @@ public sealed unsafe class CombatMeter : IDisposable
         }
     }
 
-    /// <summary>A party member's name, job and role, read the first time they're seen (reading a name makes a string).</summary>
+    /// <summary>
+    /// A party member's name, job and role, read the first time they're seen and again when their job
+    /// changes (outside a duty, with the meter everywhere): reading a name makes a string.
+    /// </summary>
     private (string Name, string Job, byte Role) Who(uint entityId, Dalamud.Game.ClientState.Party.IPartyMember? m)
     {
-        if (known.TryGetValue(entityId, out var who) && who.Job.Length > 0) return who;
-        string name;
-        uint classJob;
-        if (m != null)
-        {
-            name = m.Name.TextValue;
-            classJob = m.ClassJob.RowId;
-        }
-        else if (Services.Objects.LocalPlayer is { } me && me.EntityId == entityId)
-        {
-            name = me.Name.TextValue;
-            classJob = me.ClassJob.RowId;
-        }
-        else
-        {
-            return (string.Empty, string.Empty, 0);
-        }
+        var me = m == null && Services.Objects.LocalPlayer is { } local && local.EntityId == entityId ? local : null;
+        if (m == null && me == null) return (string.Empty, string.Empty, 0);
+        var classJob = m != null ? m.ClassJob.RowId : me!.ClassJob.RowId;
+        if (known.TryGetValue(entityId, out var was) && was.ClassJob == classJob && was.Job.Length > 0) return (was.Name, was.Job, was.Role);
+        var name = m != null ? m.Name.TextValue : me!.Name.TextValue;
         var (job, role) = data.Job(classJob);
-        who = (name, job, role);
         if (known.Count > 256) known.Clear();
-        known[entityId] = who;
-        return who;
+        known[entityId] = (classJob, name, job, role);
+        return (name, job, role);
     }
 
     /// <summary>A party member's in-combat flag, from the game's own look-up (false when they're out of range).</summary>

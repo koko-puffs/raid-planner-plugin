@@ -873,6 +873,20 @@ public class PacingTests
         Assert.True(b.Ready(T0));
     }
 
+    [Fact]
+    public void A_clock_set_back_doesnt_hold_calls_up()
+    {
+        var b = new Backoff(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15));
+        b.Failed(T0);
+        Assert.False(b.Ready(T0.AddSeconds(1)));
+        // Set back an hour: ready, not in an hour.
+        Assert.True(b.Ready(T0.AddHours(-1)));
+        var live = new LiveShare();
+        live.Changed(S(1), T0);
+        Assert.Null(live.Due(T0.AddMilliseconds(100)));
+        Assert.Equal(S(1), live.Due(T0.AddHours(-1))!.Value.What);
+    }
+
     private static LiveStep S(int step) => new("p", step, "id" + step);
 
     [Fact]

@@ -21,9 +21,10 @@ namespace RaidPlanner.Core.Meter;
 /// - Damage between party members, and anything between two others, isn't kept.
 /// - A tick is credited to the party member the game names (a pet's owner); when it names no one, it's
 ///   shared out between the party's DoTs known to be on the target, and marked estimated.
-/// - Nonsense (a heal from the party landing on an enemy, a single non-limit-break hit over
-///   <see cref="Absurd"/>) is dropped and counted in <see cref="Anomalies"/>: the game has moved
-///   something the parser reads.
+/// - Nonsense (a single non-limit-break hit or heal over <see cref="Absurd"/>) is dropped and counted
+///   in <see cref="Anomalies"/>: the game has moved something the parser reads. A heal landing on an
+///   enemy is dropped (never the party's healing) but isn't nonsense: an enemy that absorbs an element
+///   (as some of Eureka's do) is healed by the party's attacks.
 /// </summary>
 public sealed class CombatParser
 {
@@ -95,7 +96,7 @@ public sealed class CombatParser
 
     /// <summary>
     /// Does the game side need to read this target's HP and whether it's an enemy: a party member's
-    /// (hits and heals on them), or anyone the action heals (overheal; a heal on an enemy is nonsense).
+    /// (hits and heals on them), or anyone the action heals (overheal; a heal on an enemy isn't the party's healing).
     /// </summary>
     public bool WantsTarget(uint target, ReadOnlySpan<RawEffect> effects)
     {
@@ -198,11 +199,15 @@ public sealed class CombatParser
                 Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, FxKind.Damage, flags, d.Amount, -1, -1, 0, false, recipientHostile));
                 return;
             case EffectKind.Heal:
-                if (recipientHostile && !recipientParty)
+                // A heal that big can't be right (as a hit that big).
+                if (!lb && d.Amount > Absurd)
                 {
                     Anomalies++;
                     return;
                 }
+                // On an enemy it's never the party's healing, but it isn't nonsense either: an enemy
+                // that absorbs an element (as some of Eureka's do) is healed by the party's attacks.
+                if (recipientHostile && !recipientParty) return;
                 if (d.Crit) flags |= FxFlags.Crit;
                 Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, FxKind.Heal, flags, d.Amount, hp, max, 0, recipientParty, false));
                 return;

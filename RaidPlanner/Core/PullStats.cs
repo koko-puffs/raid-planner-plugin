@@ -254,9 +254,11 @@ public static class PullStats
         foreach (var h in r.Events.OfType<HitEvent>().OrderBy(e => e.T))
         {
             if (party.Contains(h.Source) || !r.Actions.TryGetValue(h.Action, out var info) || !Named(info)) continue;
+            // Only those it landed on: a miss (fully resisted), a dodge or an invulnerable target isn't
+            // a hit to fail by (as the site reads a recording's hits).
             var mask = 0;
             for (var i = 0; i < h.Targets.Count; i++)
-                if (bit.TryGetValue(h.Targets[i], out var b))
+                if (bit.TryGetValue(h.Targets[i], out var b) && (h.Fx == null || (h.Fx[i] & NotLanded) == 0))
                     mask |= 1 << b;
             if (mask == 0) continue;
             if (info.CastType <= 1 && h.Targets.Count <= 1 && !(h.Targets.Count == 1 && tanks.Contains(h.Targets[0]) && info.Cast > 0)) continue;
@@ -334,6 +336,12 @@ public static class PullStats
 
     public static int Size(JsonNode node) => Encoding.UTF8.GetByteCount(node.ToJsonString());
 
+    /// <summary>A target's effect bits that mean the hit didn't count on them: missed (fully resisted), invulnerable, dodged.</summary>
+    private const int NotLanded = Effects.FxResisted | Effects.FxInvulnerable | Effects.FxDodged;
+
+    /// <summary>An auto-attack's names, as the site's <c>AUTO_ATTACK</c> has them: never a mechanic.</summary>
+    private static readonly string[] Autos = { "attack", "auto-attack", "shot" };
+
     private static bool Named(ActionInfo info) =>
-        !string.IsNullOrWhiteSpace(info.Name) && !string.Equals(info.Name.Trim(), "attack", StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(info.Name) && !Autos.Contains(info.Name.Trim(), StringComparer.OrdinalIgnoreCase);
 }

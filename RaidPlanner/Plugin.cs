@@ -96,7 +96,16 @@ public sealed class Plugin : IDalamudPlugin
             meterWindow.OpenDetail = (tab, fight, member, death) => meterDetail.Show(tab, fight, member, death);
             meterWindow.OpenSettings = window.ShowMeterSettings;
             meterDetail.Source = meterSource;
-            meterDetail.ShowSmall = () => meterWindow.IsOpen = true;
+            // Back to the small meter: it follows Show the meter (OnUpdate), so that's turned on too, or it would close again next frame.
+            meterDetail.ShowSmall = () =>
+            {
+                if (!config.ShowMeter)
+                {
+                    config.ShowMeter = true;
+                    config.Save();
+                }
+                meterWindow.IsOpen = true;
+            };
             window.Meter = meterSource;
             window.MeterProblem = () => meter.Source.Problem;
             plans.ShowWindow = open => planWindow.IsOpen = open;
@@ -155,6 +164,7 @@ public sealed class Plugin : IDalamudPlugin
                 meterWindow.IsOpen = config.ShowMeter;
                 break;
             case "meter unlock":
+                // Unlock saves the settings, this included.
                 config.ShowMeter = true;
                 meterWindow.Unlock();
                 meterWindow.IsOpen = true;

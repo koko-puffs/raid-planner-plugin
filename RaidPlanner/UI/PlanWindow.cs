@@ -52,6 +52,7 @@ public sealed class PlanWindow : Window
         public List<string> Lines = new();
         public float LinesWidth = -1;
         public float LinesScale;
+        public bool LinesReady;
     }
 
     private StepView? view;
@@ -231,10 +232,10 @@ public sealed class PlanWindow : Window
             y += lh;
         }
 
-        // The step's callout, big; its name under it.
+        // The step's callout, big (three lines at most, at its smallest too); its name under it.
         var px = small ? 16 : 22;
         y += S(small ? 4 : 6);
-        y += Kit.Callout(dl, new Vector2(left, y), v.Big, px, w, small ? 2 : 3, 1.02f);
+        y += Kit.Callout(dl, new Vector2(left, y), v.Big, px, w, 3, 1.02f);
         if (v.Name != null && !small)
         {
             y += S(3);
@@ -253,8 +254,9 @@ public sealed class PlanWindow : Window
             y += Kit.Cast(dl, new Vector2(left, y), w, "Following the pull", time, fraction, true, Face.SansMedium, 12, Palette.Text);
         }
 
-        // The footer: previous, where you are, next.
-        var footH = S(HSm);
+        // The footer: previous, where you are, next. At its smallest there's none (as the mock-up draws
+        // it: the callout, the board and the notes' line take the room; /raidplan next and prev still move it).
+        var footH = small ? 0 : S(HSm);
         var footY = bottom - footH;
 
         // The board, as big as leaves room for a few lines of notes.
@@ -269,15 +271,19 @@ public sealed class PlanWindow : Window
         y += board + S(8);
 
         // The notes, scrolling when long; too small a window says they're there.
-        var notesH = footY - S(8) - y;
+        var notesH = footY - (small ? 0 : S(8)) - y;
         Notes(v, left, y, w, notesH, small);
 
         // Previous and next: 32px squares, the count in mono between them.
-        if (Kit.IconButton("##rp-prev", new Vector2(left, footY), Icon.ChevronLeft, "Previous step", Btn.Outline, BtnSize.Sm, v.Step == 0)) plans.Move(-1);
-        if (Kit.IconButton("##rp-next", new Vector2(left + w - S(HSm), footY), Icon.ChevronRight, "Next step", Btn.Outline, BtnSize.Sm, v.Step >= v.Plan.Steps.Count - 1))
-            plans.Move(1);
-        var cw = Txt.Width(v.Count, Face.Mono, 13);
-        Txt.Line(dl, new Vector2(left + (w - cw) / 2, footY), v.Count, Face.Mono, 13, Palette.Muted, HSm);
+        if (!small)
+        {
+            if (Kit.IconButton("##rp-prev", new Vector2(left, footY), Icon.ChevronLeft, "Previous step", Btn.Outline, BtnSize.Sm, v.Step == 0)) plans.Move(-1);
+            if (Kit.IconButton("##rp-next", new Vector2(left + w - S(HSm), footY), Icon.ChevronRight, "Next step", Btn.Outline, BtnSize.Sm,
+                    v.Step >= v.Plan.Steps.Count - 1))
+                plans.Move(1);
+            var cw = Txt.Width(v.Count, Face.Mono, 13);
+            Txt.Line(dl, new Vector2(left + (w - cw) / 2, footY), v.Count, Face.Mono, 13, Palette.Muted, HSm);
+        }
         ImGui.SetCursorScreenPos(new Vector2(left, bottom));
         ImGui.Dummy(Vector2.Zero);
     }
@@ -324,10 +330,12 @@ public sealed class PlanWindow : Window
             return;
         }
         var scale = ImGuiHelpers.GlobalScale;
-        if (MathF.Abs(v.LinesWidth - w) > 0.5f || v.LinesScale != scale)
+        // Wrapped again for a new width or scale, and until the face is built (measured in Dalamud's font before).
+        if (MathF.Abs(v.LinesWidth - w) > 0.5f || v.LinesScale != scale || !v.LinesReady)
         {
             v.LinesWidth = w;
             v.LinesScale = scale;
+            v.LinesReady = Txt.Ready(Face.Sans, 13);
             v.Lines = Wrap(v.Notes, w - S(10));
         }
         var lh = S(19.5f);

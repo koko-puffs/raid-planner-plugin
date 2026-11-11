@@ -19,7 +19,11 @@ public sealed class Backoff
         this.most = most;
     }
 
-    public bool Ready(DateTime now) => now >= until;
+    /// <summary>
+    /// The wait is over; or the computer's clock has been set back by more than the wait (else a clock
+    /// put back an hour would hold every call up for that hour).
+    /// </summary>
+    public bool Ready(DateTime now) => now >= until || until - now > wait;
 
     /// <summary>When it's ready again.</summary>
     public DateTime Until => until;
@@ -72,7 +76,8 @@ public sealed class LiveShare
     /// <summary>What to send now, if anything: it's settled, nothing's on its way, and the site doesn't have it yet.</summary>
     public LiveCall? Due(DateTime now)
     {
-        if (inFlight != 0 || pending is not { } p || now < due || !backoff.Ready(now)) return null;
+        // Not settled yet (a clock set back by more than the wait counts as settled).
+        if (inFlight != 0 || pending is not { } p || (now < due && due - now <= Settle) || !backoff.Ready(now)) return null;
         if (sent == p)
         {
             pending = null;

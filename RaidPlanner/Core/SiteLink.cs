@@ -155,17 +155,27 @@ public static class SiteLink
 
     public static bool IsUuid(string? id) => id != null && Uuid.IsMatch(id);
 
-    /// <summary>What's sent: the token, the pull's name, its own id and the recording (its file's JSON, as an object).</summary>
+    /// <summary>
+    /// What's sent: the token, the pull's name, its own id and the recording (its file's JSON, as an
+    /// object). The recording goes in as it's written (checked to be JSON as it's copied), never read into
+    /// a tree of nodes first: a big pull's tree is a hundred MB or more that the game's process would have
+    /// to collect afterwards.
+    /// </summary>
+    /// <exception cref="JsonException">The recording isn't JSON.</exception>
     public static string Body(string token, string name, string recordingJson, string? clientId = null)
     {
-        var body = new JsonObject
+        using var ms = new MemoryStream(recordingJson.Length + 512);
+        using (var w = new Utf8JsonWriter(ms))
         {
-            ["p_token"] = token,
-            ["p_name"] = name.Length > 120 ? name[..120] : name,
-            ["p_recording"] = JsonNode.Parse(recordingJson),
-        };
-        if (clientId != null) body["p_client_id"] = clientId;
-        return body.ToJsonString();
+            w.WriteStartObject();
+            w.WriteString("p_token", token);
+            w.WriteString("p_name", name.Length > 120 ? name[..120] : name);
+            w.WritePropertyName("p_recording");
+            w.WriteRawValue(recordingJson);
+            if (clientId != null) w.WriteString("p_client_id", clientId);
+            w.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
     }
 
     /// <summary>

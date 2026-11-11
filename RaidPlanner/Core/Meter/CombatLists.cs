@@ -47,19 +47,21 @@ public static class CombatLists
     /// <summary>Damage Down: what a failed mechanic often leaves.</summary>
     public const int FailDamageDown = 1;
 
-    /// <summary>Vulnerability Up (physical, magic or plain): the other one.</summary>
+    /// <summary>Vulnerability Up: the other one.</summary>
     public const int FailVulnerability = 2;
 
     /// <summary>
-    /// Whether a status is a damage down or a vulnerability up, by its English name: "Damage Down",
-    /// or a name ending "Vulnerability Up" ("Physical Vulnerability Up", "Magic Vulnerability Up").
+    /// Whether a status is a damage down or a vulnerability up, by its English name: exactly "Damage
+    /// Down" or "Vulnerability Up" (the Status sheet's 18 and 22 rows of those names in November 2026),
+    /// as the site's <c>model/debuffs.ts</c> lists them by id. "Physical Vulnerability Up" and "Magic
+    /// Vulnerability Up" aren't failures: tankbusters put them on the tanks on purpose (to make them swap).
     /// </summary>
     public static int FailKind(string? englishName)
     {
         if (string.IsNullOrWhiteSpace(englishName)) return NotAFail;
         var name = englishName.Trim();
         if (name.Equals("Damage Down", StringComparison.OrdinalIgnoreCase)) return FailDamageDown;
-        if (name.EndsWith("Vulnerability Up", StringComparison.OrdinalIgnoreCase)) return FailVulnerability;
+        if (name.Equals("Vulnerability Up", StringComparison.OrdinalIgnoreCase)) return FailVulnerability;
         return NotAFail;
     }
 }

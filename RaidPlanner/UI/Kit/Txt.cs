@@ -27,12 +27,35 @@ public static class Txt
 {
     public static Fonts Fonts { get; set; } = null!;
 
-    /// <summary>The site's text-transform: capitals, except on a Japanese client.</summary>
-    public static string Caps(string text) => Format.Caps(text, Fonts.Japanese);
+    /// <summary>The site's text-transform for the mono capitals (tags, eyebrows, labels): the windows' own words, in capitals on every client.</summary>
+    public static string Caps(string text) => Format.Caps(text, false);
+
+    /// <summary>The callout's capitals: as written on a Japanese client (Dalamud's font, the plan's own words), else in capitals.</summary>
+    public static string CalloutCaps(string text) => Format.Caps(text, Fonts.Japanese);
+
+    /// <summary>
+    /// Whether a face is built and in the atlas (it's built after the plugin loads, and again when
+    /// Dalamud's fonts change): what's measured before then is measured in Dalamud's font, so it isn't kept.
+    /// </summary>
+    public static bool Ready(Face face, int px) => Fonts.Handle(face, px).Available;
+
+    /// <summary>
+    /// The face text is drawn in: on a Japanese client the mono (Geist Mono, which has no kana or
+    /// kanji) gives way to the sans (Dalamud's font there) for text with Japanese in it, as a duty's
+    /// name in an eyebrow or a job's abbreviation in the meter.
+    /// </summary>
+    public static Face For(Face face, ReadOnlySpan<char> text)
+    {
+        if (face is not (Face.Mono or Face.MonoSemibold) || !Fonts.Japanese) return face;
+        foreach (var c in text)
+            if (c >= '⺀')
+                return face == Face.Mono ? Face.Sans : Face.SansSemibold;
+        return face;
+    }
 
     public static Vector2 Measure(string text, Face face, int px)
     {
-        using (Fonts.Push(face, px)) return ImGui.CalcTextSize(text);
+        using (Fonts.Push(For(face, text), px)) return ImGui.CalcTextSize(text);
     }
 
     public static float Width(string text, Face face, int px) => Measure(text, face, px).X;
@@ -52,6 +75,7 @@ public static class Txt
     /// <summary>Draws text with its glyph box's top at <paramref name="pos"/>; returns its width.</summary>
     public static float Draw(ImDrawListPtr dl, Vector2 pos, string text, Face face, int px, Vector4 color)
     {
+        face = For(face, text);
         using (Fonts.Push(face, px))
         {
             dl.AddText(Snap(pos), Palette.U32(color), text);
@@ -64,6 +88,7 @@ public static class Txt
     /// <summary>Draws one line centred in a CSS line box <paramref name="lineCss"/> tall (0: the font's own line); returns its width.</summary>
     public static float Line(ImDrawListPtr dl, Vector2 lineTop, string text, Face face, int px, Vector4 color, float lineCss = 0)
     {
+        face = For(face, text);
         using (Fonts.Push(face, px))
         {
             var size = ImGui.GetFontSize();
@@ -93,7 +118,7 @@ public static class Txt
     /// </summary>
     public static float Spaced(ImDrawListPtr dl, Vector2 pos, string text, Face face, int px, Vector4 color, float em, bool draw = true)
     {
-        using (Fonts.Push(face, px))
+        using (Fonts.Push(For(face, text), px))
         {
             var spacing = S(px * em);
             var x = pos.X;
@@ -116,14 +141,14 @@ public static class Txt
     /// <summary>The text cut to fit a width, with an ellipsis.</summary>
     public static string Fit(string text, Face face, int px, float width)
     {
-        using (Fonts.Push(face, px))
+        using (Fonts.Push(For(face, text), px))
             return Format.Fit(text, s => ImGui.CalcTextSize(s).X, width);
     }
 
     /// <summary>Words wrapped to a width, at most <paramref name="maxLines"/> lines (the last cut with "…").</summary>
     public static List<string> Wrap(string text, Face face, int px, float width, int maxLines = int.MaxValue)
     {
-        using (Fonts.Push(face, px))
+        using (Fonts.Push(For(face, text), px))
             return Format.Wrap(text, s => ImGui.CalcTextSize(s).X, width, maxLines);
     }
 
@@ -142,7 +167,7 @@ public static class Txt
         for (var r = 0; r < runs.Count; r++)
         {
             var run = runs[r];
-            using (Fonts.Push(run.Face, run.Px))
+            using (Fonts.Push(For(run.Face, run.Text), run.Px))
             {
                 var space = ImGui.CalcTextSize(" ").X;
                 var text = run.Text;
@@ -217,7 +242,7 @@ public static class Txt
             {
                 var tok = tokens[t];
                 var run = runs[tok.Run];
-                using (Fonts.Push(run.Face, run.Px))
+                using (Fonts.Push(For(run.Face, run.Text), run.Px))
                 {
                     var size = ImGui.GetFontSize();
                     var top = new Vector2(lx, y + (box - size) / 2);
