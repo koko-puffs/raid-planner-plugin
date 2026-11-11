@@ -65,12 +65,25 @@ public enum Icon
     Sparkles,
     Lock,
     LockOpen,
+    CircleX,
+    CircleCheck,
+    Skull,
+    ArrowUpRight,
+    ArrowRight,
+    Download,
+    Star,
+    MousePointer,
+    Sword,
+    Shield,
+    PanelRight,
+    RefreshCw,
+    Maximize,
 }
 
 /// <summary>
 /// Lucide's outlined icons, drawn with ImGui's draw lists from their SVG paths
-/// (<c>viewBox="0 0 24 24"</c>, <c>stroke-width:1.8</c>, round caps and joins). The stroke is in the
-/// icon's 24-unit grid as in SVG, so a 16px icon has the mockup's 1.2px line and a 24px one 1.8px.
+/// (<c>viewBox="0 0 24 24"</c>, <c>stroke-width:1.75</c> as the site's `.i`, round caps and joins). The stroke is
+/// in the icon's 24-unit grid as in SVG, so a 15px icon has a 1.1px line.
 ///
 /// The paths are Lucide's (https://lucide.dev), under the ISC License: copyright (c) for portions of
 /// Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other copyright (c) for
@@ -168,6 +181,20 @@ public static class Icons
         [Icon.Sparkles] = (new[] { "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z", "M20 3v4", "M22 5h-4" }, false),
         [Icon.Lock] = (new[] { Rect(3, 11, 18, 11, 2), "M7 11V7a5 5 0 0 1 10 0v4" }, false),
         [Icon.LockOpen] = (new[] { Rect(3, 11, 18, 11, 2), "M7 11V7a5 5 0 0 1 9.9-1" }, false),
+        // Ready Check's: the meter's tabs, the toasts, deaths, links with their arrows (Lucide 0.4xx).
+        [Icon.CircleX] = (new[] { Circle(12, 12, 10), "m15 9-6 6", "m9 9 6 6" }, false),
+        [Icon.CircleCheck] = (new[] { Circle(12, 12, 10), "m9 12 2 2 4-4" }, false),
+        [Icon.Skull] = (new[] { "m12.5 17-.5-1-.5 1h1z", "M15 22a1 1 0 0 0 1-1v-1a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20v1a1 1 0 0 0 1 1z", Circle(15, 12, 1), Circle(9, 12, 1) }, false),
+        [Icon.ArrowUpRight] = (new[] { "M7 7h10v10", "M7 17 17 7" }, false),
+        [Icon.ArrowRight] = (new[] { "M5 12h14", "m12 5 7 7-7 7" }, false),
+        [Icon.Download] = (new[] { "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M7 10l5 5 5-5", "M12 15V3" }, false),
+        [Icon.Star] = (new[] { "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" }, false),
+        [Icon.MousePointer] = (new[] { "M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" }, false),
+        [Icon.Sword] = (new[] { "M14.5 17.5 3 6V3h3l11.5 11.5", "M13 19l6-6", "M16 16l4 4", "M19 21l2-2" }, false),
+        [Icon.Shield] = (new[] { "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" }, false),
+        [Icon.PanelRight] = (new[] { Rect(3, 3, 18, 18, 2), "M15 3v18" }, false),
+        [Icon.RefreshCw] = (new[] { "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5" }, false),
+        [Icon.Maximize] = (new[] { "M15 3h6v6", "M9 21H3v-6", "M21 3l-7 7", "M3 21l7-7" }, false),
         [Icon.Inbox] = (new[] { "M22 12h-6l-2 3h-4l-2-3H2", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }, false),
     };
 
@@ -188,14 +215,14 @@ public static class Icons
     }
 
     /// <summary>Draws an icon with its top-left at <paramref name="pos"/>, <paramref name="size"/> pixels square (already scaled).</summary>
-    /// <param name="stroke">The stroke in the icon's 24-unit grid (Lucide's strokeWidth): 1.8, or 1.6 at 18px and up.</param>
-    public static void Draw(ImDrawListPtr dl, Icon icon, Vector2 pos, float size, Vector4 color, float stroke = 1.8f)
+    /// <param name="stroke">The stroke in the icon's 24-unit grid (Lucide's strokeWidth): the site's 1.75 (2.6 for a tick).</param>
+    public static void Draw(ImDrawListPtr dl, Icon icon, Vector2 pos, float size, Vector4 color, float stroke = 1.75f)
     {
         var (subs, filled) = Get(icon);
         var k = size / 24f;
         var col = Palette.U32(color);
         var thickness = stroke * k;
-        Span<Vector2> buffer = stackalloc Vector2[128];
+        Span<Vector2> buffer = stackalloc Vector2[512];
         foreach (var sub in subs)
         {
             var n = Math.Min(sub.Points.Count, buffer.Length);

@@ -139,6 +139,9 @@ public sealed class CueFollower
     /// <summary>Where the pull the plan was made from would be now.</summary>
     private double PlanTime(double now) => anchorT + (now - anchorAt);
 
+    /// <summary>The plan's own time now (its cues' times), once a cue has matched in this pull; null before.</summary>
+    public double? Clock(double now) => Following && engaged ? PlanTime(now) : null;
+
     /// <summary>An enemy's cast began, going off <paramref name="castLeft"/> seconds from <paramref name="now"/>. True when the step changed.</summary>
     public bool Cast(uint action, double now, double castLeft)
     {

@@ -125,6 +125,9 @@ public sealed class PlanService : IDisposable
     /// <summary>A pull is moving the plan along now.</summary>
     public bool Following => follower is { Following: true } && ForThisDuty;
 
+    /// <summary>Where the pull is in the plan's own time (its cues' times), once a cue has matched; null before (the plan window's slim cast bar).</summary>
+    public double? PlanClock => follower != null && Following && recorder.InPull ? follower.Clock(recorder.Elapsed) : null;
+
     /// <summary>Your plans for the duty you're in.</summary>
     public IEnumerable<PlanListItem> ForDuty => Content == 0 ? Enumerable.Empty<PlanListItem>() : List.Where(p => p.Content == Content);
 
@@ -298,13 +301,11 @@ public sealed class PlanService : IDisposable
     // ---------------------------------------------------------------------------------------------
     // Callouts and chat.
 
-    /// <summary>A step called out: its name and its notes' first line in chat, with a soft sound.</summary>
+    /// <summary>A step said in chat: its name, then its callout as a raid lead would say it (<see cref="PlanJson.ChatLine"/>), with a soft sound.</summary>
     private void Callout(int step)
     {
         if (Plan == null || step < 0 || step >= Plan.Steps.Count) return;
-        var s = Plan.Steps[step];
-        var line = PlanJson.FirstLine(s.Notes);
-        Print(line.Length > 0 ? $"{s.Name}: {line}" : s.Name);
+        Print(PlanJson.ChatLine(Plan.Steps[step]));
         Chime();
     }
 

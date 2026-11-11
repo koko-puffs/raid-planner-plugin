@@ -1,10 +1,17 @@
+using System;
 using System.Collections.Generic;
+using Dalamud.Game;
 using Lumina.Excel.Sheets;
 using RaidPlanner.Core;
+using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.Game;
 
-/// <summary>What the game's own data says about actions, duties and jobs (each looked up once, kept).</summary>
+/// <summary>
+/// What the game's own data says about actions, duties, jobs and statuses (each looked up once, kept).
+/// On the framework thread, except the status lists (<see cref="FailKinds"/>, <see cref="DotIds"/>,
+/// <see cref="ShieldIds"/>), made once and never changed after, which a worker may read.
+/// </summary>
 public sealed class GameData
 {
     private readonly Dictionary<uint, ActionInfo?> actions = new();
@@ -31,11 +38,68 @@ public sealed class GameData
         if (Services.Data.GetExcelSheet<Action>().TryGetRow(id, out var row))
         {
             var omen = row.Omen.ValueNullable is { } o ? o.Path.ExtractText() : string.Empty;
-            info = new ActionInfo(row.Name.ExtractText(), row.CastType, row.EffectRange, row.XAxisModifier, omen, row.Cast100ms / 10f);
+            info = new ActionInfo(row.Name.ExtractText(), row.CastType, row.EffectRange, row.XAxisModifier, omen, row.Cast100ms / 10f,
+                (int)row.ActionCategory.RowId, row.Recast100ms / 10f);
         }
         actions[id] = info;
         return info;
     }
+
+    /// <summary>An action's ActionCategory row (9 a limit break, 15 PvP's; 0 unknown): the combat parser's question.</summary>
+    public int ActionCategory(uint id) => Action(id)?.Category ?? 0;
+
+    /// <summary>An action's name for the meter ("Action 1234" for one the sheet doesn't name).</summary>
+    public string ActionName(uint id) => Action(id) is { Name.Length: > 0 } a ? a.Name : $"Action {id}";
+
+    /// <summary>A status's name for the meter ("Status 1234" for one the sheet doesn't name).</summary>
+    public string StatusName(uint id) => Status(id) is { Name.Length: > 0 } st ? st.Name : $"Status {id}";
+
+    private readonly Lazy<(Dictionary<uint, int> Fails, HashSet<uint> Dots, HashSet<uint> Shields)> lists = new(ReadLists);
+
+    /// <summary>
+    /// The statuses the meter and the summary pick out, by their English names on the Status sheet
+    /// (read in English whatever the client's language; <see cref="CombatLists"/>): every damage down
+    /// and vulnerability up (by kind), the jobs' DoTs, the barriers. Made once, then only read.
+    /// </summary>
+    private static (Dictionary<uint, int>, HashSet<uint>, HashSet<uint>) ReadLists()
+    {
+        var fails = new Dictionary<uint, int>();
+        var dots = new HashSet<uint>();
+        var shields = new HashSet<uint>();
+        var dotNames = new HashSet<string>(CombatLists.DotNames, StringComparer.OrdinalIgnoreCase);
+        var shieldNames = new HashSet<string>(CombatLists.ShieldNames, StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var row in Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Status>(ClientLanguage.English))
+            {
+                var name = row.Name.ExtractText().Trim();
+                if (name.Length == 0) continue;
+                var fail = CombatLists.FailKind(name);
+                if (fail != CombatLists.NotAFail) fails[row.RowId] = fail;
+                // Every row with the name: only the party's statuses are ever asked about, so another of the same name does no harm.
+                if (dotNames.Contains(name)) dots.Add(row.RowId);
+                if (shieldNames.Contains(name)) shields.Add(row.RowId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, "Raid Planner couldn't read the game's statuses in English");
+        }
+        return (fails, dots, shields);
+    }
+
+    /// <summary>Each damage down's and vulnerability up's kind (<see cref="CombatLists.FailDamageDown"/>, <see cref="CombatLists.FailVulnerability"/>), by status id.</summary>
+    public IReadOnlyDictionary<uint, int> FailKinds => lists.Value.Fails;
+
+    public IReadOnlySet<uint> DotIds => lists.Value.Dots;
+
+    public IReadOnlySet<uint> ShieldIds => lists.Value.Shields;
+
+    public int FailKind(uint status) => lists.Value.Fails.TryGetValue(status, out var k) ? k : CombatLists.NotAFail;
+
+    public bool IsDot(uint status) => lists.Value.Dots.Contains(status);
+
+    public bool IsShield(uint status) => lists.Value.Shields.Contains(status);
 
     /// <summary>A status's name and icon, as the game's Status sheet has them; null for one it doesn't have.</summary>
     public StatusInfo? Status(uint id)

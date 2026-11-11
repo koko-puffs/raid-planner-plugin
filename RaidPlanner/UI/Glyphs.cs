@@ -2,28 +2,29 @@ using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
-using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// A mechanic's small round icon, as the planner's timeline shows them: a disc in the mechanic's
-/// colour (area attacks orange, stacks yellow, spreads purple, busters red, the planner's own) with
-/// its shape cut in dark.
+/// A mechanic drawn small, as the board draws it (the site's MechanicGlyph, the mock-ups'
+/// <c>RP.glyph</c>): in a 10.4-unit box clipped square, a circle telegraph, a donut, a cone from
+/// below, a line, a cross, a stack with its chevrons in, a spread with its triangles out, a
+/// tankbuster with its shield. They sit in square wells (round is for people). A raidwide is the
+/// arena's rings rolling out; anything else, a quiet ring.
 /// </summary>
 public static class Glyphs
 {
-    private static readonly Vector4 Dark = Palette.Hex(0x1a0f08);
-
-    public static Vector4 ColorOf(MechanicKind kind) => kind switch
+    /// <summary>What a mechanic asks, for the word said before its name; none for a raidwide or anything else.</summary>
+    public static Intent? IntentOf(MechanicKind kind) => kind switch
     {
-        MechanicKind.Stack => Palette.Hex(0xffcf4a),
-        MechanicKind.Spread => Palette.Hex(0xb46cff),
-        MechanicKind.Tankbuster => Palette.Hex(0xff4f4f),
-        MechanicKind.Other => Palette.Hex(0x7d7d86),
-        _ => Palette.Ember,
+        MechanicKind.Circle or MechanicKind.Donut or MechanicKind.Cone or MechanicKind.Line or MechanicKind.Cross => Intent.Dodge,
+        MechanicKind.Stack => Intent.Share,
+        MechanicKind.Spread => Intent.Apart,
+        MechanicKind.Tankbuster => Intent.Tanks,
+        _ => null,
     };
 
+    /// <summary>The shape's name, as the site's Kit names it (the row's tooltip).</summary>
     public static string Word(MechanicKind kind) => kind switch
     {
         MechanicKind.Circle => "Circle",
@@ -38,82 +39,53 @@ public static class Glyphs
         _ => "Other",
     };
 
-    /// <summary>Draws the icon <paramref name="size"/> pixels across (already scaled) with its top-left at <paramref name="pos"/>.</summary>
-    public static void Draw(ImDrawListPtr dl, Vector2 pos, float size, MechanicKind kind)
+    /// <summary>Draws the mechanic in a square <paramref name="size"/> pixels across (already scaled) from <paramref name="min"/>, clipped to it.</summary>
+    public static void Draw(ImDrawListPtr dl, Vector2 min, float size, MechanicKind kind)
     {
-        var r = size / 2;
-        var c = pos + new Vector2(r);
-        var dark = Palette.U32(Dark);
-        dl.AddCircleFilled(c, r, Palette.U32(ColorOf(kind)), 24);
-        var k = r / 8f;
-        var line = MathF.Max(1f, 1.4f * k);
-        switch (kind)
+        var u = size / 10.4f;
+        var c = min + new Vector2(size / 2);
+        var rim = MathF.Max(1, 0.17f * u);
+        dl.PushClipRect(min, min + new Vector2(size), true);
+        try
         {
-            case MechanicKind.Circle:
-                dl.AddCircle(c, 3.6f * k, dark, 16, line);
-                break;
-            case MechanicKind.Donut:
-                dl.AddCircle(c, 4.2f * k, dark, 16, line * 1.6f);
-                dl.AddCircleFilled(c, 1.2f * k, dark, 8);
-                break;
-            case MechanicKind.Cone:
-                dl.PathLineTo(c + new Vector2(0, 3.5f * k));
-                dl.PathArcTo(c + new Vector2(0, 3.5f * k), 7f * k, -MathF.PI / 2 - 0.62f, -MathF.PI / 2 + 0.62f, 8);
-                dl.PathFillConvex(dark);
-                break;
-            case MechanicKind.Line:
-                dl.AddRectFilled(c - new Vector2(1.6f * k, 5.2f * k), c + new Vector2(1.6f * k, 5.2f * k), dark, 0.6f * k);
-                break;
-            case MechanicKind.Cross:
-                dl.AddRectFilled(c - new Vector2(1.3f * k, 5f * k), c + new Vector2(1.3f * k, 5f * k), dark);
-                dl.AddRectFilled(c - new Vector2(5f * k, 1.3f * k), c + new Vector2(5f * k, 1.3f * k), dark);
-                break;
-            case MechanicKind.Stack:
-                // Arrows pointing in to the middle.
-                for (var i = 0; i < 3; i++)
-                {
-                    var a = -MathF.PI / 2 + i * MathF.PI * 2 / 3;
-                    var d = new Vector2(MathF.Cos(a), MathF.Sin(a));
-                    var side = new Vector2(-d.Y, d.X);
-                    var tip = c + d * 1.6f * k;
-                    dl.AddTriangleFilled(tip, c + d * 5.2f * k + side * 2.1f * k, c + d * 5.2f * k - side * 2.1f * k, dark);
-                }
-                break;
-            case MechanicKind.Spread:
-                dl.AddCircleFilled(c, 1.5f * k, dark, 10);
-                dl.AddCircle(c, 4.6f * k, dark, 16, line);
-                break;
-            case MechanicKind.Tankbuster:
-                // A shield.
-                dl.PathLineTo(c + new Vector2(-3.8f * k, -4f * k));
-                dl.PathLineTo(c + new Vector2(3.8f * k, -4f * k));
-                dl.PathLineTo(c + new Vector2(3.4f * k, 1.2f * k));
-                dl.PathLineTo(c + new Vector2(0, 4.8f * k));
-                dl.PathLineTo(c + new Vector2(-3.4f * k, 1.2f * k));
-                dl.PathFillConvex(dark);
-                break;
-            case MechanicKind.Raidwide:
-                dl.AddCircle(c, 5.2f * k, dark, 20, line);
-                dl.AddCircle(c, 2.6f * k, dark, 14, line);
-                break;
-            default:
-                dl.AddCircleFilled(c, 1.6f * k, dark, 10);
-                break;
+            switch (kind)
+            {
+                case MechanicKind.Circle:
+                    BoardArt.TeleCircle(dl, c, 3.6f * u, Palette.Dodge, rim);
+                    break;
+                case MechanicKind.Donut:
+                    BoardArt.TeleDonut(dl, c, 4.3f * u, 2f * u, Palette.Dodge, rim);
+                    break;
+                case MechanicKind.Cone:
+                    BoardArt.TeleCone(dl, c + new Vector2(0, 3.2f * u), 7.4f * u, 70, 0, Palette.Dodge, rim);
+                    break;
+                case MechanicKind.Line:
+                    BoardArt.TeleRect(dl, c + new Vector2(0, 4.4f * u), -1.6f * u, -8.8f * u, 1.6f * u, 0, 0, Palette.Dodge, rim);
+                    break;
+                case MechanicKind.Cross:
+                    BoardArt.TeleCross(dl, c, 2.4f * u, 4.6f * u, 0, Palette.Dodge, rim);
+                    break;
+                case MechanicKind.Stack:
+                    BoardArt.Stack(dl, c, 3f * u, Palette.Share, u, rim);
+                    break;
+                case MechanicKind.Spread:
+                    BoardArt.Spread(dl, c, 3f * u, Palette.Apart, u, rim);
+                    break;
+                case MechanicKind.Tankbuster:
+                    BoardArt.Buster(dl, c, 3.4f * u, Palette.Tanks, u, rim);
+                    break;
+                case MechanicKind.Raidwide:
+                    BoardArt.Proximity(dl, c, 4.6f * u, u);
+                    break;
+                default:
+                    dl.AddCircle(c, 2.4f * u, Palette.U32(Palette.WithAlpha(Palette.Muted, 0.8f)), 24, rim);
+                    dl.AddCircleFilled(c, MathF.Max(1, 0.5f * u), Palette.U32(Palette.Muted), 10);
+                    break;
+            }
         }
-    }
-
-    /// <summary>A row of icons, overlapping a little as the planner's do; returns its width.</summary>
-    public static float Row(ImDrawListPtr dl, Vector2 pos, float size, System.Collections.Generic.IReadOnlyList<MechanicKind> kinds, int most = 4)
-    {
-        var n = Math.Min(kinds.Count, most);
-        var step = size * 0.8f;
-        for (var i = n - 1; i >= 0; i--)
+        finally
         {
-            var p = pos + new Vector2(step * i, 0);
-            // A thin ring of the card's black between overlapping discs.
-            dl.AddCircleFilled(p + new Vector2(size / 2), size / 2 + S(1.5f), Palette.U32(Palette.Card), 24);
-            Draw(dl, p, size, kinds[i]);
+            dl.PopClipRect();
         }
-        return n == 0 ? 0 : step * (n - 1) + size;
     }
 }

@@ -2,12 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
-/// <summary>One of Settings' tabs: its words and, when it has one, a count after them.</summary>
-public readonly record struct TabSpec(string Label, string? Count = null);
+/// <summary>A tab: its words, an optional icon before them and an optional count after (`.tab .n`).</summary>
+public readonly record struct TabSpec(string Label, Icon? Icon = null, string? Count = null);
+
+/// <summary>A tab row's size: Settings' (`.tab`, 40 tall, 14px), dense (`.tab.sm`, 32, 13px) or the meter's (`.mt-tabs`, 27, 12px).</summary>
+public enum TabSize
+{
+    Md,
+    Sm,
+    Meter,
+}
 
 /// <summary>Lays things left to right from the cursor, wrapping at the box's edge.</summary>
 public sealed class Wrap
@@ -46,139 +55,259 @@ public sealed class Wrap
 }
 
 /// <summary>
-/// The rows the screens share, as the site lays them out: a section's heading with a quiet note on
-/// its right ("Get started … Three steps to your first plan"), tabs as a pick-one pill, the round
-/// orange icon wells of the planner's cards, and the row of fact boxes (Steps · Arena · Edited).
+/// The rows the screens share: a section's head (a small callout, a muted aside, a link on the
+/// right), tabs with the ember cast bar under the one you're on, the facts box (mono labels over
+/// mono values), slabs, and links with their arrow.
 /// </summary>
 public static partial class Kit
 {
-    /// <summary>A section's heading (Geist 600, 15px) with <paramref name="rest"/> on the right in quiet 12px.</summary>
-    public static void Section(string text, string? rest = null)
+    // ---------------------------------------------------------------------------------------------
+    // Section heads.
+
+    /// <summary>
+    /// A section's head (`.sh`): a callout at 13px, a muted aside after it on the same baseline, and
+    /// on the right an optional link with its arrow. Returns true when the link is pressed.
+    /// </summary>
+    public static bool Section(string id, string title, string? aside = null, string? link = null)
     {
         var at = At;
         var w = Width;
-        var h = Txt.Natural(Face.SansSemibold, 15);
-        var restW = rest != null ? Txt.Measure(rest, Face.Sans, 12).X : 0;
         var dl = Dl;
-        Txt.Draw(dl, at, Txt.Fit(text, Face.SansSemibold, 15, rest != null ? w - restW - S(12) : w), Face.SansSemibold, 15, Palette.Ink);
-        if (rest != null)
-            Txt.Draw(dl, new Vector2(at.X + w - restW, at.Y + (h - Txt.Natural(Face.Sans, 12)) / 2), rest, Face.Sans, 12, Palette.Muted);
-        Reserve(at, w, h);
+        var titleH = S(13 * 1.1f);
+        var linkW = link != null ? LinkWidth(link, Icon.ArrowRight) : 0;
+        var room = w - (link != null ? linkW + S(12) : 0);
+        var lines = CalloutLines(title, 13, room, 1);
+        var tw = Txt.Line(dl, at, lines[0], Face.Callout, 13, Palette.White, 13 * 1.1f);
+        // align-items: baseline.
+        var baseline = at.Y + (titleH - Txt.Natural(Face.Callout, 13)) / 2 + Txt.Ascent(Face.Callout, 13);
+        if (aside != null && tw + S(9.6f) < room)
+            Txt.Draw(dl, new Vector2(at.X + tw + S(9.6f), baseline - Txt.Ascent(Face.Sans, 12)), Txt.Fit(aside, Face.Sans, 12, room - tw - S(9.6f)), Face.Sans, 12, Palette.Muted);
+        var pressed = false;
+        if (link != null)
+        {
+            var lh = Txt.Natural(Face.SansMedium, 13);
+            pressed = Link(id, new Vector2(at.X + w - linkW, baseline - Txt.Ascent(Face.SansMedium, 13)), link, Icon.ArrowRight);
+            _ = lh;
+        }
+        Reserve(at, w, titleH);
+        return pressed;
     }
 
-    /// <summary>A heading on the left and a link on its right (true when the link is pressed).</summary>
-    public static bool SectionLink(string id, string text, string link)
+    // ---------------------------------------------------------------------------------------------
+    // Links.
+
+    public static float LinkWidth(string text, Icon? icon = null, int px = 13) =>
+        Txt.Width(text, Face.SansMedium, px) + (icon != null ? S(4) + S(14) : 0);
+
+    /// <summary>
+    /// A link (`.lnk`): white 13px at 550, underlined 3px under in a faint line, its arrow after it
+    /// (14px); pointed at, the words and the line turn ember-light. Returns true when pressed.
+    /// </summary>
+    public static bool Link(string id, Vector2 pos, string text, Icon? icon = null, int px = 13, string? tip = null)
     {
-        var at = At;
-        var w = Width;
-        var h = Txt.Natural(Face.SansSemibold, 15);
-        var lw = Txt.Measure(link, Face.Sans, 12).X;
-        Txt.Draw(Dl, at, Txt.Fit(text, Face.SansSemibold, 15, w - lw - S(12)), Face.SansSemibold, 15, Palette.Ink);
-        var lh = Txt.Natural(Face.Sans, 12);
-        var pos = new Vector2(at.X + w - lw, at.Y + (h - lh) / 2);
-        var (clicked, hovered, _) = Hit(id, pos - new Vector2(S(4)), new Vector2(lw, lh) + new Vector2(S(8)));
-        Txt.Draw(Dl, pos, link, Face.Sans, 12, hovered ? Palette.Ink : Palette.Light);
-        Reserve(at, w, h);
+        var w = LinkWidth(text, icon, px);
+        var h = Txt.Natural(Face.SansMedium, px);
+        var (clicked, hovered, _) = Hit(id, pos - new Vector2(0, S(2)), new Vector2(w, h + S(5)));
+        if (tip != null && hovered) Tooltip(tip);
+        var dl = Dl;
+        var color = hovered ? Palette.EmberHi : Palette.White;
+        var tw = Txt.Draw(dl, pos, text, Face.SansMedium, px, color);
+        var under = MathF.Round(pos.Y + Txt.Ascent(Face.SansMedium, px) + S(3)) + 0.5f;
+        dl.AddLine(new Vector2(pos.X, under), new Vector2(pos.X + tw, under), Palette.U32(hovered ? Palette.EmberHi : Palette.Line3), 1f);
+        if (icon is { } ic) Icons.Draw(dl, ic, new Vector2(pos.X + tw + S(4), pos.Y + (h - S(14)) / 2), S(14), color, 1.75f);
+        FocusRing(pos, pos + new Vector2(w, h), S(4));
         return clicked;
     }
 
     // ---------------------------------------------------------------------------------------------
     // Tabs.
 
-    public static float TabWidth(TabSpec tab) =>
-        S(14) * 2 + Txt.Measure(tab.Label, Face.SansMedium, 13).X + (tab.Count != null ? S(6) + Txt.Measure(tab.Count, Face.Mono, 11).X : 0);
+    private static (float H, float Pad, int Px, float Gap, float BarH, float BarBottom, float BarIn) TabSpecOf(TabSize size) => size switch
+    {
+        TabSize.Sm => (HSm, 9.6f, 13, 3.2f, 2, 0, 9.6f),
+        TabSize.Meter => (27, 7, 12, 2, 2, 0, 7),
+        _ => (H, 12, 14, 3.2f, 3, 2, 12),
+    };
+
+    public static float TabWidth(TabSpec tab, TabSize size = TabSize.Md)
+    {
+        var (_, pad, px, _, _, _, _) = TabSpecOf(size);
+        return S(pad) * 2 + Txt.Width(tab.Label, Face.SansMedium, px)
+            + (tab.Icon != null ? S(IconPx + 7.2f) : 0)
+            + (tab.Count != null ? S(7.2f) + Txt.Width(tab.Count, Face.Mono, 11) : 0);
+    }
+
+    public static float TabsWidth(IReadOnlyList<TabSpec> tabs, TabSize size = TabSize.Md)
+    {
+        var gap = S(TabSpecOf(size).Gap);
+        var w = gap * (tabs.Count - 1);
+        foreach (var t in tabs) w += TabWidth(t, size);
+        return w;
+    }
 
     /// <summary>
-    /// Tabs as the site's pick-one pill (36 tall, the strong edge, 3px inside): the picked one a soft
-    /// white fill with white words, the others grey. Returns the tab picked (the one given when none was pressed).
+    /// Tabs as the site's (`.tab`): muted words (550), the one you're on white with the ember cast
+    /// bar under it (a square-ended gradient, filling from the left over 280ms when you arrive);
+    /// pointed at, white on a faint fill. <paramref name="rule"/> draws the line under the row
+    /// across <paramref name="ruleWidth"/>. Returns the tab picked (the one given when none was).
     /// </summary>
-    public static int Tabs(string id, IReadOnlyList<TabSpec> tabs, int selected)
+    public static int Tabs(string id, Vector2 at, IReadOnlyList<TabSpec> tabs, int selected, TabSize size = TabSize.Md, bool rule = false, float ruleWidth = 0,
+        float ruleLeft = float.NaN)
     {
-        var at = At;
-        var h = S(36);
-        var inner = S(28);
-        var total = S(4) * 2 + S(3) * (tabs.Count - 1);
-        foreach (var t in tabs) total += TabWidth(t);
+        var (hCss, pad, px, gapCss, barH, barBottom, barIn) = TabSpecOf(size);
+        var h = S(hCss);
         var dl = Dl;
-        dl.AddRect(at + new Vector2(0.5f), at + new Vector2(total, h) - new Vector2(0.5f), Palette.U32(Palette.LineStrong), h / 2, ImDrawFlags.None, 1f);
+        if (rule)
+        {
+            var l = float.IsNaN(ruleLeft) ? at.X : ruleLeft;
+            dl.AddLine(new Vector2(l, at.Y + h - 0.5f), new Vector2(l + ruleWidth, at.Y + h - 0.5f), Palette.U32(Palette.Line), 1f);
+        }
         var result = selected;
-        var x = at.X + S(4);
+        var x = at.X;
+        // The bar fills from the left each time the tab changes.
+        var storage = ImGui.GetStateStorage();
+        var lastKey = ImGui.GetID(id + "##last");
+        var arrived = Since(id + "##arrived", storage.GetInt(lastKey, -1) != selected);
+        storage.SetInt(lastKey, selected);
         for (var i = 0; i < tabs.Count; i++)
         {
             var tab = tabs[i];
-            var w = TabWidth(tab);
-            var p = new Vector2(x, at.Y + S(4));
-            var max = p + new Vector2(w, inner);
-            var (clicked, hovered, held) = Hit($"{id}{i}", p, new Vector2(w, inner));
+            var w = TabWidth(tab, size);
+            var p = new Vector2(x, at.Y);
+            var max = p + new Vector2(w, h);
+            var (clicked, hovered, _) = Hit($"{id}{i}", p, new Vector2(w, h));
             if (clicked) result = i;
             var on = i == selected;
-            if (on) dl.AddRectFilled(p, max, Palette.U32(Palette.Picked), inner / 2);
-            else if (held || hovered) dl.AddRectFilled(p, max, Palette.U32(held ? Palette.LinePicked : Palette.LineFaint), inner / 2);
-            var tx = p.X + S(14);
-            tx += Txt.Line(dl, new Vector2(tx, p.Y), tab.Label, Face.SansMedium, 13, on || hovered ? Palette.Ink : Palette.Muted, 28);
-            if (tab.Count != null) Txt.Line(dl, new Vector2(tx + S(6), p.Y), tab.Count, Face.Mono, 11, Palette.Faint, 28);
-            FocusRing(p, max, inner / 2);
-            x += w + S(3);
+            if (hovered && size != TabSize.Meter) dl.AddRectFilled(p, max, Palette.U32(Palette.Hover), S(Palette.RadiusSm));
+            var ink = on || hovered ? Palette.White : Palette.Muted;
+            var tx = p.X + S(pad);
+            if (tab.Icon is { } ic)
+            {
+                Icons.Draw(dl, ic, new Vector2(tx, p.Y + (h - S(IconPx)) / 2), S(IconPx), ink, 1.75f);
+                tx += S(IconPx + 7.2f);
+            }
+            tx += Txt.Line(dl, new Vector2(tx, p.Y), tab.Label, Face.SansMedium, px, ink, hCss);
+            if (tab.Count != null) Txt.Line(dl, new Vector2(tx + S(7.2f), p.Y), tab.Count, Face.Mono, 11, Palette.Faint, hCss);
+            if (on)
+            {
+                var fill = ReducedMotion ? 1 : Ease.Out(Math.Clamp(arrived / TSettle, 0, 1));
+                var bx = p.X + S(barIn);
+                var bw = (w - S(barIn) * 2) * fill;
+                var by = max.Y - S(barBottom) - S(barH);
+                if (bw >= 1) CastGradient(dl, new Vector2(bx, by), new Vector2(bx + bw, by + S(barH)));
+            }
+            FocusRing(p, max, S(Palette.RadiusSm));
+            x += w + S(gapCss);
         }
-        Reserve(at, total, h);
         return result;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Wells and facts.
-
-    /// <summary>
-    /// The round icon well of the planner's cards: its dark orange with the icon in orange (the
-    /// favicon's), or grey for something quiet.
-    /// </summary>
-    public static void IconWell(Vector2 pos, float size, Icon icon, bool quiet = false)
+    /// <summary>The cast bar's ember gradient over a rectangle (deep, ember at 70%, light), square-ended.</summary>
+    public static void CastGradient(ImDrawListPtr dl, Vector2 min, Vector2 max)
     {
-        var dl = Dl;
-        var c = pos + new Vector2(size / 2);
-        dl.AddCircleFilled(c, size / 2, Palette.U32(quiet ? Palette.Tile : Palette.EmberTile), 40);
-        dl.AddCircle(c, size / 2 - 0.5f, Palette.U32(quiet ? Palette.Line : Palette.EmberEdge), 40, 1f);
-        var px = MathF.Round(size * 0.45f);
-        Icons.Draw(dl, icon, c - new Vector2(px / 2), px, quiet ? Palette.Muted : Palette.Ember);
+        var mid = min.X + (max.X - min.X) * 0.7f;
+        var deep = Palette.U32(Palette.EmberDeep);
+        var ember = Palette.U32(Palette.Ember);
+        var hi = Palette.U32(Palette.EmberHi);
+        dl.AddRectFilledMultiColor(min, new Vector2(mid, max.Y), deep, ember, ember, deep);
+        dl.AddRectFilledMultiColor(new Vector2(mid, min.Y), max, ember, hi, hi, ember);
     }
 
-    /// <summary>One fact in a row of boxes: its label over its value, with a quieter note after the value ("19 to 4:40").</summary>
-    public readonly record struct Fact(string Label, string Value, string? Note = null, Vector4? Color = null);
+    // ---------------------------------------------------------------------------------------------
+    // Facts.
+
+    /// <summary>One fact in the facts box: its label over its value, a quieter note after the value ("8 places"), the value's colour and face.</summary>
+    public readonly record struct Fact(string Label, string Value, string? Note = null, Vector4? Color = null, bool Sans = false);
 
     /// <summary>
-    /// The planner's row of fact boxes (Steps · Arena · Edited · Made): one rounded box split by
-    /// hairlines, each a 12px label over a 15px value. Two to a row when narrow.
+    /// The facts box (`.facts4`): one box with a hairline edge and 10px corners split into equal cells
+    /// by hairlines; each a mono label in capitals (500 10px, +0.09em, faint) over its value in mono
+    /// (600 16px, white) or sans (600 14px), a 12px faint note after it.
     /// </summary>
-    public static void Facts(string id, IReadOnlyList<Fact> facts)
+    public static void Facts(IReadOnlyList<Fact> facts)
     {
         if (facts.Count == 0) return;
         var at = At;
         var w = Width;
-        var perRow = w < S(360) ? 2 : facts.Count;
-        var rows = (facts.Count + perRow - 1) / perRow;
-        var cellW = w / perRow;
-        var cellH = S(62);
-        var h = cellH * rows;
+        var cellW = w / facts.Count;
+        var labelH = S(10);
+        var valueH = S(18);
+        var h = S(9) + labelH + S(7) + valueH + S(10);
         var dl = Dl;
         var r = S(Palette.RadiusMd);
         dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), r, ImDrawFlags.None, 1f);
         for (var i = 0; i < facts.Count; i++)
         {
-            var col = i % perRow;
-            var row = i / perRow;
-            var p = at + new Vector2(cellW * col, cellH * row);
-            if (col > 0) dl.AddLine(new Vector2(p.X + 0.5f, p.Y + 1), new Vector2(p.X + 0.5f, p.Y + cellH - 1), Palette.U32(Palette.Line), 1f);
-            if (row > 0 && col == 0) dl.AddLine(new Vector2(at.X + 1, p.Y + 0.5f), new Vector2(at.X + w - 1, p.Y + 0.5f), Palette.U32(Palette.Line), 1f);
+            var p = at + new Vector2(cellW * i, 0);
+            if (i > 0) dl.AddLine(new Vector2(MathF.Round(p.X) + 0.5f, p.Y + 1), new Vector2(MathF.Round(p.X) + 0.5f, p.Y + h - 1), Palette.U32(Palette.Line), 1f);
             var f = facts[i];
-            var inner = cellW - S(28);
-            Txt.Draw(dl, p + new Vector2(S(14), S(12)), Txt.Fit(f.Label, Face.Sans, 12, inner), Face.Sans, 12, Palette.Muted);
-            var vy = p.Y + S(12) + Txt.Natural(Face.Sans, 12) + S(3);
-            var vw = Txt.Draw(dl, new Vector2(p.X + S(14), vy), Txt.Fit(f.Value, Face.SansSemibold, 15, inner), Face.SansSemibold, 15, f.Color ?? Palette.Ink);
-            if (f.Note != null && vw + S(6) < inner)
-            {
-                var ny = vy + Txt.Ascent(Face.SansSemibold, 15) - Txt.Ascent(Face.Sans, 12);
-                Txt.Draw(dl, new Vector2(p.X + S(14) + vw + S(6), ny), Txt.Fit(f.Note, Face.Sans, 12, inner - vw - S(6)), Face.Sans, 12, Palette.Muted);
-            }
+            var inner = cellW - S(24);
+            var lx = p.X + S(12);
+            Label(dl, new Vector2(lx, p.Y + S(9) + (labelH - Txt.Natural(Face.Mono, 10)) / 2), f.Label, 10, 0.09f, Palette.Faint, inner);
+            var vy = p.Y + S(9) + labelH + S(7);
+            var (vf, vpx) = f.Sans ? (Face.SansSemibold, 14) : (Face.MonoSemibold, 16);
+            var baseline = vy + (valueH - Txt.Natural(vf, vpx)) / 2 + Txt.Ascent(vf, vpx);
+            var vw = Txt.Draw(dl, new Vector2(lx, baseline - Txt.Ascent(vf, vpx)), Txt.Fit(f.Value, vf, vpx, inner), vf, vpx, f.Color ?? Palette.White);
+            if (f.Note != null && vw + S(4) < inner)
+                Txt.Draw(dl, new Vector2(lx + vw + S(4), baseline - Txt.Ascent(Face.Sans, 12)), Txt.Fit(f.Note, Face.Sans, 12, inner - vw - S(4)), Face.Sans, 12, Palette.Faint);
         }
         Reserve(at, w, h);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Slabs: the content is laid first, the slab drawn behind it at the height it had last frame.
+
+    private static readonly Dictionary<uint, float> Heights = new();
+    private static readonly Stack<(uint Id, Vector2 Start, float Width, float PadBottom, Vector4 Edge, float Radius)> Panels = new();
+
+    /// <summary>
+    /// A slab (`.slab`): solid #111115, a hairline edge, 14px corners (or as given). Lay its rows
+    /// between this and <see cref="EndPanel"/>; padding is CSS pixels (top, sides, bottom).
+    /// </summary>
+    public static void BeginPanel(string id, float padTop, float padX, float padBottom, Vector4? fill = null, Vector4? edge = null, float radius = Palette.RadiusLg)
+    {
+        var at = At;
+        var w = Width;
+        var key = ImGui.GetID(id);
+        var r = S(radius);
+        var f = fill ?? Palette.Slab;
+        if (Heights.TryGetValue(key, out var h) && h > 0 && f.W > 0)
+            Dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(f), r);
+        Panels.Push((key, at, w, S(padBottom), edge ?? Palette.Line, r));
+        ImGui.SetCursorScreenPos(at + new Vector2(0, S(padTop)));
+        ImGui.Dummy(Vector2.Zero);
+        ImGui.SetCursorScreenPos(at + new Vector2(0, S(padTop)));
+        PushBox(at.X + S(padX), w - S(padX) * 2);
+    }
+
+    /// <summary>The slab being laid: its top-left and width (for rows that go edge to edge).</summary>
+    public static (Vector2 Start, float Width, float Radius) Panel => Panels.Count > 0 ? (Panels.Peek().Start, Panels.Peek().Width, Panels.Peek().Radius) : (At, Width, 0);
+
+    public static void EndPanel()
+    {
+        PopBox();
+        var (key, start, w, padBottom, edge, r) = Panels.Pop();
+        var bottom = ImGui.GetCursorScreenPos().Y + padBottom;
+        var h = bottom - start.Y;
+        Heights[key] = h;
+        var dl = Dl;
+        var max = start + new Vector2(w, h);
+        if (edge.W > 0) dl.AddRect(start + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
+        Reserve(start, w, h);
+    }
+
+    /// <summary>A row inside a slab pointed at: a fill edge to edge, rounded where it meets the slab's corners.</summary>
+    public static void RowFill(Vector2 min, Vector2 max, Vector4 color, bool first, bool last)
+    {
+        var (start, w, r) = Panel;
+        var flags = (first ? ImDrawFlags.RoundCornersTop : 0) | (last ? ImDrawFlags.RoundCornersBottom : 0);
+        if (flags == 0) flags = ImDrawFlags.RoundCornersNone;
+        var a = new Vector2(start.X + 1, min.Y + (first ? 1 : 0));
+        var b = new Vector2(start.X + w - 1, max.Y - (last ? 1 : 0));
+        Dl.AddRectFilled(a, b, Palette.U32(color), r - 1, flags);
+    }
+
+    /// <summary>A hairline across a width.</summary>
+    public static void Rule(ImDrawListPtr dl, float x0, float x1, float y, Vector4? color = null) =>
+        dl.AddLine(new Vector2(x0, MathF.Round(y) + 0.5f), new Vector2(x1, MathF.Round(y) + 0.5f), Palette.U32(color ?? Palette.Line), 1f);
 }

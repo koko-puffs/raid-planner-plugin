@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Dalamud.Configuration;
+using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner;
 
@@ -45,6 +46,44 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>The plan window can't be moved or resized.</summary>
     public bool PlanWindowLocked { get; set; }
+
+    // The meter (its own window over the game; Settings → Meter).
+
+    /// <summary>The meter's window is shown (in duties, or everywhere).</summary>
+    public bool ShowMeter { get; set; } = true;
+
+    /// <summary>Shown everywhere, not only in duties.</summary>
+    public bool MeterEverywhere { get; set; }
+
+    /// <summary>Hidden out of combat (else folded to one line between pulls).</summary>
+    public bool MeterHideOutOfCombat { get; set; }
+
+    /// <summary>The number the meter ranks damage by and its bars run to: ENCDPS (the fight's time) or DPS (each player's own).</summary>
+    public MeterRank MeterRank { get; set; } = MeterRank.EncDps;
+
+    /// <summary>Jobs only, no names (for a stream).</summary>
+    public bool MeterJobsOnly { get; set; }
+
+    /// <summary>The meter's window can't be moved or sized, and has no title bar.</summary>
+    public bool MeterLocked { get; set; }
+
+    /// <summary>Locked, the mouse goes through it to the game.</summary>
+    public bool MeterClickThrough { get; set; }
+
+    /// <summary>How solid the meter's background is (0–1); its rows stay solid.</summary>
+    public float MeterBackground { get; set; } = 0.88f;
+
+    /// <summary>A fight ends when nobody in the party has been in combat this long (seconds).</summary>
+    public int MeterEndAfter { get; set; } = 4;
+
+    /// <summary>How many fights the meter keeps to pick from and pace against.</summary>
+    public int MeterKeep { get; set; } = 20;
+
+    /// <summary>What pace compares with: the best pull, the last, or nothing.</summary>
+    public PaceAgainst MeterPace { get; set; } = PaceAgainst.Best;
+
+    /// <summary>The meter's tab last shown.</summary>
+    public MeterTab MeterTab { get; set; } = MeterTab.Damage;
 
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();

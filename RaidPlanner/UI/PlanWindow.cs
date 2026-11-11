@@ -7,18 +7,21 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using RaidPlanner.Core;
 using RaidPlanner.Game;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The plan in the game: a small window to put anywhere (and lock there), in the main window's
-/// look. The plan's name, the step's name and time, the step's board, its notes, and the previous
-/// and next buttons; its list button picks another of your plans, for any duty. During a pull it
-/// follows along by itself (<see cref="PlanService"/>).
+/// The plan in the game (the mock-ups' "The plan window"): a small window to put anywhere and lock
+/// there. Its eyebrow as Present writes it ("13 / 19 · 2:44 · P2", the step's number in ember), the
+/// step's callout big in Archivo with its name under it, a slim cast bar filling to the next step
+/// while a pull moves it, the step's board in the board's language, its notes (fading at the foot
+/// when there's more), and previous / next. Its list button picks another of your plans, for any
+/// duty; with nothing to show, the Boss says why.
 ///
-/// What's drawn is worked out once a step (the board's objects, coloured and capped; the words;
-/// the notes wrapped to the width), so a frame only draws. Nothing in Draw is let throw.
+/// What's drawn is worked out once a step (the board's objects, the words, the notes wrapped to the
+/// width), so a frame only draws. Nothing in Draw is let throw.
 /// </summary>
 public sealed class PlanWindow : Window
 {
@@ -26,6 +29,8 @@ public sealed class PlanWindow : Window
 
     private readonly Configuration config;
     private readonly PlanService plans;
+    private readonly FightRecorder recorder;
+    private readonly GameData data;
     private readonly Fonts fonts;
 
     /// <summary>What the step shown draws, made once a step.</summary>
@@ -35,51 +40,43 @@ public sealed class PlanWindow : Window
         public required int Step;
         public required PlanArena Arena;
         public required List<DrawnObj> Objects;
-        public required string Title;
+        public required string Big;
+        public required string? Name;
+        public required string Lead;
         public required string Eyebrow;
         public required string Count;
         public required string Notes;
+        public required double? CueAt;
+        public required double? NextAt;
         public string? Hidden;
         public List<string> Lines = new();
         public float LinesWidth = -1;
         public float LinesScale;
-
-        // The plan's name, the step's title (on one or two lines) and the eyebrow, fitted to the
-        // width once (again when the width or the scale changes), not every frame.
-        public float FitWidth = -1;
-        public float FitScale;
-        public string NameFit = string.Empty;
-        public string TitleFirst = string.Empty;
-        public string? TitleSecond;
-        public string EyebrowFit = string.Empty;
     }
 
     private StepView? view;
     private int viewVersion = -1;
+    private string?[] phases = Array.Empty<string?>();
+    private Plan? phasesOf;
 
-    /// <summary>The plans menu's rows (name · duty, and fitted to the menu), made again when the list or the width changes.</summary>
-    private readonly List<(string Id, string Key, string Shown, bool Here)> menuRows = new();
+    /// <summary>The plans menu's rows, made again when the list changes.</summary>
+    private readonly List<(PlanListItem Item, bool Here)> menuRows = new();
     private int menuVersion = -1;
-    private float menuWidth = -1;
 
-    /// <summary>The empty window's line (and whether it offers Try again), made again when anything it says changes.</summary>
-    private Run[] emptyLine = { Run.Note(string.Empty) };
-    private bool emptyRetry;
-    private int emptyVersion = -1;
-
-    private static readonly Run[] LinkLine = { Run.Note("Link your Raid Planner account to see your plans here.") };
-
-    /// <summary>The plan's error under the header, fitted once for its width.</summary>
-    private (string? Why, float Width, string Fit) whyLine = (null, -1, string.Empty);
+    /// <summary>Your spot in the party now (its player on the board takes the reticle), read once a second.</summary>
+    private string? you;
+    private DateTime youAt;
 
     private DateTime drawFailedAt;
     private bool askedForList;
 
-    public PlanWindow(Configuration config, PlanService plans, Fonts fonts)
+    public PlanWindow(Configuration config, PlanService plans, FightRecorder recorder, GameData data, Fonts fonts)
         : base("Raid plan###RaidPlannerPlan")
     {
         this.config = config;
         this.plans = plans;
+        this.recorder = recorder;
+        this.data = data;
         this.fonts = fonts;
         Size = new Vector2(340, 520);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -95,6 +92,7 @@ public sealed class PlanWindow : Window
     public override void PreDraw()
     {
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
+        // Locked: Dalamud's own moving and resizing are off too.
         if (config.PlanWindowLocked) Flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
         Theme.PushFrame();
     }
@@ -114,6 +112,7 @@ public sealed class PlanWindow : Window
             {
                 try
                 {
+                    Frame.Window();
                     DrawInside();
                 }
                 finally
@@ -136,28 +135,31 @@ public sealed class PlanWindow : Window
         }
     }
 
+    /// <summary>The smallest window (240 × 300) draws a smaller callout and board, and says the notes are there.</summary>
+    private static bool Small(float w, float h) => w < S(270) || h < S(400);
+
     private void DrawInside()
     {
-        var pad = S(14);
         var win = ImGui.GetWindowPos();
         var top = ImGui.GetCursorScreenPos();
         var width = ImGui.GetWindowWidth();
-        var bottom = win.Y + ImGui.GetWindowHeight() - pad;
-        var left = win.X + pad;
-        var inner = width - pad * 2;
-        Kit.Dl.AddLine(new Vector2(win.X + 1, top.Y + 0.5f), new Vector2(win.X + width - 1, top.Y + 0.5f), Palette.U32(Palette.Line), 1f);
+        var small = Small(width, win.Y + ImGui.GetWindowHeight() - top.Y);
+        var padX = S(small ? 12 : 14);
+        var left = win.X + padX;
+        var inner = width - padX * 2;
+        var bottom = win.Y + ImGui.GetWindowHeight() - S(small ? 10 : 12);
         Kit.PushBox(left, inner);
         try
         {
-            var y = top.Y + S(12);
+            var y = top.Y + S(small ? 8 : 10);
             if (plans.Plan is { } plan)
             {
                 Refresh(plan);
-                DrawPlan(view!, left, y, inner, bottom);
+                DrawPlan(view!, left, y, inner, bottom, small);
             }
             else
             {
-                DrawEmpty(left, y, inner);
+                DrawEmpty(left, y, inner, small);
             }
             DrawPlansMenu();
         }
@@ -174,126 +176,151 @@ public sealed class PlanWindow : Window
         viewVersion = plans.Version;
         var step = Math.Clamp(plans.Step, 0, plan.Steps.Count - 1);
         if (view != null && ReferenceEquals(view.Plan, plan) && view.Step == step) return;
+        if (!ReferenceEquals(phasesOf, plan))
+        {
+            phasesOf = plan;
+            phases = PlanJson.Phases(plan.Steps);
+        }
         var s = plan.Steps[step];
         var objects = PlanBoard.Prepare(s.Objects, out var hidden);
+        var name = PlanJson.WithoutPhase(s.Name);
+        var rest = $" / {plan.Steps.Count}" + (s.Time.Length > 0 ? $" · {s.Time}" : string.Empty) + (phases[step] is { } ph ? $" · {ph}" : string.Empty);
+        var (cueAt, nextAt) = StepProgress.Window(plan.Game?.Cues, step);
         view = new StepView
         {
             Plan = plan,
             Step = step,
             Arena = plan.ArenaAt(step),
             Objects = objects,
-            Title = s.Name,
-            Eyebrow = s.Time.Length > 0 ? $"Step {step + 1} of {plan.Steps.Count} · {s.Time}" : $"Step {step + 1} of {plan.Steps.Count}",
+            Big = s.Big,
+            // The name under the callout, when the callout isn't just the name again.
+            Name = s.Callout is { Length: > 0 } && !string.Equals(s.Callout.Trim(), name, StringComparison.OrdinalIgnoreCase) ? name : null,
+            Lead = Format.StepNumber(step + 1),
+            Eyebrow = rest,
             Count = $"{step + 1} / {plan.Steps.Count}",
             Notes = s.Notes,
-            Hidden = hidden > 0 ? $"{Words.Count(hidden, "more object")} not drawn" : null,
+            CueAt = cueAt,
+            NextAt = nextAt,
+            Hidden = hidden > 0 ? $"{hidden} more objects not drawn" : null,
         };
     }
 
-    private void DrawPlan(StepView v, float left, float y, float w, float bottom)
+    private void DrawPlan(StepView v, float left, float y, float w, float bottom, bool small)
     {
         var dl = Kit.Dl;
-        var buttons = S(28) * 2 + S(6);
-        Fit(v, w, buttons);
-        // The plan's name, with the list and the lock.
-        Txt.Line(dl, new Vector2(left, y), v.NameFit, Face.SansMedium, 12, Palette.Muted, 28);
-        HeaderButtons(new Vector2(left + w - buttons, y));
-        y += S(28) + S(4);
+        // The eyebrow, with the list and the lock.
+        var headH = S(small ? 28 : 32);
+        var buttons = S(HSm) * (small ? 1 : 2) + (small ? 0 : S(6.4f));
+        Kit.Eyebrow(dl, new Vector2(left, y + (headH - Kit.EyebrowH) / 2), v.Eyebrow, v.Lead, w - buttons - S(8));
+        HeaderButtons(new Vector2(left + w - buttons, y + (headH - S(HSm)) / 2), true, !small);
+        y += headH;
 
-        // Another plan on its way, or one that couldn't be read: said under the header.
-        if (plans.Loading != null || plans.PlanWhy != null)
+        // Another plan on its way (the old step stays until it's in), or one that couldn't be read.
+        if (plans.Loading != null)
         {
-            var failed = plans.Loading == null;
-            var line = "Opening the plan…";
-            if (failed)
-            {
-                var room = w - S(30);
-                if (!ReferenceEquals(whyLine.Why, plans.PlanWhy) || MathF.Abs(whyLine.Width - room) > 0.5f)
-                    whyLine = (plans.PlanWhy, room, Txt.Fit(plans.PlanWhy!, Face.Sans, 12, room));
-                line = whyLine.Fit;
-            }
-            Txt.Line(dl, new Vector2(left, y), line, Face.Sans, 12, failed ? Palette.Danger : Palette.Muted, 22);
-            if (failed && Kit.IconButton("##rp-retry-top", new Vector2(left + w - S(22), y), Icon.Refresh, "Try again", 22)) plans.Retry();
-            y += S(22) + S(6);
+            y += S(6);
+            y += Kit.Cast(dl, new Vector2(left, y), w, "Opening the plan", null, Running(1.4f), true, Face.SansMedium, 12, Palette.Text);
+        }
+        else if (plans.PlanWhy is { } why)
+        {
+            y += S(6);
+            var lh = S(HSm);
+            Icons.Draw(dl, Icon.CircleX, new Vector2(left, y + (lh - S(Kit.IconPx)) / 2), S(Kit.IconPx), Palette.Danger);
+            Txt.Line(dl, new Vector2(left + S(Kit.IconPx + 8), y), Txt.Fit(why, Face.Sans, 12, w - S(Kit.IconPx + 8) - S(HSm) - S(6)), Face.Sans, 12, Palette.DangerSoft, HSm);
+            if (Kit.IconButton("##rp-retry-top", new Vector2(left + w - S(HSm), y), Icon.RefreshCw, "Try again", Btn.Quiet, BtnSize.Sm)) plans.Retry();
+            y += lh;
         }
 
-        // The step: its name, then where it is (and Following, while a pull moves it).
-        var lh = S(18 * 1.2f);
-        Txt.Line(dl, new Vector2(left, y), v.TitleFirst, Face.SansSemibold, 18, Palette.Ink, 18 * 1.2f);
-        if (v.TitleSecond != null) Txt.Line(dl, new Vector2(left, y + lh), v.TitleSecond, Face.SansSemibold, 18, Palette.Ink, 18 * 1.2f);
-        y += (v.TitleSecond != null ? lh * 2 : lh) + S(2);
-        var eyebrowW = Txt.Line(dl, new Vector2(left, y), v.EyebrowFit, Face.Sans, 12, Palette.Muted, 18);
-        if (plans.Following)
+        // The step's callout, big; its name under it.
+        var px = small ? 16 : 22;
+        y += S(small ? 4 : 6);
+        y += Kit.Callout(dl, new Vector2(left, y), v.Big, px, w, small ? 2 : 3, 1.02f);
+        if (v.Name != null && !small)
         {
-            var dot = new Vector2(left + eyebrowW + S(12), y + S(9));
-            var p = Pulse();
-            dl.AddCircleFilled(dot, S(3) + S(2) * p, Palette.U32(Palette.WithAlpha(Palette.Ember, 0.25f * (1 - p))), 12);
-            dl.AddCircleFilled(dot, S(3), Palette.U32(Palette.Ember), 12);
-            Txt.Line(dl, new Vector2(dot.X + S(8), y), "Following the pull", Face.Sans, 12, Palette.EmberText, 18);
+            y += S(3);
+            Txt.Line(dl, new Vector2(left, y), Txt.Fit(v.Name, Face.Sans, 13, w), Face.Sans, 13, Palette.Muted, 19.5f);
+            y += S(19.5f);
         }
-        y += S(18) + S(10);
+
+        // Following the pull: a slim cast bar filling to the next step, with when it comes.
+        if (plans.Following && recorder.InPull && !small)
+        {
+            y += S(9);
+            var now = recorder.Elapsed;
+            var clock = plans.PlanClock;
+            var (fraction, nextIn) = StepProgress.Of(v.CueAt, v.NextAt, clock);
+            var time = Format.Clock(now) + (nextIn is { } n ? $" · next {Format.InSeconds(n)}" : string.Empty);
+            y += Kit.Cast(dl, new Vector2(left, y), w, "Following the pull", time, fraction, true, Face.SansMedium, 12, Palette.Text);
+        }
 
         // The footer: previous, where you are, next.
-        var footH = S(30);
+        var footH = S(HSm);
         var footY = bottom - footH;
 
         // The board, as big as leaves room for a few lines of notes.
-        var notesMin = S(19.5f) * 3 + S(12);
-        var board = MathF.Max(S(110), MathF.Min(w, footY - S(10) - notesMin - y));
-        board = MathF.Min(board, w);
+        y += S(small ? 8 : 10);
+        var notesMin = small ? 0 : S(19.5f) * 3;
+        var room = footY - S(8) - notesMin - S(8) - y;
+        var board = small ? MathF.Min(S(110), MathF.Min(w, room)) : MathF.Max(S(110), MathF.Min(w, room));
+        board = MathF.Max(S(60), MathF.Min(board, w));
         var boardX = left + (w - board) / 2;
-        PlanBoard.Draw(dl, new Vector2(boardX, y), board, v.Arena, v.Objects);
-        if (v.Hidden != null && ImGui.IsMouseHoveringRect(new Vector2(boardX, y), new Vector2(boardX + board, y + board)) && ImGui.IsWindowHovered())
-            Kit.Tooltip(v.Hidden);
-        y += board + S(12);
+        PlanBoard.Draw(dl, new Vector2(boardX, y), board, v.Arena, v.Objects, small || board < S(160), You());
+        if (v.Hidden != null && Kit.Pointed(new Vector2(boardX, y), new Vector2(boardX + board, y + board))) Kit.Tooltip(v.Hidden);
+        y += board + S(8);
 
-        // The notes, scrolling when long.
-        var notesH = footY - S(10) - y;
-        if (notesH > S(16)) Notes(v, left, y, w, notesH);
+        // The notes, scrolling when long; too small a window says they're there.
+        var notesH = footY - S(8) - y;
+        Notes(v, left, y, w, notesH, small);
 
-        // Previous and next.
-        if (Kit.IconButton("##rp-prev", new Vector2(left, footY), Icon.ChevronLeft, "Previous step", 30, Btn.Glass, v.Step == 0)) plans.Move(-1);
-        if (Kit.IconButton("##rp-next", new Vector2(left + w - S(30), footY), Icon.ChevronRight, "Next step", 30, Btn.Glass, v.Step >= v.Plan.Steps.Count - 1))
+        // Previous and next: 32px squares, the count in mono between them.
+        if (Kit.IconButton("##rp-prev", new Vector2(left, footY), Icon.ChevronLeft, "Previous step", Btn.Outline, BtnSize.Sm, v.Step == 0)) plans.Move(-1);
+        if (Kit.IconButton("##rp-next", new Vector2(left + w - S(HSm), footY), Icon.ChevronRight, "Next step", Btn.Outline, BtnSize.Sm, v.Step >= v.Plan.Steps.Count - 1))
             plans.Move(1);
-        var cw = Txt.Measure(v.Count, Face.Mono, 12).X;
-        Txt.Line(dl, new Vector2(left + (w - cw) / 2, footY), v.Count, Face.Mono, 12, Palette.Muted, 30);
+        var cw = Txt.Width(v.Count, Face.Mono, 13);
+        Txt.Line(dl, new Vector2(left + (w - cw) / 2, footY), v.Count, Face.Mono, 13, Palette.Muted, HSm);
         ImGui.SetCursorScreenPos(new Vector2(left, bottom));
         ImGui.Dummy(Vector2.Zero);
     }
 
-    /// <summary>The words fitted to the width: done once, and again only when the width or the scale changes.</summary>
-    private static void Fit(StepView v, float w, float buttons)
+    /// <summary>Your spot (MT, H1…) from the party as the game lists it now, read once a second.</summary>
+    private string? You()
     {
-        var scale = ImGuiHelpers.GlobalScale;
-        if (MathF.Abs(v.FitWidth - w) <= 0.5f && v.FitScale == scale) return;
-        v.FitWidth = w;
-        v.FitScale = scale;
-        v.NameFit = Txt.Fit(v.Plan.Name, Face.SansMedium, 12, w - buttons - S(10));
-        (v.TitleFirst, v.TitleSecond) = TitleLines(v.Title, w);
-        v.EyebrowFit = Txt.Fit(v.Eyebrow, Face.Sans, 12, w * 0.7f);
-    }
-
-    /// <summary>The step's name in Geist 600, on up to two lines: as many words as fit on the first, the rest cut on the second.</summary>
-    private static (string First, string? Second) TitleLines(string text, float w)
-    {
-        if (Txt.Measure(text, Face.SansSemibold, 18).X <= w) return (text, null);
-        var cut = text.Length;
-        while (cut > 0)
+        if (DateTime.UtcNow - youAt < TimeSpan.FromSeconds(1)) return you;
+        youAt = DateTime.UtcNow;
+        try
         {
-            cut = text.LastIndexOf(' ', cut - 1);
-            if (cut <= 0) break;
-            if (Txt.Measure(text[..cut], Face.SansSemibold, 18).X <= w) break;
+            var me = Services.Objects.LocalPlayer;
+            if (me == null) return you = null;
+            var party = new List<Partier>();
+            foreach (var m in Services.Party)
+            {
+                if (m.EntityId == 0) continue;
+                var (job, role) = data.Job(m.ClassJob.RowId);
+                party.Add(new Partier(m.EntityId, job, role));
+            }
+            if (party.Count == 0)
+            {
+                var (job, role) = data.Job(me.ClassJob.RowId);
+                party.Add(new Partier(me.EntityId, job, role));
+            }
+            foreach (var (who, slot) in Roles.Assign(party))
+                if (who.Key == me.EntityId) return you = slot;
+            return you = null;
         }
-        if (cut <= 0) return (Txt.Fit(text, Face.SansSemibold, 18, w), null);
-        return (text[..cut], Txt.Fit(text[(cut + 1)..], Face.SansSemibold, 18, w));
+        catch (Exception)
+        {
+            // The party can't be read this frame (a zone change): no reticle, not an error.
+            return you = null;
+        }
     }
 
-    /// <summary>The notes, wrapped once for the width (again when it changes), in a part of their own that scrolls.</summary>
-    private void Notes(StepView v, float left, float y, float w, float h)
+    /// <summary>The notes, wrapped once for the width, in a part of their own that scrolls, fading at the foot when there's more.</summary>
+    private void Notes(StepView v, float left, float y, float w, float h, bool small)
     {
+        var dl = Kit.Dl;
         if (v.Notes.Length == 0)
         {
-            Txt.Line(Kit.Dl, new Vector2(left, y), "No notes for this step.", Face.Sans, 13, Palette.Faint, 19.5f);
+            if (h >= S(19.5f)) Txt.Line(dl, new Vector2(left, y), "No notes for this step.", Face.Sans, 13, Palette.Muted, 19.5f);
             return;
         }
         var scale = ImGuiHelpers.GlobalScale;
@@ -303,22 +330,39 @@ public sealed class PlanWindow : Window
             v.LinesScale = scale;
             v.Lines = Wrap(v.Notes, w - S(10));
         }
+        var lh = S(19.5f);
+        if (small || h < lh * 1.5f)
+        {
+            // Too small for the notes: say they're there, rather than hide them without a word.
+            if (h < S(16)) return;
+            Icons.Draw(dl, Icon.ChevronDown, new Vector2(left, y + (lh - S(Kit.IconPx)) / 2), S(Kit.IconPx), Palette.Muted);
+            var words = v.Lines.Count == 1 ? "Notes: 1 line, make it taller" : $"Notes: {v.Lines.Count} lines, make it taller";
+            Txt.Line(dl, new Vector2(left + S(Kit.IconPx + 5.6f), y), Txt.Fit(words, Face.Sans, 13, w - S(Kit.IconPx + 5.6f)), Face.Sans, 13, Palette.Muted, 19.5f);
+            return;
+        }
         ImGui.SetCursorScreenPos(new Vector2(left, y));
         var open = ImGui.BeginChild("##rp-notes", new Vector2(w, h), false, ImGuiWindowFlags.None);
         Frame.Open.Push(false);
         try
         {
             if (!open) return;
-            var dl = ImGui.GetWindowDrawList();
-            var lh = S(19.5f);
+            var cdl = ImGui.GetWindowDrawList();
             var start = ImGui.GetCursorScreenPos();
             var scroll = ImGui.GetScrollY();
             // Only the lines in view are drawn.
             var first = Math.Max(0, (int)(scroll / lh) - 1);
             var last = Math.Min(v.Lines.Count, first + (int)(h / lh) + 3);
             for (var i = first; i < last; i++)
-                Txt.Line(dl, start + new Vector2(0, lh * i), v.Lines[i], Face.Sans, 13, Palette.Soft, 19.5f);
+                Txt.Line(cdl, start + new Vector2(0, lh * i), v.Lines[i], Face.Sans, 13, Palette.Text, 19.5f);
             ImGui.Dummy(new Vector2(1, lh * v.Lines.Count));
+            // More below: the words fade at the foot (`.fade-b`, 26px into the window's ground).
+            if (scroll + h < lh * v.Lines.Count - 1)
+            {
+                var a = new Vector2(left, y + h - S(26));
+                var b = new Vector2(left + w - S(8), y + h);
+                var bg = Palette.Over(Palette.Window, Palette.Void);
+                cdl.AddRectFilledMultiColor(a, b, Palette.U32(Palette.WithAlpha(bg, 0)), Palette.U32(Palette.WithAlpha(bg, 0)), Palette.U32(bg), Palette.U32(bg));
+            }
         }
         finally
         {
@@ -340,133 +384,181 @@ public sealed class PlanWindow : Window
                 lines.Add(string.Empty);
                 continue;
             }
-            var cur = string.Empty;
-            foreach (var word in para.Split(' '))
-            {
-                var next = cur.Length == 0 ? word : cur + " " + word;
-                if (cur.Length > 0 && Txt.Measure(next, Face.Sans, 13).X > width)
-                {
-                    lines.Add(cur);
-                    cur = word;
-                }
-                else cur = next;
-            }
-            lines.Add(cur);
+            lines.AddRange(Txt.Wrap(para, Face.Sans, 13, width));
             if (lines.Count > 400) break;
         }
         return lines;
     }
 
-    private void HeaderButtons(Vector2 pos)
+    /// <summary>The list (on while the menu is open) and the lock (ember-washed when locked, quiet when not); the lock always, even unlinked.</summary>
+    private void HeaderButtons(Vector2 pos, bool list, bool lockButton)
     {
-        if (Kit.IconButton("##rp-pick", pos, Icon.List, "Your plans", 28)) ImGui.OpenPopup(PlansMenu);
+        var x = pos.X;
+        if (list)
+        {
+            var open = ImGui.IsPopupOpen(PlansMenu);
+            if (Kit.IconButton("##rp-pick", new Vector2(x, pos.Y), Icon.List, "Your plans", open ? Btn.On : Btn.Quiet, BtnSize.Sm)) ImGui.OpenPopup(PlansMenu);
+            x += S(HSm) + S(6.4f);
+        }
+        if (!lockButton) return;
         var locked = config.PlanWindowLocked;
-        if (Kit.IconButton("##rp-lock", pos + new Vector2(S(28) + S(6), 0), locked ? Icon.Lock : Icon.LockOpen,
-                locked ? "Locked where it is. Press to move and resize it again." : "Lock it where it is", 28, locked ? Btn.Picked : Btn.Glass))
+        if (Kit.IconButton("##rp-lock", new Vector2(x, pos.Y), locked ? Icon.Lock : Icon.LockOpen,
+                locked ? "Locked where it is. Press to move and resize it again." : "Lock it where it is", locked ? Btn.Ember : Btn.Quiet, BtnSize.Sm))
         {
             config.PlanWindowLocked = !locked;
             config.Save();
         }
     }
 
-    /// <summary>No plan shown yet: why, and what to do.</summary>
-    private void DrawEmpty(float left, float y, float w)
+    /// <summary>No plan shown: the Boss, a small callout, one line, at most one button.</summary>
+    private void DrawEmpty(float left, float y, float w, bool small)
     {
         var dl = Kit.Dl;
-        var buttons = S(28) * 2 + S(6);
-        Txt.Line(dl, new Vector2(left, y), "Raid plan", Face.SansMedium, 12, Palette.Muted, 28);
-        if (plans.Linked) HeaderButtons(new Vector2(left + w - buttons, y));
-        y += S(28) + S(14);
-        ImGui.SetCursorScreenPos(new Vector2(left, y));
-        if (!plans.Linked)
-        {
-            Txt.Para(LinkLine);
-            Kit.Gap(12);
-            if (Kit.Button("##rp-link", Kit.At, "Link your account", Btn.Primary, BtnSize.Tiny, Icon.Link)) OpenSettings?.Invoke();
-            return;
-        }
-        if (!plans.ListLoaded && !plans.ListLoading && plans.ListWhy == null && !askedForList)
+        var headH = S(32);
+        var canPick = plans.Linked && plans.List.Count > 0;
+        var buttons = S(HSm) * (canPick ? 2 : 1) + (canPick ? S(6.4f) : 0);
+        Kit.Eyebrow(dl, new Vector2(left, y + (headH - Kit.EyebrowH) / 2), "Raid plan", null, w - buttons - S(8));
+        HeaderButtons(new Vector2(left + w - buttons, y + (headH - S(HSm)) / 2), canPick, true);
+        y += headH + S(small ? 4 : 10);
+
+        if (plans.Linked && !plans.ListLoaded && !plans.ListLoading && plans.ListWhy == null && !askedForList)
         {
             askedForList = true;
             plans.RefreshList();
         }
-        if (emptyVersion != plans.Version)
+        var state = EmptyState.Of(plans.Linked, plans.Loading != null, plans.ListLoading, plans.PlanWhy ?? plans.ListWhy, plans.List.Count, plans.Content != 0);
+        var (mood, ring, icon, tele) = state.Kind switch
         {
-            // Everything it reads bumps the plans' version when it changes.
-            emptyVersion = plans.Version;
-            string line;
-            var retry = false;
-            if (plans.Loading != null) line = "Opening the plan…";
-            else if (plans.ListLoading) line = "Reading your plans…";
-            else if (plans.PlanWhy is { } pw)
-            {
-                line = pw;
-                retry = true;
-            }
-            else if (plans.ListWhy is { } lw)
-            {
-                line = lw;
-                retry = true;
-            }
-            else if (plans.List.Count == 0) line = "You have no plans yet. Make one on the site, or make one from a pull you've sent.";
-            else if (plans.Content != 0) line = $"No plan for {plans.DutyName ?? "this duty"} yet. Pick one of yours, or make one on the site.";
-            else line = "Pick one of your plans to show it here.";
-            emptyLine = new[] { Run.Note(line, retry ? Palette.Danger : null) };
-            emptyRetry = retry;
+            EmptyKind.NotLinked => (BossMood.Asleep, true, Icon.Link, true),
+            EmptyKind.Wrong => (BossMood.Awake, false, Icon.RefreshCw, false),
+            EmptyKind.NoPlans => (BossMood.Asleep, true, Icon.ExternalLink, false),
+            EmptyKind.NoPlanHere => (BossMood.Tilted, false, Icon.List, true),
+            _ => (BossMood.Asleep, false, Icon.List, true),
+        };
+        var cx = left + w / 2;
+        var drawH = S(small ? 60 : 84);
+        var c = new Vector2(cx, y + drawH / 2);
+        if (state.Kind == EmptyKind.Reading) Spots(dl, c);
+        else Boss.Empty(dl, c, small ? 40 : 56, mood, ring && !small ? 84 : 0);
+        y += drawH + S(8.8f);
+        y += Kit.Callout(dl, new Vector2(left, y), state.Title, 13, w, 2, 1.1f, center: true);
+        y += S(8.8f);
+        if (state.Kind == EmptyKind.Reading)
+        {
+            var bw = MathF.Min(S(180), w);
+            Kit.CastBar(dl, new Vector2(cx - bw / 2, y), bw, Running(1.4f));
+            return;
         }
-        var retrying = emptyRetry;
-        Txt.Para(emptyLine);
-        Kit.Gap(12);
-        var at = Kit.At;
-        if (retrying)
+        var runs = new[] { Run.Note(state.Line) };
+        var lineH = Txt.Flow(new Vector2(left, y), w, runs, 19.5f, out _, center: true);
+        y += lineH + S(8.8f);
+        if (state.Button == null) return;
+        var style = tele ? Btn.Tele : Btn.Outline;
+        var bw2 = Kit.ButtonWidth(state.Button, BtnSize.Md, icon, style);
+        if (Kit.Button("##rp-empty", new Vector2(cx - bw2 / 2, y), state.Button, style, BtnSize.Md, icon))
         {
-            if (Kit.Button("##rp-retry", at, "Try again", Btn.Glass, BtnSize.Tiny, Icon.Refresh)) plans.Retry();
-        }
-        else if (plans.List.Count > 0 && Kit.Button("##rp-pick-btn", at, "Pick a plan", Btn.Primary, BtnSize.Tiny, Icon.List))
-        {
-            ImGui.OpenPopup(PlansMenu);
+            switch (state.Kind)
+            {
+                case EmptyKind.NotLinked:
+                    OpenSettings?.Invoke();
+                    break;
+                case EmptyKind.Wrong:
+                    plans.Retry();
+                    break;
+                case EmptyKind.NoPlans:
+                    Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+                    break;
+                default:
+                    ImGui.OpenPopup(PlansMenu);
+                    break;
+            }
         }
     }
 
-    /// <summary>Your plans: this duty's first, then the rest, newest first; Refresh at the top.</summary>
+    /// <summary>The party in a row, as the site's loader (eight spots in their roles' colours).</summary>
+    private static void Spots(ImDrawListPtr dl, Vector2 c)
+    {
+        string[] spots = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
+        var d = S(20);
+        var gap = S(4);
+        var total = d * spots.Length + gap * (spots.Length - 1);
+        var x = c.X - total / 2 + d / 2;
+        // They run to their spots: each in turn lifts a little.
+        var t = Running(1.4f);
+        for (var i = 0; i < spots.Length; i++)
+        {
+            var lift = MathF.Max(0, MathF.Sin((t * spots.Length - i) * MathF.PI / 2)) * S(2) * (ReducedMotion ? 0 : 1);
+            Kit.Spot(dl, new Vector2(x, c.Y - lift), 20, spots[i], Palette.SpotColor(spots[i]));
+            x += d + gap;
+        }
+    }
+
+    /// <summary>
+    /// Your plans (`.menu`): this duty's under an eyebrow, the one shown with a ready tick and the rest
+    /// with the map, then the other duties' with their duty under the name; every row keeps a 20px
+    /// slot at the left, so the names line up. Read them again at the foot.
+    /// </summary>
     private void DrawPlansMenu()
     {
-        ImGui.SetNextWindowSizeConstraints(new Vector2(S(220), 0), new Vector2(S(360), S(380)));
+        ImGui.SetNextWindowSizeConstraints(new Vector2(S(220), 0), new Vector2(S(320), S(420)));
         if (!Kit.BeginMenu(PlansMenu)) return;
         try
         {
-            var w = S(320);
-            if (menuVersion != plans.Version || MathF.Abs(menuWidth - w) > 0.5f)
+            var w = S(320) - S(11.2f);
+            if (menuVersion != plans.Version)
             {
                 menuVersion = plans.Version;
-                menuWidth = w;
                 menuRows.Clear();
-                foreach (var p in plans.List.OrderByDescending(p => plans.Content != 0 && p.Content == plans.Content))
-                {
-                    var here = plans.Content != 0 && p.Content == plans.Content;
-                    var label = string.IsNullOrEmpty(p.Duty) ? p.Name : $"{p.Name} · {p.Duty}";
-                    menuRows.Add((p.Id, "##rp-plan-" + p.Id, Txt.Fit(label, Face.Sans, 13, w - S(48)), here));
-                }
+                foreach (var p in plans.List) menuRows.Add((p, plans.Content != 0 && p.Content == plans.Content));
             }
-            if (Kit.MenuItem("##rp-refresh", plans.ListLoading ? "Reading your plans…" : "Read them again", Icon.Refresh, w)) plans.RefreshList(true);
+            var dl = ImGui.GetWindowDrawList();
+            var here = menuRows.Where(r => r.Here).ToList();
+            var others = menuRows.Where(r => !r.Here).ToList();
+            if (here.Count > 0)
+            {
+                Kit.MenuEyebrow($"This duty · {plans.DutyName ?? "here"}", w);
+                foreach (var (p, _) in here) PlanRow(dl, p, w, null);
+            }
+            if (others.Count > 0)
+            {
+                if (here.Count > 0) Kit.MenuRule(w);
+                Kit.MenuEyebrow(here.Count > 0 || plans.Content != 0 ? "Other duties" : "Your plans", w);
+                foreach (var (p, _) in others) PlanRow(dl, p, w, string.IsNullOrEmpty(p.Duty) ? null : p.Duty);
+            }
             if (menuRows.Count == 0)
             {
-                Txt.Line(ImGui.GetWindowDrawList(), ImGui.GetCursorScreenPos() + new Vector2(S(12), 0), "No plans yet", Face.Sans, 13, Palette.Faint, 36);
-                ImGui.Dummy(new Vector2(w, S(36)));
+                var pos = ImGui.GetCursorScreenPos();
+                Txt.Line(dl, pos + new Vector2(S(8.8f), 0), "No plans yet", Face.Sans, 13, Palette.Muted, 38);
+                ImGui.Dummy(new Vector2(w, S(38)));
             }
-            for (var i = 0; i < menuRows.Count; i++)
-            {
-                var (id, key, shown, here) = menuRows[i];
-                if (Kit.MenuItem(key, shown, plans.Plan?.Id == id ? Icon.Check : here ? Icon.MapPin : null, w))
-                {
-                    plans.Open(id, true);
-                    ImGui.CloseCurrentPopup();
-                }
-            }
+            Kit.MenuRule(w);
+            var reading = plans.ListLoading;
+            var (clicked, hovered, min, max) = Kit.MenuRow("##rp-refresh", w, reading ? "Reading your plans…" : "Read them again");
+            var (slot, _) = Kit.MenuRowParts(min, max);
+            Icons.Draw(dl, Icon.RefreshCw, slot + new Vector2((S(20) - S(Kit.IconPx)) / 2), S(Kit.IconPx), hovered ? Palette.White : Palette.Muted);
+            if (clicked) plans.RefreshList(true);
         }
         finally
         {
             Kit.EndMenu();
+        }
+    }
+
+    private void PlanRow(ImDrawListPtr dl, PlanListItem p, float w, string? sub)
+    {
+        var shown = plans.Plan?.Id == p.Id;
+        var steps = shown ? plans.Plan!.Steps.Count : p.Steps;
+        var count = steps is { } n ? (n == 1 ? "1 step" : $"{n} steps") : null;
+        var reserve = count != null ? Txt.Width(count, Face.Mono, 12) + S(10) : 0;
+        var (clicked, _, min, max) = Kit.MenuRow("##rp-plan-" + p.Id, w, p.Name, sub, reserve: reserve);
+        var (slot, right) = Kit.MenuRowParts(min, max);
+        if (shown) Kit.Tick(dl, slot + new Vector2(S(10)), 20);
+        else if (sub == null) Icons.Draw(dl, Icon.Map, slot + new Vector2((S(20) - S(Kit.IconPx)) / 2), S(Kit.IconPx), Palette.Faint);
+        if (count != null) Txt.LineRight(dl, right, min.Y, count, Face.Mono, 12, Palette.Faint, (max.Y - min.Y) / S(1));
+        if (clicked)
+        {
+            plans.Open(p.Id, true);
+            ImGui.CloseCurrentPopup();
         }
     }
 }

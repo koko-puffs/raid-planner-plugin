@@ -26,6 +26,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Configuration config;
     private readonly RecordingStore store;
     private readonly FightRecorder recorder;
+
+    /// <summary>The meter's game side; its <see cref="CombatMeter.Source"/> is what the meter's window reads.</summary>
+    private readonly CombatMeter meter;
     private readonly SiteSession site;
     private readonly PlanService plans;
     private readonly Uploads uploads;
@@ -33,6 +36,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windows = new("RaidPlanner");
     private readonly MainWindow window;
     private readonly PlanWindow planWindow;
+    private readonly MeterWindow meterWindow;
+    private readonly MeterDetailWindow meterDetail;
     private IDtrBarEntry? bar;
 
     /// <summary>The last pull kept, shown in the bar for a moment ("Pull 3 kept").</summary>
@@ -67,18 +72,33 @@ public sealed class Plugin : IDalamudPlugin
             var data = new GameData();
             recorder = new FightRecorder(config, data, store, version);
             recorder.Kept += OnKept;
+            meter = new CombatMeter(config, data, recorder);
             site = new SiteSession(() => config.SiteToken);
             plans = new PlanService(config, data, recorder, site);
             uploads = new Uploads(config, data, recorder, site);
 
             fonts = new Fonts();
             window = new MainWindow(config, store, recorder, site, plans, uploads, fonts);
-            planWindow = new PlanWindow(config, plans, fonts);
+            planWindow = new PlanWindow(config, plans, recorder, data, fonts);
+            meterWindow = new MeterWindow(config, fonts);
+            meterDetail = new MeterDetailWindow(config, fonts);
             windows.AddWindow(window);
             windows.AddWindow(planWindow);
+            windows.AddWindow(meterWindow);
+            windows.AddWindow(meterDetail);
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
             planWindow.OpenSettings = window.ShowAccount;
+            // The meter's windows read the meter's numbers only (CombatMeter's session), or a made-up fight when previewed.
+            var meterSource = () => meterWindow.Preview ?? meter.Source;
+            meterWindow.Source = () => meter.Source;
+            meterWindow.InDuty = () => recorder.DutyHere != null;
+            meterWindow.OpenDetail = (tab, fight, member, death) => meterDetail.Show(tab, fight, member, death);
+            meterWindow.OpenSettings = window.ShowMeterSettings;
+            meterDetail.Source = meterSource;
+            meterDetail.ShowSmall = () => meterWindow.IsOpen = true;
+            window.Meter = meterSource;
+            window.MeterProblem = () => meter.Session.Problem;
             plans.ShowWindow = open => planWindow.IsOpen = open;
             // With recording off, a pull is still followed when the plan window shows this duty's plan.
             recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;
@@ -86,6 +106,7 @@ public sealed class Plugin : IDalamudPlugin
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
                 HelpMessage = "Open Raid Planner. /raidplan plan shows your plan, /raidplan next and /raidplan prev move its step; "
+                    + "/raidplan meter shows or hides the meter, /raidplan meter unlock gives it the mouse back; "
                     + "/raidplan send last sends the newest pull; /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
             });
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
@@ -126,6 +147,29 @@ public sealed class Plugin : IDalamudPlugin
             case "send last":
             case "send":
                 SendLast();
+                break;
+            case "meter":
+                // Shows or hides it (Settings' Show the meter).
+                config.ShowMeter = !config.ShowMeter;
+                config.Save();
+                meterWindow.IsOpen = config.ShowMeter;
+                break;
+            case "meter unlock":
+                config.ShowMeter = true;
+                meterWindow.Unlock();
+                meterWindow.IsOpen = true;
+                break;
+            case "meter settings":
+                window.ShowMeterSettings();
+                break;
+            case "meter big":
+            case "meter open":
+                meterDetail.Show(config.MeterTab, null, null, null);
+                break;
+            case "meter preview":
+                // A made-up fight, under a Preview tag, to see the windows without one.
+                meterWindow.Preview = meterWindow.Preview == null ? new MeterPreview() : null;
+                meterWindow.IsOpen = true;
                 break;
             default:
                 window.Toggle();
@@ -169,6 +213,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>The server info bar: "● Rec 2:31" while a pull is recorded, "Pull 3 kept" for a moment after.</summary>
     private void OnUpdate(IFramework framework)
     {
+        // The meter's window follows Settings' Show the meter (and /raidplan meter).
+        var meterWanted = config.ShowMeter || meterWindow.Preview != null;
+        if (meterWindow.IsOpen != meterWanted) meterWindow.IsOpen = meterWanted;
         try
         {
             if (!config.ShowInBar || barBroken)
@@ -181,12 +228,12 @@ public sealed class Plugin : IDalamudPlugin
             if (recorder.Current is { } b)
             {
                 text = $"● Rec {Words.Clock(recorder.Elapsed)}";
-                tip = $"Raid Planner is recording {b.Duty.Name}, pull {b.Pull}. Click to open it.";
+                tip = $"Raid Planner is recording {b.Duty.Name}, pull {b.Pull}. Click to open the Raid Planner plugin.";
             }
             else if (justKept is { } k && DateTime.UtcNow < k.Until)
             {
                 text = $"Pull {k.Info.Pull} kept";
-                tip = "Click to send it to the Raid Planner.";
+                tip = $"Pull {k.Info.Pull} is kept. Click to open the Raid Planner plugin.";
             }
             if (text == null)
             {
@@ -235,6 +282,7 @@ public sealed class Plugin : IDalamudPlugin
         Safely(() => uploads?.Dispose());
         // Calls to the site under way stop here; a pull being saved is still waited for below.
         Safely(() => site?.Dispose());
+        Safely(() => meter?.Dispose());
         Safely(() => recorder?.Dispose());
         Safely(() => fonts?.Dispose());
     }

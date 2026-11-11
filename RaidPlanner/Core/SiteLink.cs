@@ -46,9 +46,9 @@ public static class SiteLink
 
     /// <summary>
     /// The most the site takes in one recording, as the database counts it (<see cref="ServerSize"/>):
-    /// its own limit is the same number.
+    /// its own limit is the same number (5 MB since round three's migration, for the combat block; 3 MB before).
     /// </summary>
-    public const int MaxBytes = 3_000_000;
+    public const int MaxBytes = 5_000_000;
 
     /// <summary>
     /// A recording's size as the database counts it: its JSON written back out, which puts a space
@@ -74,9 +74,11 @@ public static class SiteLink
     }
 
     /// <summary>
-    /// The recording as it's sent: whole when it fits; else with the places kept less often (every
-    /// second, then every two, then four), then the enemies' places only, then none. Null when even
-    /// that's too big (a pull with more events than the site takes).
+    /// The recording as it's sent: whole when it fits; else frames go first (the places kept less
+    /// often: every second, then every two, then four; then the enemies' places only, at those steps; then
+    /// none), then the combat block's casts, then its ticks (never its effects or statuses), the block
+    /// saying what it lost (<c>combat.thinned</c>). Null when even that's too big (a pull with more
+    /// events than the site takes).
     /// </summary>
     public static (string Json, bool Thinned)? Fit(string json)
     {
@@ -101,13 +103,23 @@ public static class SiteLink
             var every = step;
             var enemies = r.WithFrames(
                 frames.Where((_, i) => i % every == 0)
-                    .Select(f => f with { At = f.At.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value) })
+                    .Select(f => f with
+                    {
+                        At = f.At.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value),
+                        Hp = f.Hp?.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value),
+                    })
                     .Where(f => f.At.Count > 0),
                 false).ToJson();
             if (ServerSize(enemies) <= MaxBytes) return (enemies, true);
         }
         var none = r.WithFrames(Array.Empty<Frame>(), false).ToJson();
-        return ServerSize(none) <= MaxBytes ? (none, true) : null;
+        if (ServerSize(none) <= MaxBytes) return (none, true);
+        if (r.Combat == null) return null;
+        // Then the combat block's casts, then its ticks.
+        var noCasts = r.With(Array.Empty<Frame>(), false, r.Combat.Without("cast")).ToJson();
+        if (ServerSize(noCasts) <= MaxBytes) return (noCasts, true);
+        var noTicks = r.With(Array.Empty<Frame>(), false, r.Combat.Without("cast", "tick")).ToJson();
+        return ServerSize(noTicks) <= MaxBytes ? (noTicks, true) : null;
     }
 
     /// <summary>

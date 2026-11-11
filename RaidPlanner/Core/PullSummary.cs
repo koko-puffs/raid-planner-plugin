@@ -9,14 +9,18 @@ namespace RaidPlanner.Core;
 /// <summary>
 /// A kept pull in a few numbers, for the site's progress tracker (<c>rp_plugin_pull</c>, contract
 /// §3): the duty, the pull, how long and how it ended, how far it got (<c>reached</c>, the length;
-/// <c>phase</c>, the furthest phase from 1) and who died to what. No names, only spots and jobs.
+/// <c>phase</c>, the furthest phase from 1) and who died to what. Since 0.3.0 also the main boss's HP
+/// left (<c>boss_hp</c>), when each phase began (<c>phases</c>) and each spot's numbers
+/// (<c>stats</c>: <see cref="PullStats.Stats"/>). No names, only spots and jobs.
 /// </summary>
 public static class PullSummary
 {
     /// <summary>The most deaths sent (the site keeps as many).</summary>
     public const int MaxDeaths = 48;
 
-    public static JsonObject Build(Recording r, int phase)
+    /// <param name="failKind">A status's kind as a failure debuff (<see cref="Meter.CombatLists.FailKind"/>); by default from its name in the recording.</param>
+    /// <param name="isDot">Is a status one of the jobs' DoTs (to share out a tick that named no one)?</param>
+    public static JsonObject Build(Recording r, int phase, Func<uint, int>? failKind = null, Func<uint, bool>? isDot = null)
     {
         var party = r.Party.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
         var deaths = new JsonArray();
@@ -24,7 +28,9 @@ public static class PullSummary
         {
             if (deaths.Count >= MaxDeaths) break;
             party.TryGetValue(d.Who, out var who);
-            var by = d.By != 0 && r.Actions.TryGetValue(d.By, out var a) && !string.IsNullOrWhiteSpace(a.Name) ? a.Name.Trim() : null;
+            var by = d.ByStatus
+                ? (d.By != 0 && r.Statuses.TryGetValue(d.By, out var st) && !string.IsNullOrWhiteSpace(st.Name) ? st.Name.Trim() : null)
+                : (d.By != 0 && r.Actions.TryGetValue(d.By, out var a) && !string.IsNullOrWhiteSpace(a.Name) ? a.Name.Trim() : null);
             deaths.Add(new JsonObject
             {
                 ["t"] = CastEvent.Round(d.T, 2),
@@ -33,6 +39,7 @@ public static class PullSummary
                 ["by"] = by,
             });
         }
+        var bossHp = PullStats.BossHp(r);
         var duration = CastEvent.Round(r.Duration, 2);
         return new JsonObject
         {
@@ -46,6 +53,9 @@ public static class PullSummary
             ["reached"] = duration,
             ["phase"] = Math.Max(1, phase),
             ["deaths"] = deaths,
+            ["boss_hp"] = bossHp,
+            ["phases"] = new JsonArray(PullStats.PhaseStarts(r).Select(t => (JsonNode)(int)Math.Round(t, MidpointRounding.AwayFromZero)).ToArray()),
+            ["stats"] = PullStats.Stats(r, failKind, isDot),
         };
     }
 }

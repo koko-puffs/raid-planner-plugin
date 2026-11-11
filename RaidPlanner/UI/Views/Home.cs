@@ -4,188 +4,359 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// Home: the title with Settings, a pill for what the plugin's doing; then the pull being recorded
-/// (its clock and counts, and Stop), the latest pull as the planner's big card (its facts, Send to
-/// Raid Planner and Save as file), and the earlier pulls as rows. With none yet, the planner's
-/// three steps. Everything else (where files go, the party, how many are kept) is in Settings.
+/// Home (the mock-ups' "Home"): the state as a tag in the header with Open the Raid Planner and
+/// Settings; then the pull being recorded in the ember box (its duty as a small callout, the clock
+/// in mono over a cast bar running to the plan's length, what's being recorded counted in mono,
+/// Stop now in the danger outline); the latest pull (its number as a small callout, the outcome as
+/// a tag, the facts in mono, Send to Raid Planner as the telegraph); the night's earlier pulls as
+/// rows with square wells, a tag and a tick once sent. Before the first pull, the Boss asleep and
+/// three steps numbered as waymarks.
 /// </summary>
 public sealed partial class MainWindow
 {
     private const int EarlierShown = 6;
     private bool earlierAll;
 
-    /// <summary>The header pill: what the plugin is doing now.</summary>
-    private (string Text, Tone Tone, bool Pulse) StatusNow()
+    /// <summary>The header's tag: what the plugin is doing now.</summary>
+    private (string Text, TagKind Kind) StateNow()
     {
         if (recorder.Current is { } b)
-            return ($"Recording · pull {b.Pull} · {Words.Clock(recorder.Elapsed)}", Tone.Live, true);
+            return ($"Rec · pull {b.Pull} · {Format.Clock(recorder.Elapsed)}", TagKind.Rec);
         // A pull only followed for the plan (recording was off as it began): it stays that way.
         if (recorder.InPull)
-            return (recorder.RecordsThisDuty ? "Following your plan · recording starts with the next pull" : "Following your plan · not recorded", Tone.Waiting, false);
-        if (!config.AutoRecord) return ("Recording is off", Tone.Neutral, false);
-        if (recorder.DutyHere is { } duty) return ($"Ready · records the next pull in {duty.Name}", Tone.Waiting, false);
-        return ("Records each pull in a duty by itself", Tone.Neutral, false);
+            return (recorder.RecordsThisDuty ? "Following your plan · recording starts next pull" : "Following your plan · not recorded", TagKind.Ember);
+        if (!config.AutoRecord) return ("Recording is off", TagKind.Default);
+        if (recorder.DutyHere is { } duty) return ($"Waiting for the pull · {duty.Name}", TagKind.Plain);
+        return ("Not in a duty", TagKind.Plain);
     }
+
+    /// <summary>The duty the header (or the recording box) already names, so the latest pull doesn't say it again.</summary>
+    private string? DutyShown => recorder.Current?.Duty.Name ?? recorder.DutyHere?.Name;
 
     private void DrawHome()
     {
-        Frame.BeginHeader(20);
+        Frame.BeginHeader();
         var at = Kit.At;
         var w = Kit.Width;
-        var titleH = Title(at, "Raid Planner", w - S(48), 22, 1);
-        SettingsButton(new Vector2(at.X + w - S(36), at.Y));
-        var (status, tone, pulse) = StatusNow();
-        var pillY = at.Y + MathF.Max(titleH, S(36)) + S(6);
-        Kit.StatusPill(new Vector2(at.X, pillY), status, tone, pulse, w);
-        Kit.Reserve(at, w, pillY + S(28) - at.Y);
+        var dl = Kit.Dl;
+        var (state, kind) = StateNow();
+        var buttons = S(H) * 2 + S(6.4f);
+        var tagH = 22f;
+        var tagText = state;
+        var room = w - buttons - S(12);
+        if (Kit.TagWidth(tagText, kind) > room) tagText = Kit.FitSpaced(Txt.Caps(state), Face.Mono, 11, 0.05f, room - (Kit.TagWidth(string.Empty, kind)));
+        Kit.Tag(dl, new Vector2(at.X, at.Y + (S(H) - S(tagH)) / 2), tagText, kind);
+        if (Kit.IconButton("##open-site", new Vector2(at.X + w - buttons, at.Y), Icon.ExternalLink, "Open the Raid Planner", Btn.Quiet))
+            Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+        if (Kit.IconButton("##settings", new Vector2(at.X + w - S(H), at.Y), Icon.Sliders, "Settings")) OpenSettings(settingsTab);
+        Kit.Reserve(at, w, S(H));
         Frame.EndHeader();
 
-        Frame.BeginBody("##home", null, 20, 24);
+        Frame.BeginBody("##home", null);
         var all = store.All;
-        if (recorder.Current != null) DrawLive();
-        else if (recorder.NotKept is { } nk && DateTime.UtcNow - nk.At < TimeSpan.FromMinutes(3))
-        {
-            Txt.Note(nk.Why, Palette.Muted);
-            Kit.Gap(16);
-        }
+        var recording = recorder.Current != null;
+        if (recording) DrawLive();
+        else if (recorder.NotKept is { } nk && DateTime.UtcNow - nk.At < TimeSpan.FromMinutes(3)) NotKept(nk.Why);
 
         if (all.Count == 0)
         {
-            if (recorder.Current == null) DrawGetStarted();
+            if (!recording) DrawGetStarted();
         }
         else
         {
-            DrawLatest(all[0]);
-            DrawEarlier(all.Skip(1).ToList());
+            DrawLatest(all[0], recording);
+            DrawEarlier(all.Skip(1).ToList(), recording);
         }
         Frame.EndBody();
+    }
+
+    /// <summary>A pull that wasn't kept: a Not kept tag and why, for three minutes.</summary>
+    private static void NotKept(string why)
+    {
+        var at = Kit.At;
+        var dl = Kit.Dl;
+        var tw = Kit.Tag(dl, at, "Not kept", TagKind.Default);
+        var x = at.X + tw + S(12);
+        Txt.Line(dl, new Vector2(x, at.Y), Txt.Fit(why, Face.Sans, 13, at.X + Kit.Width - x), Face.Sans, 13, Palette.Muted, 22);
+        Kit.Reserve(at, Kit.Width, S(22));
+        Kit.Gap(14);
     }
 
     // ---------------------------------------------------------------------------------------------
     // The pull being recorded.
 
+    /// <summary>The longest kept pull of a duty (what the recording's cast bar runs to with no plan), by name.</summary>
+    private double LongestHere(string duty) =>
+        store.All.Where(p => string.Equals(p.Duty, duty, StringComparison.OrdinalIgnoreCase)).Select(p => p.Duration).DefaultIfEmpty(0).Max();
+
     private void DrawLive()
     {
         var b = recorder.Current!;
-        Kit.BeginPanel("##live", 16, 18, 16, Palette.EmberWash, Palette.EmberEdge);
+        Kit.BeginPanel("##live", 14, 16, 14, Palette.RecWash, Palette.RecLine);
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
-        var clock = Words.Clock(recorder.Elapsed);
-        var clockW = Txt.Measure(clock, Face.SansSemibold, 30).X;
-        var textW = w - clockW - S(16);
-        Kit.Eyebrow(at, $"Recording pull {b.Pull}", Palette.EmberText, textW);
-        var nameY = at.Y + Txt.Natural(Face.SansMedium, 12) + S(2);
-        var nameH = Title(new Vector2(at.X, nameY), b.Duty.Name, textW, 18, 2);
-        var line = $"{Words.Count(b.Casts, "cast")} · {Words.Count(b.Markers, "head marker")}" + (config.RecordParty ? " · the party's places" : " · mechanics only");
-        Txt.Line(dl, new Vector2(at.X, nameY + nameH + S(2)), Txt.Fit(line, Face.Sans, 13, textW), Face.Sans, 13, Palette.Muted, 19.5f);
-        // The clock, large, on the right; its dot breathes.
-        var p = Pulse();
-        var dot = new Vector2(at.X + w - clockW - S(12), at.Y + S(20));
-        dl.AddCircleFilled(dot, S(4) + S(3) * p, Palette.U32(Palette.WithAlpha(Palette.Ember, 0.25f * (1 - p))), 16);
-        dl.AddCircleFilled(dot, S(4), Palette.U32(Palette.Ember), 16);
-        Txt.Draw(dl, new Vector2(at.X + w - clockW, at.Y + S(2)), clock, Face.SansSemibold, 30, Palette.Ink);
-        var h = nameY + nameH + S(2) + S(19.5f) - at.Y;
-        Kit.Reserve(at, w, MathF.Max(h, S(44)));
+        var now = DateTimeOffset.Now;
+
+        // The eyebrow in ember, when it started on the right.
+        var started = $"Started {b.StartedAt.ToLocalTime():HH:mm}";
+        var sw = Txt.Width(started, Face.Sans, 12);
+        var night = Format.Day(b.StartedAt, now).StartsWith("tonight", StringComparison.Ordinal) ? " tonight" : string.Empty;
+        Kit.Eyebrow(dl, at, $"Recording · pull {b.Pull}{night}", null, w - sw - S(12), Palette.Ember);
+        Txt.Draw(dl, new Vector2(at.X + w - sw, at.Y + (Kit.EyebrowH - Txt.Natural(Face.Sans, 12)) / 2), started, Face.Sans, 12, Palette.Faint);
+        var y = at.Y + Kit.EyebrowH + S(12 - 2);
+
+        // The duty, a small callout.
+        y += Kit.Callout(dl, new Vector2(at.X, y), b.Duty.Name, 17, w, 2, 1.05f);
+        y += S(12);
+
+        // The clock (Geist Mono, so it holds still), and a cast bar to the plan's length, else the longest pull here.
+        var clock = Format.Clock(recorder.Elapsed);
+        var clockW = Txt.Width(clock, Face.MonoSemibold, 30);
+        var clockH = Txt.Natural(Face.MonoSemibold, 30) * 0.8f;
+        var (name, rest, length) = LiveCast(b.Duty.Name);
+        var castX = at.X + clockW + S(16);
+        var castW = at.X + w - castX;
+        var castH = S(13 * 1.2f) + S(4.8f) + S(6);
+        var rowH = MathF.Max(clockH, castH + S(2));
+        Txt.Draw(dl, new Vector2(at.X, y + rowH - Txt.Natural(Face.MonoSemibold, 30) * 0.9f), clock, Face.MonoSemibold, 30, Palette.White);
+        var fraction = length > 0 ? (float)(recorder.Elapsed / length) : 0;
+        Kit.Cast(dl, new Vector2(castX, y + rowH - castH - S(2)), castW, name, length > 0 ? Format.Clock(length) : null, fraction, nameRest: rest);
+        Kit.Reserve(at, w, y + rowH - at.Y);
         Kit.Gap(12);
+
+        // What's being recorded, counted in mono.
+        var party = Math.Max(1, Services.Party.Length);
+        Kit.Facts(new[]
+        {
+            new Kit.Fact("Casts", Format.Thousands(b.Casts)),
+            new Kit.Fact("Markers", Format.Thousands(b.Markers)),
+            // The builder doesn't count tethers as it goes: the phase it's reached instead.
+            new Kit.Fact("Phase", $"P{Math.Max(1, b.Phase)}"),
+            config.RecordParty ? new Kit.Fact("Places", party.ToString(System.Globalization.CultureInfo.InvariantCulture), "×2 / s") : new Kit.Fact("Places", "Off", Color: Palette.Muted, Sans: true),
+        });
+        Kit.Gap(12);
+
+        // Stop now: the danger outline.
         var row = Kit.At;
         const string stop = "Stop now";
-        if (Kit.Button("##stop", row, stop, Btn.Glass, BtnSize.Tiny, Icon.Square, 0, false, "Ends this pull here and keeps it. It ends by itself when the fight does."))
+        if (Kit.Button("##stop", row, stop, Btn.Danger, BtnSize.Sm, Icon.Square, 0, false, "Ends this pull here and keeps it. It ends by itself when the fight does."))
             recorder.Stop();
-        var bw = Kit.ButtonWidth(stop, BtnSize.Tiny, Icon.Square);
-        Txt.Line(dl, new Vector2(row.X + bw + S(12), row.Y), Txt.Fit("Ends by itself when the fight does.", Face.Sans, 12, w - bw - S(12)), Face.Sans, 12, Palette.Muted, 30);
-        Kit.Reserve(row, w, Kit.ButtonHeight(BtnSize.Tiny));
+        var bw = Kit.ButtonWidth(stop, BtnSize.Sm, Icon.Square, Btn.Danger);
+        Txt.Line(dl, new Vector2(row.X + bw + S(12), row.Y), Txt.Fit("Ends by itself when the fight does.", Face.Sans, 13, w - bw - S(12)), Face.Sans, 13, Palette.Muted, HSm);
+        Kit.Reserve(row, w, S(HSm));
         Kit.EndPanel();
-        Kit.Gap(22);
+    }
+
+    /// <summary>
+    /// The recording's cast bar: with a plan for this duty, its step's callout ("· step 12 of your
+    /// plan") and the plan's length; without, the longest pull kept here.
+    /// </summary>
+    private (string Name, string? Rest, double Length) LiveCast(string duty)
+    {
+        if (plans.Plan is { } plan && plans.ForThisDuty)
+        {
+            var step = Math.Clamp(plans.Step, 0, plan.Steps.Count - 1);
+            var s = plan.Steps[step];
+            return (s.Big, $"· step {step + 1} of your plan", PlanLength(plan));
+        }
+        var longest = LongestHere(duty);
+        return longest > 0 ? ("The longest pull here", null, longest) : ("The first pull here", null, 0);
+    }
+
+    /// <summary>A plan's length: its last cue's time, else its last step's written time.</summary>
+    private static double PlanLength(Plan plan)
+    {
+        if (plan.Game?.Cues is { Count: > 0 } cues) return cues.Max(c => c.T);
+        for (var i = plan.Steps.Count - 1; i >= 0; i--)
+            if (Format.ParseClock(plan.Steps[i].Time) is { } t) return t;
+        return 0;
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The latest pull: the planner's big card.
+    // The latest pull.
 
-    private void DrawLatest(RecordingInfo info)
+    /// <summary>An outcome's tag: Wipe (red), Clear (white), Ended (a hairline).</summary>
+    private static (string Text, TagKind Kind) OutcomeTag(Outcome o) => o switch
     {
-        Kit.Section("Latest pull", Words.When(info.RecordedAt, DateTimeOffset.Now));
+        Outcome.Wipe => ("Wipe", TagKind.Wipe),
+        Outcome.Clear => ("Clear", TagKind.Clear),
+        _ => ("Ended", TagKind.Default),
+    };
+
+    /// <summary>The Party fact: how many places ("8 places"), or none kept.</summary>
+    private Kit.Fact PartyFact(RecordingInfo info) =>
+        info.PartyPositions
+            ? new Kit.Fact("Party", PartyCount(info) is { } n ? Format.Thousands(n) : "…", "places")
+            : new Kit.Fact("Party", "None", Color: Palette.Muted, Sans: true);
+
+    /// <summary>How many of the party a pull kept, read from its file once on a worker (the index doesn't say); null until it's read.</summary>
+    private int? PartyCount(RecordingInfo info)
+    {
+        if (partyCounts.TryGetValue(info.File, out var n)) return n >= 0 ? n : null;
+        partyCounts[info.File] = -1;
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                partyCounts[info.File] = store.Read(info).Party.Count;
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Warning(ex, "Raid Planner couldn't read a pull's party");
+            }
+        });
+        return null;
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> partyCounts = new(StringComparer.OrdinalIgnoreCase);
+
+    private void DrawLatest(RecordingInfo info, bool recording)
+    {
+        var now = DateTimeOffset.Now;
+        Kit.Section("##latest-sh", "Latest pull", Capital(Format.Ago(info.RecordedAt, now)));
         Kit.Gap(10);
-        Kit.BeginPanel("##latest", 18, 18, 18);
+        var compact = recording;
+        Kit.BeginPanel("##latest", compact ? 14 : 16, 16, compact ? 14 : 16);
         var at = Kit.At;
         var w = Kit.Width;
-        // The name opens the pull (its timeline).
-        var titleH = Title(at, info.Duty, w, 18, 2, draw: false);
-        var (open, hovered, _) = Kit.Hit("##latest-open", at, new Vector2(w, titleH + S(22)));
-        Title(at, info.Duty, w, 18, 2, color: hovered ? Palette.White : Palette.Ink);
-        var line = $"Pull {info.Pull} · {Words.OutcomeWord(info.Outcome)}";
-        var lineY = at.Y + titleH + S(2);
-        var lw = Txt.Line(Kit.Dl, new Vector2(at.X, lineY), line, Face.Sans, 13, Palette.Muted, 19.5f);
-        Txt.Line(Kit.Dl, new Vector2(at.X + lw + S(10), lineY), "See what's in it ›", Face.SansMedium, 13, hovered ? Palette.Ink : Palette.Light, 19.5f);
-        if (hovered) Kit.Tooltip("Its mechanics, in order, before you send it");
-        if (open) Later(() => ShowPull(info));
-        Kit.Reserve(at, w, titleH + S(2) + S(19.5f));
-        Kit.Gap(14);
-        Kit.Facts("##latest-facts", Facts(info));
-        Kit.Gap(16);
-        var buttons = Kit.At;
-        var bh = SendButtons("##latest-", buttons, info, w);
-        Kit.Reserve(buttons, w, bh);
-        DrawSendState(info, Linked ? null : "Linking takes a moment, once: then each pull is a button away from being a plan.");
+        var dl = Kit.Dl;
+        var (tag, kind) = OutcomeTag(info.Outcome);
+
+        // Pull 12 [WIPE] ……… 3:31
+        var title = $"Pull {Math.Max(1, info.Pull)}";
+        var length = Format.Clock(info.Duration);
+        float rowH;
+        if (compact)
+        {
+            rowH = S(22);
+            var tw = Txt.Line(dl, at, title, Face.SansSemibold, 15, Palette.White, 22);
+            Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y), tag, kind);
+            Txt.LineRight(dl, at.X + w, at.Y, length, Face.Mono, 13, Palette.White, 22);
+        }
+        else
+        {
+            rowH = MathF.Max(S(22), S(17 * 1.05f));
+            var tw = Txt.Line(dl, at, Txt.Caps(title), Face.Callout, 17, Palette.White, rowH / S(1));
+            Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
+            Txt.LineRight(dl, at.X + w, at.Y, length, Face.MonoSemibold, 16, Palette.White, rowH / S(1));
+        }
+        Kit.Reserve(at, w, rowH);
+        // Said once on the screen: the duty, when the header doesn't already.
+        if (!string.Equals(info.Duty, DutyShown, StringComparison.OrdinalIgnoreCase))
+        {
+            Kit.Gap(2);
+            var p = Kit.At;
+            Txt.Line(dl, p, Txt.Fit(info.Duty, Face.Sans, 13, w), Face.Sans, 13, Palette.Muted, 19.5f);
+            Kit.Reserve(p, w, S(19.5f));
+        }
+        Kit.Gap(compact ? 12 : 14);
+
+        if (compact)
+        {
+            Kit.Facts(new[] { new Kit.Fact("Length", length), new Kit.Fact("Mechanics", Format.Thousands(info.Mechanics)), PartyFact(info) });
+            Kit.Gap(12);
+            DrawSendCompact(info);
+        }
+        else
+        {
+            Kit.Facts(new[]
+            {
+                new Kit.Fact("Length", length),
+                new Kit.Fact("Ended", info.Outcome == Outcome.Wipe ? "Wipe" : info.Outcome == Outcome.Clear ? "Clear" : "Ended",
+                    Color: info.Outcome == Outcome.Wipe ? Palette.Danger : info.Outcome == Outcome.Clear ? Palette.White : Palette.Muted, Sans: true),
+                new Kit.Fact("Mechanics", Format.Thousands(info.Mechanics)),
+                PartyFact(info),
+            });
+            Kit.Gap(14);
+            var lp = Kit.At;
+            if (Kit.Link("##latest-open", lp, "What's in it", Icon.ArrowRight, tip: "Its mechanics, in order, before you send it")) Later(() => ShowPull(info));
+            Kit.Reserve(lp, w, Txt.Natural(Face.SansMedium, 13));
+            Kit.Gap(14);
+            DrawSend("##latest-", info, "It waits in the Raid Planner under From the game, ready to make into a plan.");
+        }
         Kit.EndPanel();
     }
 
-    /// <summary>A pull's facts, as the planner's boxes: length, mechanics, the party.</summary>
-    private static List<Kit.Fact> Facts(RecordingInfo info) => new()
-    {
-        new Kit.Fact("Length", Words.Clock(info.Duration)),
-        new Kit.Fact("Mechanics", info.Mechanics.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)),
-        new Kit.Fact("Party", info.PartyPositions ? "Where they stood" : "Not recorded", Color: info.PartyPositions ? null : Palette.Muted),
-    };
+    private static string Capital(string s) => s.Length > 0 ? char.ToUpperInvariant(s[0]) + s[1..] : s;
 
     // ---------------------------------------------------------------------------------------------
     // Earlier pulls.
 
-    private void DrawEarlier(List<RecordingInfo> rows)
+    private void DrawEarlier(List<RecordingInfo> rows, bool recording)
     {
         if (rows.Count == 0) return;
-        Kit.Gap(26);
-        if (rows.Count > EarlierShown)
-        {
-            if (Kit.SectionLink("##earlier-all", "Earlier pulls", earlierAll ? "Show fewer" : $"Show all {rows.Count}")) earlierAll = !earlierAll;
-        }
-        else Kit.Section("Earlier pulls", Words.Count(rows.Count, "pull"));
+        Kit.Gap(22);
+        var now = DateTimeOffset.Now;
+        var aside = Format.PullsAside(rows.Select(r => r.RecordedAt).ToList(), now);
+        string? link = rows.Count > EarlierShown ? earlierAll ? "Fewer" : $"All {rows.Count}" : null;
+        if (Kit.Section("##earlier-all", "Earlier pulls", aside, link)) earlierAll = !earlierAll;
         Kit.Gap(10);
         if (!earlierAll) rows = rows.Take(EarlierShown).ToList();
-        Kit.BeginPanel("##earlier", 6, 6, 6);
+        Kit.BeginPanel("##earlier", 4, 4, 4);
         var dl = Kit.Dl;
-        var now = DateTimeOffset.Now;
+        var shown = DutyShown ?? (store.All.Count > 0 ? store.All[0].Duty : null);
+        var hoveredIndex = -1;
+        var rects = new List<(Vector2 Min, Vector2 Max)>();
         for (var i = 0; i < rows.Count; i++)
         {
-            var row = rows[i];
             var at = Kit.At;
             var w = Kit.Width;
-            var nameH = Txt.Natural(Face.SansMedium, 14);
-            var h = S(10) * 2 + MathF.Max(S(36), nameH + S(2) + S(19.5f));
-            if (i > 0) dl.AddLine(new Vector2(at.X + S(10), at.Y - 0.5f), new Vector2(at.X + w - S(10), at.Y - 0.5f), Palette.U32(Palette.Line), 1f);
-            var (clicked, hovered, _) = Kit.Hit($"##pull-{row.File}", at, new Vector2(w, h));
-            if (clicked) Later(() => ShowPull(row));
-            if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.LineFaint), S(Palette.RadiusMd));
-
-            var x = at.X + S(12);
-            Kit.IconWell(new Vector2(x, at.Y + (h - S(36)) / 2), S(36), Icon.Swords, quiet: row.SentId != null);
-            x += S(36) + S(12);
-            var chevronX = at.X + w - S(12) - S(16);
-            var tag = row.SentId != null ? "Sent" : null;
-            var tagW = tag != null ? Kit.ChipWidth(tag, true) : 0;
-            var textW = chevronX - S(10) - (tag != null ? tagW + S(10) : 0) - x;
-            var top = at.Y + (h - (nameH + S(2) + S(19.5f))) / 2;
-            Txt.Line(dl, new Vector2(x, top), Txt.Fit(row.Duty, Face.SansMedium, 14, textW), Face.SansMedium, 14, Palette.Ink);
-            var line = $"{Words.PullLine(row.Pull, row.Duration, row.Outcome)} · {Words.When(row.RecordedAt, now)}";
-            Txt.Line(dl, new Vector2(x, top + nameH + S(2)), Txt.Fit(line, Face.Sans, 13, textW), Face.Sans, 13, Palette.Muted, 19.5f);
-            if (tag != null) Kit.Chip(new Vector2(chevronX - S(10) - tagW, at.Y + (h - S(24)) / 2), tag, true);
-            Icons.Draw(dl, Icon.ChevronRight, new Vector2(chevronX, at.Y + (h - S(16)) / 2), S(16), hovered ? Palette.Ink : Palette.Faint);
+            var h = S(50);
+            var (clicked, hovered, _) = Kit.Hit($"##pull-{rows[i].File}", at, new Vector2(w, h));
+            if (hovered) hoveredIndex = i;
+            if (clicked)
+            {
+                var row = rows[i];
+                Later(() => ShowPull(row));
+            }
+            rects.Add((at, at + new Vector2(w, h)));
             Kit.Reserve(at, w, h);
+        }
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var (min, max) = rects[i];
+            var row = rows[i];
+            var hovered = i == hoveredIndex;
+            var w = max.X - min.X;
+            var h = max.Y - min.Y;
+            // A hairline between rows, gone round the one pointed at.
+            if (i > 0 && hoveredIndex != i && hoveredIndex != i - 1) Kit.Rule(dl, min.X, max.X, min.Y - 0.5f);
+            if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover), S(Palette.RadiusMd));
+            Kit.Reticle(dl, $"##pull-ret-{row.File}", min, max, hovered);
+
+            var x = min.X + S(9.6f);
+            Kit.IconWell(dl, new Vector2(x, min.Y + (h - S(32)) / 2), 32, Icon.Swords);
+            x += S(32) + S(11.2f);
+            var chevronX = max.X - S(9.6f) - S(Kit.IconPx);
+            var right = chevronX - S(11.2f);
+            if (row.SentId != null)
+            {
+                Kit.Tick(dl, new Vector2(right - S(9), min.Y + h / 2));
+                right -= S(18) + S(11.2f);
+            }
+            var (tag, kind) = OutcomeTag(row.Outcome);
+            var tagW = Kit.TagWidth(tag, kind);
+            Kit.Tag(dl, new Vector2(right - tagW, min.Y + (h - S(22)) / 2), tag, kind);
+            right -= tagW + S(11.2f);
+
+            var nameH = S(14 * 1.25f);
+            var subH = Txt.Natural(Face.Sans, 12);
+            var top = min.Y + (h - nameH - subH) / 2;
+            var title = $"Pull {Math.Max(1, row.Pull)}";
+            var tw = Txt.Line(dl, new Vector2(x, top), title, Face.SansMedium, 14, Palette.White, 14 * 1.25f);
+            Txt.Line(dl, new Vector2(x + tw + S(4.8f), top), Format.Clock(row.Duration), Face.Mono, 13, Palette.Muted, 14 * 1.25f);
+            var sub = Format.Ago(row.RecordedAt, now);
+            // A pull from another duty says which.
+            if (!string.Equals(row.Duty, shown, StringComparison.OrdinalIgnoreCase)) sub = $"{row.Duty} · {sub}";
+            Txt.Draw(dl, new Vector2(x, top + nameH), Txt.Fit(sub, Face.Sans, 12, right - x), Face.Sans, 12, Palette.Muted);
+            Icons.Draw(dl, Icon.ChevronRight, new Vector2(chevronX, min.Y + (h - S(Kit.IconPx)) / 2), S(Kit.IconPx), hovered ? Palette.White : Palette.Faint);
         }
         Kit.EndPanel();
     }
@@ -193,52 +364,77 @@ public sealed partial class MainWindow
     // ---------------------------------------------------------------------------------------------
     // Nothing yet.
 
-    private static readonly (Icon Icon, string Title, string Line)[] Steps =
+    private static readonly (string Title, string Line)[] Steps =
     {
-        (Icon.Map, "Go into a duty", "Each pull is recorded by itself, from the pull until the fight ends."),
-        (Icon.Swords, "Fight", "The boss's casts and where they land, stacks, spreads, tankbusters, tethers, markers and waymarks."),
-        (Icon.Send, "Send it to the Raid Planner", "It becomes a plan, a step for each mechanic, ready for your strats."),
+        ("Go into a duty", "Trials, raids and ultimates are recorded by themselves."),
+        ("Pull", "The boss's casts and where they land, markers, tethers, waymarks."),
+        ("Send it to the Raid Planner", "It becomes a plan: a step for each mechanic, yours to edit."),
     };
 
     private void DrawGetStarted()
     {
-        Kit.Section("Get started", "Three steps to your first plan");
-        Kit.Gap(12);
         var dl = Kit.Dl;
+        var w = Kit.Width;
+        Kit.Gap(10);
+        // The Boss asleep, over a small callout and one line.
+        var at = Kit.At;
+        var drawH = S(96);
+        Boss.Empty(dl, new Vector2(at.X + w / 2, at.Y + drawH / 2), 68, BossMood.Asleep, 96);
+        Kit.Reserve(at, w, drawH);
+        Kit.Gap(8.8f);
+        var cy = Kit.At;
+        var ch = Kit.Callout(dl, cy, "Nothing pulled yet", 17, w, 2, 1.05f, center: true);
+        Kit.Reserve(cy, w, ch);
+        Kit.Gap(8.8f);
+        var lw = MathF.Min(w, S(304));
+        var lp = Kit.At;
+        var lh = Txt.Flow(new Vector2(lp.X + (w - lw) / 2, lp.Y), lw, new[] { Run.Note("Each pull in a duty is recorded by itself, from the pull until the fight ends.") }, 19.5f, out _, center: true);
+        Kit.Reserve(lp, w, lh);
+        Kit.Gap(18);
+
+        // Three steps, numbered as waymarks (1 red, 2 yellow, 3 blue squares).
+        Kit.BeginPanel("##steps", 6, 6, 6);
         for (var i = 0; i < Steps.Length; i++)
         {
-            var (icon, title, line) = Steps[i];
-            Kit.BeginPanel($"##step{i}", 16, 16, 16);
-            var at = Kit.At;
-            var w = Kit.Width;
-            Kit.IconWell(at, S(40), icon);
-            var x = at.X + S(40) + S(14);
-            var numW = Txt.Measure((i + 1).ToString(), Face.SansSemibold, 18).X;
-            Txt.Draw(dl, new Vector2(at.X + w - numW, at.Y), (i + 1).ToString(), Face.SansSemibold, 18, Palette.Faint);
-            var tw = w - (x - at.X) - numW - S(12);
-            Txt.Line(dl, new Vector2(x, at.Y), Txt.Fit(title, Face.SansMedium, 14, tw), Face.SansMedium, 14, Palette.Ink);
-            var h = Txt.Flow(new Vector2(x, at.Y + Txt.Natural(Face.SansMedium, 14) + S(2)), tw, new[] { new Run(line, Face.Sans, 13, Palette.Muted) }, 19.5f, out _);
-            Kit.Reserve(at, w, MathF.Max(S(40), Txt.Natural(Face.SansMedium, 14) + S(2) + h));
-            Kit.EndPanel();
-            Kit.Gap(8);
+            var (title, line) = Steps[i];
+            var p = Kit.At;
+            var rw = Kit.Width;
+            var lines = Txt.Wrap(line, Face.Sans, 12, rw - S(9.6f) * 2 - S(22) - S(11.2f));
+            var h = MathF.Max(S(50), S(8) * 2 + S(14 * 1.25f) + Txt.Natural(Face.Sans, 12) * lines.Count);
+            if (i > 0) Kit.Rule(dl, p.X, p.X + rw, p.Y - 0.5f);
+            var x = p.X + S(9.6f);
+            var sq = new Vector2(x, p.Y + (h - S(22)) / 2);
+            dl.AddRectFilled(sq, sq + new Vector2(S(22)), Palette.U32(Palette.Waymarks[i]), S(4));
+            var n = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var ns = Txt.Measure(n, Face.MonoSemibold, 12);
+            Txt.Draw(dl, sq + (new Vector2(S(22)) - ns) / 2, n, Face.MonoSemibold, 12, Palette.OnLight);
+            x += S(22) + S(11.2f);
+            var top = p.Y + (h - S(14 * 1.25f) - Txt.Natural(Face.Sans, 12) * lines.Count) / 2;
+            Txt.Line(dl, new Vector2(x, top), title, Face.SansMedium, 14, Palette.White, 14 * 1.25f);
+            for (var j = 0; j < lines.Count; j++)
+                Txt.Draw(dl, new Vector2(x, top + S(14 * 1.25f) + Txt.Natural(Face.Sans, 12) * j), lines[j], Face.Sans, 12, Palette.Muted);
+            Kit.Reserve(p, rw, h);
         }
-        Kit.Gap(12);
+        Kit.EndPanel();
+        Kit.Gap(18);
+
+        // Link your account is the telegraph until you've linked; Open the Raid Planner outlined.
         var row = Kit.At;
         var x0 = row.X;
         if (!Linked)
         {
             const string link = "Link your account";
-            if (Kit.Button("##gs-link", row, link, Btn.Primary, BtnSize.Md, Icon.Link, 0, false, "Once, so pulls go straight to your Raid Planner"))
+            if (Kit.Button("##gs-link", row, link, Btn.Tele, BtnSize.Md, Icon.Link, 0, false, "Once, so pulls go straight to your Raid Planner"))
                 OpenSettings(SettingsTab.Account);
-            x0 += Kit.ButtonWidth(link, BtnSize.Md, Icon.Link, Btn.Primary) + S(8);
+            x0 += Kit.ButtonWidth(link, BtnSize.Md, Icon.Link, Btn.Tele) + S(6.4f);
         }
-        if (Kit.Button("##gs-open", new Vector2(x0, row.Y), "Open the Raid Planner", Btn.Glass, BtnSize.Md, Icon.ExternalLink))
+        if (Kit.Button("##gs-open", new Vector2(x0, row.Y), "Open the Raid Planner", Btn.Outline, BtnSize.Md, Icon.ExternalLink))
             Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
-        Kit.Reserve(row, Kit.Width, Kit.ButtonHeight(BtnSize.Md));
+        Kit.Reserve(row, w, Kit.ButtonHeight());
         if (!config.AutoRecord)
         {
-            Kit.Gap(14);
-            if (Txt.Para(new[] { Run.Note("Recording is off. "), new Run("Turn it on", Face.SansMedium, 13, Palette.Ink, Link: "on") }) == "on")
+            Kit.Gap(18);
+            if (Txt.Para(new[] { Run.Note("Recording is off. "), Run.LinkRun("Turn it on", "on") }) == "on")
             {
                 config.AutoRecord = true;
                 config.Save();

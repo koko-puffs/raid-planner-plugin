@@ -1,5 +1,6 @@
 using System.Net;
 using RaidPlanner.Core;
+using RaidPlanner.Core.Meter;
 using Xunit;
 
 namespace RaidPlanner.Tests;
@@ -102,6 +103,15 @@ public class RecordingTests
         [500] = new ActionInfo("attack", 1, 0, 0, "", 0),
         [600] = new ActionInfo("Crushing Blow", 1, 0, 0, "", 5),
         [700] = new ActionInfo("Exaflare", 2, 6, 0, "general_1bf", 0),
+        // The party's own (since 0.3.0, with their category and recast): a weaponskill, a heal, a DoT,
+        // a pet's, a cast spell, a buff, and a limit break.
+        [9001] = new ActionInfo("Fast Blade", 1, 3, 0, "", 0, 3, 2.5f),
+        [9002] = new ActionInfo("Cure II", 1, 30, 0, "", 2, 2, 2.5f),
+        [9003] = new ActionInfo("Dia", 1, 25, 0, "", 0, 2, 2.5f),
+        [9004] = new ActionInfo("Phantom Kamaitachi", 2, 3, 0, "", 0, 3, 0),
+        [9005] = new ActionInfo("Fire IV", 2, 25, 5, "", 2.8f, 2, 2.5f),
+        [9006] = new ActionInfo("Battle Litany", 2, 0, 30, "", 0, 4, 120),
+        [9007] = new ActionInfo("Meteor", 2, 25, 8, "", 4.5f, 9, 0),
     };
 
     public static readonly Dictionary<uint, StatusInfo> StatusData = new()
@@ -109,13 +119,19 @@ public class RecordingTests
         [1138] = new StatusInfo("Physical Vulnerability Up", 215532),
         [1769] = new StatusInfo("Doom", 215502),
         [1000] = new StatusInfo("Party Buff", 210001),
+        [1871] = new StatusInfo("Dia", 212675),
+        [786] = new StatusInfo("Battle Litany", 212578),
     };
 
     /// <summary>
     /// A small made-up pull: a raidwide, a cone, a pair stack, spreads, autos, a buster and an exaflare
     /// chain; the cone's vulnerability on the two it hit, Doom on two, H2 dying to the exaflare, the
     /// boss going away and coming back (a second phase, with a second raidwide) and R2 dying to it.
-    /// The site's test fixture is this, written by the plugin's own code (rptest dump).
+    /// Since 0.3.0 also HP (the party's max, the boss's, everyone's in the frames, each hit's damage and
+    /// HP before) and the party's own fight (the combat block: hits, a crit, a heal with overheal, a
+    /// pet's hit, a DoT's ticks credited and one that named no one, a bleed, a cast finished and one
+    /// cancelled, a buff and the DoT as statuses, a limit break). The site's test fixture is this,
+    /// written by the plugin's own code (<see cref="FixtureTests"/>).
     /// </summary>
     public static Recording Sample(bool partyPositions = true) => SampleBuilder(partyPositions, out _);
 
@@ -123,8 +139,9 @@ public class RecordingTests
     {
         var b = new RecordingBuilder(new DutyInfo("Test Arena (Savage)", 1, 99999), 3, new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero), partyPositions, "0.1.0",
             id => Data.TryGetValue(id, out var a) ? a : null, id => StatusData.TryGetValue(id, out var st) ? st : null);
-        var party = new[] { new Partier(11, "PLD", 1), new Partier(12, "WAR", 1), new Partier(13, "WHM", 4), new Partier(14, "SGE", 4),
-            new Partier(15, "DRG", 2), new Partier(16, "NIN", 2), new Partier(17, "BRD", 3), new Partier(18, "BLM", 3) };
+        var party = new[] { new Partier(11, "PLD", 1, 100_000), new Partier(12, "WAR", 1, 102_000), new Partier(13, "WHM", 4, 80_000),
+            new Partier(14, "SGE", 4, 80_500), new Partier(15, "DRG", 2, 85_000), new Partier(16, "NIN", 2, 84_000), new Partier(17, "BRD", 3, 79_000),
+            new Partier(18, "BLM", 3, 78_000) };
         b.SetParty(party);
         var boss = b.Actor(900, "The Boss", 5, 1001);
         var helper = b.Actor(901, "", 0.5f, 1002);
@@ -133,32 +150,63 @@ public class RecordingTests
         for (var t = 0.0; t <= 60; t += 0.25)
         {
             var at = new Dictionary<int, (float, float, float)> { [boss] = (100, 100, 0), [helper] = (90, 90, 0) };
-            for (var i = 1; i <= 8; i++) at[i] = (100 + i, 105, 3.14f);
-            b.Positions(t, at);
+            // The boss loses 10,000 a second; the party is at full HP but for H2 and R2 once they're down.
+            var hp = new Dictionary<int, long> { [boss] = 1_000_000 - (long)(t * 10_000), [helper] = 1 };
+            for (var i = 1; i <= 8; i++)
+            {
+                at[i] = (100 + i, 105, 3.14f);
+                hp[i] = (i == 4 && t >= 45.5) || (i == 8 && t >= 56.2) ? 0 : party[i - 1].MaxHp;
+            }
+            b.Positions(t, at, hp);
         }
         var all = Enumerable.Range(1, 8).ToList();
+        long[] Each(long dmg, int n) => Enumerable.Repeat(dmg, n).ToArray();
+        long[] Hp(IEnumerable<int> who) => who.Select(i => party[i - 1].MaxHp).ToArray();
         b.Cast(5, boss, 100, 5, 100, 100, 0, 0, null, null);
-        b.Hit(10, boss, 100, 100, 100, 0, 100, 100, all);
+        b.Hit(10, boss, 100, 100, 100, 0, 100, 100, all, Each(30_000, 8), new int[8], Hp(all));
         b.Cast(12, boss, 200, 4.7f, 100, 100, 3.14f, 1, null, null);
-        b.Hit(16.8, boss, 200, 100, 100, 3.14f, 100, 100, new[] { 1, 5 });
-        b.Hit(20, boss, 500, 100, 100, 0, 101, 105, new[] { 1 });
-        b.Hit(21, boss, 500, 100, 100, 0, 101, 105, new[] { 1 });
+        b.Hit(16.8, boss, 200, 100, 100, 3.14f, 100, 100, new[] { 1, 5 }, new long[] { 45_000, 60_000 }, new[] { 0, 0 }, new long[] { 100_000, 85_000 });
+        b.Hit(20, boss, 500, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 8_000 }, new[] { 4 }, new long[] { 100_000 });
+        b.Hit(21, boss, 500, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 0 }, new[] { 128 }, new long[] { 92_000 });
         b.Marker(22, 3, 62);
         b.Marker(22, 7, 62);
-        b.Hit(27, helper, 300, 90, 90, 0, 103, 105, new[] { 3, 4, 5, 6 });
-        b.Hit(27, helper, 300, 90, 90, 0, 107, 105, new[] { 7, 8, 1, 2 });
+        b.Hit(27, helper, 300, 90, 90, 0, 103, 105, new[] { 3, 4, 5, 6 }, Each(20_000, 4), new int[4], Hp(new[] { 3, 4, 5, 6 }));
+        b.Hit(27, helper, 300, 90, 90, 0, 107, 105, new[] { 7, 8, 1, 2 }, Each(20_000, 4), new int[4], Hp(new[] { 7, 8, 1, 2 }));
         b.Cast(29, boss, 400, 3, 100, 100, 0, 0, null, null);
-        foreach (var i in all) b.Hit(32, helper, 400, 90, 90, 0, 100 + i, 105, new[] { i });
+        foreach (var i in all) b.Hit(32, helper, 400, 90, 90, 0, 100 + i, 105, new[] { i }, new long[] { 15_000 }, new[] { 0 }, new[] { party[i - 1].MaxHp });
         b.Cast(35, boss, 600, 5, 100, 100, 0, 1, null, null);
-        b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 });
-        for (var k = 0; k < 5; k++) b.Hit(45 + k * 1.1, helper, 700, 90, 90, 0, 90 + k * 4, 90, k == 0 ? new[] { 4 } : Array.Empty<int>());
+        b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 90_000 }, new[] { 0 }, new long[] { 100_000 });
+        for (var k = 0; k < 5; k++)
+            b.Hit(45 + k * 1.1, helper, 700, 90, 90, 0, 90 + k * 4, 90, k == 0 ? new[] { 4 } : Array.Empty<int>(),
+                k == 0 ? new long[] { 104_880 } : Array.Empty<long>(), k == 0 ? new[] { 0 } : Array.Empty<int>(), k == 0 ? new long[] { 80_500 } : Array.Empty<long>());
         b.Cast(51, boss, 100, 5, 100, 100, 0, 0, null, null);
-        b.Hit(56, boss, 100, 100, 100, 0, 100, 100, new[] { 1, 2, 3, 5, 6, 7, 8 });
+        b.Hit(56, boss, 100, 100, 100, 0, 100, 100, new[] { 1, 2, 3, 5, 6, 7, 8 }, new long[] { 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 90_000 },
+            new int[7], new long[] { 100_000, 102_000, 80_000, 85_000, 84_000, 79_000, 70_000 });
+        // The party's own fight: the PLD's hits (one a crit), the WHM's Cure II on the MT (a little
+        // overheal), the NIN's Bunshin (a pet's hit, credited to the NIN), Dia's ticks (one the game
+        // didn't say whose), a bleed on the MT, the BLM's Fire IV finished then one cancelled, the
+        // DRG's Battle Litany on the party, Dia on the boss, and the BLM's Meteor (a limit break).
+        for (var k = 0; k < 20; k++) b.CombatFx(2 + k * 2.5, 9001, 1, boss, 12_000 + k * 100, (int)FxKind.Damage | (k == 3 ? (int)FxFlags.Crit : 0), -1);
+        b.CombatFx(17.5, 9002, 3, 1, 25_000, (int)FxKind.Heal, 80_000);
+        b.CombatFx(28, 9004, 6, boss, 18_000, (int)FxKind.Damage | (int)FxFlags.Pet, -1);
+        b.CombatFx(6, 9003, 3, boss, 4_000, (int)FxKind.Damage, -1);
+        b.CombatFx(6, 9003, 3, boss, 0, (int)FxKind.Status, -1);
+        for (var k = 1; k <= 9; k++) b.CombatTick(6 + k * 3, boss, k == 5 ? 0 : 3, 0, 2_500, false);
+        b.CombatTick(21.5, 1, 101, 0, 3_000, false);
+        b.PartyCast(8, 8, 9005, 2.8f);
+        b.PartyUsed(10.8, 8, 9005);
+        b.CombatFx(10.8, 9005, 8, boss, 55_000, (int)FxKind.Damage | (int)FxFlags.Crit | (int)FxFlags.DirectHit, -1);
+        b.PartyCast(30, 8, 9005, 2.8f);
+        b.PartyCast(34, 8, 9007, 4.5f);
+        b.PartyUsed(38.5, 8, 9007);
+        b.CombatFx(38.5, 9007, 8, boss, 2_400_000, (int)FxKind.Damage | (int)FxFlags.LimitBreak, -1);
+        b.CombatFx(12, 9006, 5, 1, 0, (int)FxKind.Status, -1);
         b.Tethers(50, new[] { (boss, 2, 84u) });
         b.Tethers(55, Array.Empty<(int, int, uint)>());
         b.MapEffect(44, 0x10, 0x00020001);
-        // Every frame (and at the moments things happen): the party's statuses, who's down, the boss's targetability.
-        var frames = Enumerable.Range(0, 121).Select(i => i * 0.5).Concat(new[] { 16.9, 23, 31, 41, 45.5, 50, 56.2 }).Distinct().OrderBy(x => x);
+        // Every frame (and at the moments things happen): the party's statuses, who's down, the boss's
+        // targetability; the vulnerability and Doom with their stacks and time left as they run down.
+        var frames = Enumerable.Range(0, 121).Select(i => i * 0.5).Concat(new[] { 6.1, 12.1, 16.9, 23, 31, 41, 45.5, 50, 56.2 }).Distinct().OrderBy(x => x);
         foreach (var t in frames)
         {
             b.BeginStatuses();
@@ -166,10 +214,19 @@ public class RecordingTests
             {
                 b.StatusesOf(i);
                 if (i == 1 && !b.StatusKnown(1, 1000)) b.StatusGained(t, 1, 1000, 0, 30, keep: false);
-                if ((i == 1 || i == 5) && t >= 16.9 && !b.StatusKnown(i, 1138)) b.StatusGained(t, i, 1138, boss, 30, keep: true);
-                if ((i == 1 || i == 3) && t >= 23 && t < 31 && !b.StatusKnown(i, 1769)) b.StatusGained(t, i, 1769, boss, 8, keep: true);
+                if ((i == 1 || i == 5) && t >= 16.9 && !b.StatusKnown(t, i, 1138, 900, 1, (float)(30 - (t - 16.9))))
+                    b.StatusGained(t, i, 1138, 900, StatusFrom.Enemy, boss, 1, 30);
+                if ((i == 1 || i == 3) && t >= 23 && t < 31 && !b.StatusKnown(t, i, 1769, 900, 0, (float)(8 - (t - 23))))
+                    b.StatusGained(t, i, 1769, 900, StatusFrom.Enemy, boss, 0, 8);
+                // The DRG's Battle Litany on everyone (a party buff: a combat row, not an event) for 20 s.
+                if (t >= 12.1 && t < 32.1 && !b.StatusKnown(t, i, 786, 15, 0, (float)(20 - (t - 12.1))))
+                    b.StatusGained(t, i, 786, 15, StatusFrom.Party, 5, 0, (float)(20 - (t - 12.1)), 9006);
                 b.Alive(t, i, (i == 4 && t >= 45.5) || (i == 8 && t >= 56.2));
             }
+            // Dia on the boss, read with the boss's statuses, until it runs out at 36.1.
+            b.StatusesOf(boss);
+            if (t >= 6.1 && t < 36.1 && !b.StatusKnown(t, boss, 1871, 13, 0, (float)(30 - (t - 6.1))))
+                b.StatusGained(t, boss, 1871, 13, StatusFrom.Party, 3, 0, (float)(30 - (t - 6.1)), 9003);
             b.EndStatuses(t);
             b.Targetable(t, boss, t < 41 || t >= 50);
             b.EndTargets(t);

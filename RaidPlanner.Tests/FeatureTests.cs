@@ -211,7 +211,8 @@ public class PullSummaryTests
         Assert.Equal("Exaflare", deaths[0]!["by"]!.GetValue<string>());
         Assert.Equal(45.5, deaths[0]!["t"]!.GetValue<double>(), 2);
         Assert.Equal("Raidwide Roar", deaths[1]!["by"]!.GetValue<string>());
-        Assert.DoesNotContain("name", s.ToJsonString());
+        // No one's name: only spots and jobs (the stats name actions and statuses only).
+        Assert.DoesNotContain("\"name\"", s.ToJsonString());
     }
 
     [Fact]

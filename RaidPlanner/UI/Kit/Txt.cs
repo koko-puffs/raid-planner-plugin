@@ -2,31 +2,40 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
-/// <summary>A piece of styled text in a paragraph: words in a face, size and colour, or a dye swatch, or a link.</summary>
-public readonly record struct Run(string Text, Face Face, int Px, Vector4 Color, string? Link = null, uint? Swatch = null)
+/// <summary>A piece of styled text in a paragraph: words in a face, size and colour, or a link.</summary>
+public readonly record struct Run(string Text, Face Face, int Px, Vector4 Color, string? Link = null)
 {
+    /// <summary>A line as the site's `.small`: 13px, muted.</summary>
     public static Run Note(string text, Vector4? color = null) => new(text, Face.Sans, 13, color ?? Palette.Muted);
 
-    public static Run Dot(uint? rgb) => new(string.Empty, Face.Sans, 13, Palette.Muted, Swatch: rgb ?? 0xFFFFFFFF);
+    /// <summary>A link as the site's `.lnk`: white 13px at 550, underlined in a faint line; ember-light when pointed at.</summary>
+    public static Run LinkRun(string text, string link, int px = 13) => new(text, Face.SansMedium, px, Palette.White, link);
 }
 
 /// <summary>
 /// Text as the browser lays it out: line boxes of a CSS line height with the glyphs centred in them
-/// (half-leading), letter-spacing drawn glyph by glyph, ellipses, and paragraphs of mixed runs
-/// wrapped at word boundaries with clickable links.
+/// (half-leading), letter-spacing drawn glyph by glyph (eyebrows +0.09em, tags +0.05em), capitals
+/// for the callout, ellipses, and paragraphs of mixed runs wrapped at word boundaries with links,
+/// underlined as the site's are.
 /// </summary>
 public static class Txt
 {
     public static Fonts Fonts { get; set; } = null!;
 
+    /// <summary>The site's text-transform: capitals, except on a Japanese client.</summary>
+    public static string Caps(string text) => Format.Caps(text, Fonts.Japanese);
+
     public static Vector2 Measure(string text, Face face, int px)
     {
         using (Fonts.Push(face, px)) return ImGui.CalcTextSize(text);
     }
+
+    public static float Width(string text, Face face, int px) => Measure(text, face, px).X;
 
     /// <summary>The font's own line (ImGui's font size): CSS "line-height: normal".</summary>
     public static float Natural(Face face, int px)
@@ -46,20 +55,32 @@ public static class Txt
         using (Fonts.Push(face, px))
         {
             dl.AddText(Snap(pos), Palette.U32(color), text);
+            // Dalamud's font has no bold: a callout drawn in it (a Japanese client) is drawn twice, a pixel apart.
+            if (face == Face.Callout && Fonts.Japanese) dl.AddText(Snap(pos) + new Vector2(1, 0), Palette.U32(color), text);
             return ImGui.CalcTextSize(text).X;
         }
     }
 
-    /// <summary>Draws one line centred in a CSS line box <paramref name="lineCss"/> tall (0: the font's own line).</summary>
+    /// <summary>Draws one line centred in a CSS line box <paramref name="lineCss"/> tall (0: the font's own line); returns its width.</summary>
     public static float Line(ImDrawListPtr dl, Vector2 lineTop, string text, Face face, int px, Vector4 color, float lineCss = 0)
     {
         using (Fonts.Push(face, px))
         {
             var size = ImGui.GetFontSize();
             var box = lineCss > 0 ? S(lineCss) : size;
-            dl.AddText(Snap(lineTop + new Vector2(0, (box - size) / 2)), Palette.U32(color), text);
+            var p = Snap(lineTop + new Vector2(0, (box - size) / 2));
+            dl.AddText(p, Palette.U32(color), text);
+            if (face == Face.Callout && Fonts.Japanese) dl.AddText(p + new Vector2(1, 0), Palette.U32(color), text);
             return ImGui.CalcTextSize(text).X;
         }
+    }
+
+    /// <summary>Draws one line right-aligned at <paramref name="right"/>, centred in its line box; returns its width.</summary>
+    public static float LineRight(ImDrawListPtr dl, float right, float lineTop, string text, Face face, int px, Vector4 color, float lineCss = 0)
+    {
+        var w = Width(text, face, px);
+        Line(dl, new Vector2(right - w, lineTop), text, face, px, color, lineCss);
+        return w;
     }
 
     /// <summary>The height of a CSS line box in screen pixels.</summary>
@@ -67,7 +88,8 @@ public static class Txt
 
     /// <summary>
     /// Letter-spaced text (CSS letter-spacing, which also follows the last letter): eyebrows at
-    /// .18em, stamps at .1em. Returns the width.
+    /// .09em, tags at .05em, intents at .1em. Drawn glyph by glyph without making strings. Returns
+    /// the width (the last letter's spacing left off, as it sits outside the words).
     /// </summary>
     public static float Spaced(ImDrawListPtr dl, Vector2 pos, string text, Face face, int px, Vector4 color, float em, bool draw = true)
     {
@@ -76,13 +98,15 @@ public static class Txt
             var spacing = S(px * em);
             var x = pos.X;
             var col = Palette.U32(color);
-            foreach (var ch in text)
+            var font = ImGui.GetFont();
+            var size = ImGui.GetFontSize();
+            for (var i = 0; i < text.Length; i++)
             {
-                var s = ch.ToString();
-                if (draw) dl.AddText(Snap(new Vector2(x, pos.Y)), col, s);
-                x += ImGui.CalcTextSize(s).X + spacing;
+                var ch = text.AsSpan(i, 1);
+                if (draw) dl.AddText(Snap(new Vector2(x, pos.Y)), col, ch);
+                x += font.GetCharAdvance(text[i]) * size / font.FontSize + spacing;
             }
-            return x - pos.X;
+            return MathF.Max(0, x - pos.X - spacing);
         }
     }
 
@@ -93,28 +117,23 @@ public static class Txt
     public static string Fit(string text, Face face, int px, float width)
     {
         using (Fonts.Push(face, px))
-        {
-            if (ImGui.CalcTextSize(text).X <= width) return text;
-            const string dots = "…";
-            var lo = 0;
-            var hi = text.Length;
-            while (lo < hi)
-            {
-                var mid = (lo + hi + 1) / 2;
-                if (ImGui.CalcTextSize(text[..mid].TrimEnd() + dots).X <= width) lo = mid;
-                else hi = mid - 1;
-            }
-            return lo == 0 ? dots : text[..lo].TrimEnd() + dots;
-        }
+            return Format.Fit(text, s => ImGui.CalcTextSize(s).X, width);
+    }
+
+    /// <summary>Words wrapped to a width, at most <paramref name="maxLines"/> lines (the last cut with "…").</summary>
+    public static List<string> Wrap(string text, Face face, int px, float width, int maxLines = int.MaxValue)
+    {
+        using (Fonts.Push(face, px))
+            return Format.Wrap(text, s => ImGui.CalcTextSize(s).X, width, maxLines);
     }
 
     private readonly record struct Token(string Text, int Run, float Width, float Trailing);
 
     /// <summary>
     /// Lays out runs of text wrapped to <paramref name="width"/>, in line boxes <paramref name="lineCss"/>
-    /// CSS pixels tall, from <paramref name="pos"/>. Links are underlined on hover and clickable;
-    /// <paramref name="clicked"/> is the link pressed this frame. Leaves the cursor where it was.
-    /// Returns the height.
+    /// CSS pixels tall, from <paramref name="pos"/>. Links are underlined (a faint line 3px under the
+    /// words), turn ember-light when pointed at, and are clickable: <paramref name="clicked"/> is
+    /// the link pressed this frame. Leaves the cursor where it was. Returns the height.
     /// </summary>
     public static float Flow(Vector2 pos, float width, IReadOnlyList<Run> runs, float lineCss, out string? clicked, bool center = false, bool draw = true)
     {
@@ -123,11 +142,6 @@ public static class Txt
         for (var r = 0; r < runs.Count; r++)
         {
             var run = runs[r];
-            if (run.Swatch != null)
-            {
-                tokens.Add(new Token(string.Empty, r, S(10), S(6)));
-                continue;
-            }
             using (Fonts.Push(run.Face, run.Px))
             {
                 var space = ImGui.CalcTextSize(" ").X;
@@ -174,8 +188,7 @@ public static class Txt
 
         var dl = ImGui.GetWindowDrawList();
         var cursor = ImGui.GetCursorScreenPos();
-        // The link under the mouse, found first: a link of several words lights up whole, whichever
-        // of its words the mouse is on (each word is its own button, laid where it falls).
+        // The link under the mouse, found first: a link of several words lights up whole.
         string? hoveredLink = null;
         if (!Kit.Blocked && ImGui.IsWindowHovered())
         {
@@ -204,12 +217,6 @@ public static class Txt
             {
                 var tok = tokens[t];
                 var run = runs[tok.Run];
-                if (run.Swatch is { } rgb)
-                {
-                    Kit.Swatch(dl, new Vector2(lx + S(5), y + box / 2), rgb == 0xFFFFFFFF ? null : rgb);
-                    lx += tok.Width + tok.Trailing;
-                    continue;
-                }
                 using (Fonts.Push(run.Face, run.Px))
                 {
                     var size = ImGui.GetFontSize();
@@ -217,13 +224,19 @@ public static class Txt
                     var color = run.Color;
                     if (run.Link != null)
                     {
+                        // The space after a word belongs to the link when the next word is the same link's.
+                        var joined = t < b - 1 && runs[tokens[t + 1].Run].Link == run.Link;
                         var min = new Vector2(lx, y);
-                        var max = new Vector2(lx + tok.Width + (t < b - 1 && runs[tokens[t + 1].Run].Link == run.Link ? tok.Trailing : 0), y + box);
+                        var max = new Vector2(lx + tok.Width + (joined ? tok.Trailing : 0), y + box);
                         ImGui.SetCursorScreenPos(min);
                         var hit = ImGui.InvisibleButton($"##link{run.Link}{linkIndex++}", Vector2.Max(max - min, new Vector2(1)));
                         if (hit && !Kit.Blocked) clicked = run.Link;
                         if (ImGui.IsItemHovered() && !Kit.Blocked) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-                        if (run.Link == hoveredLink) color = Palette.Ink;
+                        var hot = run.Link == hoveredLink;
+                        if (hot) color = Palette.EmberHi;
+                        // text-decoration: underline, var(--line-3), 3px under the baseline (ember-light when pointed at).
+                        var under = MathF.Round(top.Y + ImGui.GetFont().Ascent + S(3)) + 0.5f;
+                        dl.AddLine(new Vector2(lx, under), new Vector2(max.X, under), Palette.U32(hot ? Palette.EmberHi : Palette.Line3), 1f);
                     }
                     if (tok.Text.Length > 0) dl.AddText(Snap(top), Palette.U32(color), tok.Text);
                 }
@@ -245,8 +258,8 @@ public static class Txt
         return clicked;
     }
 
-    /// <summary>A note (13px ash, line-height 1.5) at the cursor.</summary>
+    /// <summary>A line as the site's `.small` (13px, muted, line-height 1.5) at the cursor.</summary>
     public static void Note(string text, Vector4? color = null, bool center = false) => Para(new[] { Run.Note(text, color) }, 19.5f, center);
 
-    private static Vector2 Snap(Vector2 p) => new(MathF.Round(p.X), MathF.Round(p.Y));
+    internal static Vector2 Snap(Vector2 p) => new(MathF.Round(p.X), MathF.Round(p.Y));
 }

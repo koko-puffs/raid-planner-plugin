@@ -1,25 +1,29 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
-using System.Net.Http;
+using System.Linq;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
 /// <summary>
 /// Sending a pull to the Raid Planner, saving it as a file, and linking your account (Settings →
-/// Account), as Housing Studio's plugin links and sends: a token made on the site, pasted once,
-/// kept masked, Unlink. A send reads the pull's file and posts it from a worker; how it went shows
-/// under the buttons, with Open it once it's there. The token is never logged.
+/// Account), as the mock-ups' "Sending" draws it: not linked, Link your account is the telegraph;
+/// linked, Send to Raid Planner in the same place; sending, the button holds still and dims over a
+/// cast bar, with a quiet Stop; sent, a ready tick and Open in Review; failed, a red box that says
+/// what to do and the one button that does it. A send reads the pull's file and posts it from a
+/// worker. The token is never logged.
 /// </summary>
 public sealed partial class MainWindow
 {
-    /// <summary>A send under way (no result yet) or done, by the pull's file.</summary>
-    private sealed record SendState(SendResult? Result);
+    /// <summary>A send under way (no result yet) or done, by the pull's file: its stop, its size, when it began.</summary>
+    private sealed record SendState(SendResult? Result, CancellationTokenSource? Stop = null, long Bytes = 0);
 
     private readonly ConcurrentDictionary<string, SendState> sends = new(StringComparer.OrdinalIgnoreCase);
 
@@ -48,8 +52,18 @@ public sealed partial class MainWindow
         var token = config.SiteToken;
         var file = info.File;
         var http = site.Http;
-        var cancel = site.Closing;
-        sends[file] = new SendState(null);
+        var stop = CancellationTokenSource.CreateLinkedTokenSource(site.Closing);
+        var cancel = stop.Token;
+        long bytes = 0;
+        try
+        {
+            bytes = new FileInfo(store.PathOf(info)).Length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The size is only said while it goes.
+        }
+        sends[file] = new SendState(null, stop, bytes);
         _ = Task.Run(async () =>
         {
             SendResult result;
@@ -60,7 +74,7 @@ public sealed partial class MainWindow
             }
             catch (OperationCanceledException)
             {
-                return;
+                result = new SendResult(null, "Stopped.");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -72,15 +86,29 @@ public sealed partial class MainWindow
                 Services.Log.Error(ex, "Send to Raid Planner failed");
                 result = new SendResult(null, "Something went wrong sending it (see /xllog).");
             }
+            finally
+            {
+                stop.Dispose();
+            }
             // Unloaded meanwhile: the plugin loaded again keeps the list now, so this one leaves it alone.
-            if (cancel.IsCancellationRequested) return;
+            if (site.Closing.IsCancellationRequested) return;
             if (result.Sent) store.MarkSent(info, result.Id!, DateTimeOffset.UtcNow);
-            sends[file] = new SendState(result);
+            // Stopped by hand: as if it hadn't been sent at all.
+            if (result.Why == "Stopped.") sends.TryRemove(file, out _);
+            else sends[file] = new SendState(result);
             try
             {
                 _ = Services.Framework.RunOnFrameworkThread(() =>
                 {
-                    Notify(result.Sent ? "Sent to your Raid Planner" : "Couldn't send it");
+                    if (result.Sent)
+                    {
+                        var id = result.Id!;
+                        Notify("Sent to your Raid Planner", ToastKind.Ok, action: "Open", onAction: () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, id)));
+                    }
+                    else if (result.Why != "Stopped.")
+                    {
+                        Notify("Couldn't send it", ToastKind.Bad, action: "Why", onAction: () => ShowPull(info));
+                    }
                     try
                     {
                         done?.Invoke(result);
@@ -98,6 +126,17 @@ public sealed partial class MainWindow
         });
     }
 
+    /// <summary>
+    /// Where Open in Review goes: the plan for the pull's duty in Review on that pull, or From the game
+    /// (the site's dialog for a sent pull) when the plugin has no plan for that duty.
+    /// </summary>
+    private string ReviewUrl(RecordingInfo info, string sentId)
+    {
+        if (plans.Plan is { Game: { } g } plan && string.Equals(g.Duty, info.Duty, StringComparison.OrdinalIgnoreCase))
+            return $"{SiteLink.PlannerUrl}/plan/{Uri.EscapeDataString(plan.Id)}/review?pull={Uri.EscapeDataString(sentId)}";
+        return SiteLink.OpenUrl(sentId);
+    }
+
     /// <summary>Saves a copy of a pull's file wherever you like (to import on the site, or to share).</summary>
     private void SaveAs(RecordingInfo info)
     {
@@ -111,164 +150,283 @@ public sealed partial class MainWindow
             {
                 if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
                 File.Copy(store.PathOf(info), path, true);
-                Notify($"Saved {Path.GetFileName(path)}");
+                Notify($"Saved {Path.GetFileName(path)}", ToastKind.News, Icon.Download);
             }
             catch (Exception ex)
             {
                 // Run by the file dialog, outside the window's own catch: nothing may escape.
                 if (ex is not (IOException or UnauthorizedAccessException)) Services.Log.Error(ex, "Raid Planner couldn't save the file");
-                Notify("Couldn't save it there");
+                Notify("Couldn't save it there", ToastKind.Bad);
             }
         }, start, true);
     }
 
-    /// <summary>
-    /// The pull's two buttons from <paramref name="pos"/>: the white Send to Raid Planner (or Link your
-    /// account, not linked yet) and Save as file. Returns their height.
-    /// </summary>
-    private float SendButtons(string id, Vector2 pos, RecordingInfo info, float width)
+    /// <summary>A sent line (`.sentline`): a 16px ready tick and the words; returns its height.</summary>
+    private static float SentLine(Vector2 at, float width, string text, string? linkId = null, string? link = null, Action? onLink = null)
     {
-        string label;
-        Icon icon;
-        string? tip = null;
-        var disabled = false;
-        if (!Linked)
-        {
-            label = "Link your account";
-            icon = Icon.Link;
-            tip = "Link the plugin to the site once, and pulls go straight to your Raid Planner.";
-        }
-        else if (Sending(info))
-        {
-            label = "Sending…";
-            icon = Icon.Send;
-            disabled = true;
-        }
-        else if (info.SentId != null)
-        {
-            label = "Send again";
-            icon = Icon.Send;
-            tip = "It's in your Raid Planner already: this sends another copy.";
-        }
-        else
-        {
-            label = "Send to Raid Planner";
-            icon = Icon.Send;
-            tip = "It waits in the Raid Planner under From the game, ready to make into a plan.";
-        }
-        var style = info.SentId != null && Linked ? Btn.Glass : Btn.Primary;
-        var sendW = Kit.ButtonWidth(label, BtnSize.Md, icon, style);
-        const string save = "Save as file";
-        var saveW = Kit.ButtonWidth(save, BtnSize.Md, Icon.FileDown);
-        var h = Kit.ButtonHeight(BtnSize.Md);
-        if (Kit.Button(id + "send", pos, label, style, BtnSize.Md, icon, 0, disabled, tip))
-        {
-            if (!Linked) OpenSettings(SettingsTab.Account);
-            else Send(info);
-        }
-        var stacked = sendW + S(8) + saveW > width;
-        var savePos = stacked ? new Vector2(pos.X, pos.Y + h + S(8)) : new Vector2(pos.X + sendW + S(8), pos.Y);
-        if (Kit.Button(id + "save", savePos, save, Btn.Glass, BtnSize.Md, Icon.FileDown, 0, false,
-                "A file to import in the Raid Planner yourself (Import on its front page), or to share."))
-            SaveAs(info);
-        return stacked ? h * 2 + S(8) : h;
+        var dl = Kit.Dl;
+        var h = S(19.5f);
+        Kit.Tick(dl, new Vector2(at.X + S(8), at.Y + h / 2), 16);
+        var lw = link != null ? Kit.LinkWidth(link, Icon.ArrowUpRight) : 0;
+        var x = at.X + S(16 + 8.8f);
+        Txt.Line(dl, new Vector2(x, at.Y), Txt.Fit(text, Face.Sans, 13, at.X + width - x - (link != null ? lw + S(12) : 0)), Face.Sans, 13, Palette.Text, 19.5f);
+        if (link != null && Kit.Link(linkId!, new Vector2(at.X + width - lw, at.Y + (h - Txt.Natural(Face.SansMedium, 13)) / 2), link, Icon.ArrowUpRight)) onLink?.Invoke();
+        return h;
     }
 
-    /// <summary>Under a pull's buttons: sending, sent (with Open it), or why it couldn't; and, sent before, where it went.</summary>
-    private void DrawSendState(RecordingInfo info, string? idleLine = null)
+    /// <summary>Two buttons on a row (the first growing to fill it when asked), stacked when the window is narrow. Returns which was pressed.</summary>
+    private static (bool First, bool Second) ButtonPair(string id, string first, Btn firstStyle, Icon? firstIcon, string? second, Btn secondStyle, Icon? secondIcon,
+        bool grow = false, float dim = 1f, bool firstDisabled = false, string? firstTip = null, string? secondTip = null)
     {
-        Run[]? runs = null;
-        if (sends.TryGetValue(info.File, out var s))
+        var at = Kit.At;
+        var w = Kit.Width;
+        var h = Kit.ButtonHeight();
+        var fw = Kit.ButtonWidth(first, BtnSize.Md, firstIcon, firstStyle);
+        var sw = second != null ? Kit.ButtonWidth(second, BtnSize.Md, secondIcon, secondStyle) : 0;
+        var gap = S(6.4f);
+        var stacked = second != null && fw + gap + sw > w;
+        if (grow && second != null && !stacked) fw = w - gap - sw;
+        var a = Kit.Button(id + "1", at, first, firstStyle, BtnSize.Md, firstIcon, grow && !stacked && second != null ? fw : 0, firstDisabled, firstTip, dim);
+        var b = false;
+        if (second != null)
         {
-            runs = s.Result switch
+            var p = stacked ? new Vector2(at.X, at.Y + h + gap) : new Vector2(at.X + fw + gap, at.Y);
+            b = Kit.Button(id + "2", p, second, secondStyle, BtnSize.Md, secondIcon, 0, false, secondTip);
+        }
+        Kit.Reserve(at, w, stacked ? h * 2 + gap : h);
+        return (a, b);
+    }
+
+    /// <summary>
+    /// A pull's send, in full (the latest pull's card, a pull's footer): the buttons for where it is
+    /// (link, send, sending, sent, failed) and the line or box under them. <paramref name="readyLine"/>
+    /// is what's said when it's ready to go.
+    /// </summary>
+    private void DrawSend(string id, RecordingInfo info, string readyLine, bool grow = false)
+    {
+        const string save = "Save as file";
+        const string saveTip = "A file to import in the Raid Planner yourself (Import on its front page), or to share.";
+        sends.TryGetValue(info.File, out var s);
+        var sentId = store.Find(info.File)?.SentId ?? info.SentId;
+
+        // Sending: the telegraph holds still and dims; a quiet Stop; a cast bar runs under, because a send is time.
+        if (s is { Result: null })
+        {
+            var (_, stop) = ButtonPair(id, "Sending…", Btn.Tele, Icon.Send, "Stop", Btn.Quiet, null, false, 0.55f, true);
+            if (stop) s.Stop?.Cancel();
+            Kit.Gap(10);
+            var at = Kit.At;
+            var h = Kit.Cast(Kit.Dl, at, Kit.Width, $"Sending pull {Math.Max(1, info.Pull)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
+            Kit.Reserve(at, Kit.Width, h);
+            return;
+        }
+
+        // Failed: red, and the one thing to do.
+        if (s?.Result is { Sent: false } failed && SendFailure.Of(failed) is { Fix: not SendFix.Stopped } f)
+        {
+            Kit.NoteBox(f.Text);
+            Kit.Gap(10);
+            switch (f.Fix)
             {
-                null => new[] { Run.Note("Sending it to your Raid Planner…") },
-                { Sent: true, Thinned: true } => new[]
+                case SendFix.LinkAgain:
                 {
-                    Run.Note("Sent, with the places kept less often (it was too big whole). It's waiting in your Raid Planner. ", Palette.Success),
-                    new Run("Open it", Face.SansMedium, 13, Palette.Ink, Link: "open"),
-                },
-                { Sent: true } => new[]
+                    var (a, b) = ButtonPair(id, "Link again", Btn.Tele, Icon.Link, save, Btn.Outline, Icon.Download, secondTip: saveTip);
+                    if (a) OpenSettings(SettingsTab.Account);
+                    if (b) SaveAs(info);
+                    break;
+                }
+                case SendFix.Look:
                 {
-                    Run.Note("Sent. It's waiting in your Raid Planner. ", Palette.Success),
-                    new Run("Open it", Face.SansMedium, 13, Palette.Ink, Link: "open"),
-                },
-                { TokenRefused: true } => new[]
+                    var (a, b) = ButtonPair(id, "Open the Raid Planner", Btn.Tele, Icon.ExternalLink, save, Btn.Outline, Icon.Download, secondTip: saveTip);
+                    if (a) Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+                    if (b) SaveAs(info);
+                    break;
+                }
+                case SendFix.SaveFile:
+                case SendFix.Update:
                 {
-                    Run.Note($"Couldn't send it. {s.Result.Why} ", Palette.Danger),
-                    new Run("Settings", Face.SansMedium, 13, Palette.Ink, Link: "settings"),
-                },
-                _ => new[] { Run.Note($"Couldn't send it. {s.Result.Why}", Palette.Danger) },
-            };
+                    var (a, _) = ButtonPair(id, save, Btn.Tele, Icon.Download, null, Btn.Outline, null, firstTip: saveTip);
+                    if (a) SaveAs(info);
+                    break;
+                }
+                default:
+                {
+                    var (a, b) = ButtonPair(id, "Try again", Btn.Tele, Icon.RefreshCw, save, Btn.Outline, Icon.Download, secondTip: saveTip);
+                    if (a) Send(info);
+                    if (b) SaveAs(info);
+                    break;
+                }
+            }
+            return;
         }
-        else if (info.SentId != null)
+
+        // Sent this session: a ready tick, Open in Review; Send again goes quiet (Save as file when it was made smaller).
+        if (s?.Result is { Sent: true } sent && sent.Id is { } sid)
         {
-            runs = new[]
+            var at = Kit.At;
+            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, sent.Thinned ? "Sent, with fewer of the party's places: it was too big whole." : "Sent. It's waiting in your Raid Planner."));
+            Kit.Gap(10);
+            var (a, b) = ButtonPair(id, "Open in Review", Btn.Outline, Icon.ExternalLink, sent.Thinned ? save : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
+                secondTip: sent.Thinned ? saveTip : "It's in your Raid Planner already: this sends another copy.");
+            if (a) Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sid));
+            if (b)
             {
-                Run.Note($"Sent {Words.When(info.SentAt ?? info.RecordedAt, DateTimeOffset.Now)}. "),
-                new Run("Open it", Face.SansMedium, 13, Palette.Ink, Link: "open"),
-            };
+                if (sent.Thinned) SaveAs(info);
+                else Send(info);
+            }
+            return;
         }
-        else if (idleLine != null)
+
+        // Sent in an earlier session: one line, and the quiet buttons.
+        if (sentId != null)
         {
-            runs = new[] { Run.Note(idleLine) };
+            var at = Kit.At;
+            var when = Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
+            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, when, id + "review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
+            Kit.Gap(10);
+            var (a, b) = ButtonPair(id, "Send again", Btn.Quiet, Icon.Send, save, Btn.Quiet, Icon.Download,
+                firstTip: "It's in your Raid Planner already: this sends another copy.", secondTip: saveTip);
+            if (a) Send(info);
+            if (b) SaveAs(info);
+            return;
         }
-        if (runs == null) return;
+
+        // Not linked: linking is the one thing to do. Linked: the same place, the same size.
+        if (!Linked)
+        {
+            var (a, b) = ButtonPair(id, "Link your account", Btn.Tele, Icon.Link, save, Btn.Outline, Icon.Download, grow,
+                firstTip: "Link the plugin to the site once, and pulls go straight to your Raid Planner.", secondTip: saveTip);
+            if (a) OpenSettings(SettingsTab.Account);
+            if (b) SaveAs(info);
+            Kit.Gap(10);
+            Txt.Note("Link once, and each pull is a button away from being a plan.");
+            return;
+        }
+        var (send, saveIt) = ButtonPair(id, "Send to Raid Planner", Btn.Tele, Icon.Send, save, Btn.Outline, Icon.Download, grow,
+            firstTip: "It waits in the Raid Planner under From the game, ready to make into a plan.", secondTip: saveTip);
+        if (send) Send(info);
+        if (saveIt) SaveAs(info);
         Kit.Gap(10);
-        var link = Txt.Para(runs);
-        var id = store.Find(info.File)?.SentId ?? info.SentId;
-        if (link == "open" && id != null) Dalamud.Utility.Util.OpenLink(SiteLink.OpenUrl(id));
-        if (link == "settings") OpenSettings(SettingsTab.Account);
+        Txt.Note(readyLine);
+    }
+
+    /// <summary>
+    /// The latest pull's send while a pull is recorded: no telegraph (nothing on Home is the one thing
+    /// to do then). A sent line with Open in Review, or how the send went; What's in it and Save as file, dense.
+    /// </summary>
+    private void DrawSendCompact(RecordingInfo info)
+    {
+        sends.TryGetValue(info.File, out var s);
+        var sentId = store.Find(info.File)?.SentId ?? info.SentId;
+        var w = Kit.Width;
+        if (s is { Result: null })
+        {
+            var at = Kit.At;
+            var h = Kit.Cast(Kit.Dl, at, w, $"Sending pull {Math.Max(1, info.Pull)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
+            Kit.Reserve(at, w, h);
+            Kit.Gap(12);
+        }
+        else if (s?.Result is { Sent: false } failed && SendFailure.Of(failed) is { Fix: not SendFix.Stopped } f)
+        {
+            Kit.NoteBox(f.Text);
+            Kit.Gap(12);
+        }
+        else if (sentId != null)
+        {
+            var at = Kit.At;
+            var text = s?.Result is { Sent: true } ? "Sent. It's waiting in your Raid Planner." : Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
+            Kit.Reserve(at, w, SentLine(at, w, text, "##latest-review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
+            Kit.Gap(12);
+        }
+        var row = Kit.At;
+        var x = row.X;
+        const string what = "What's in it";
+        if (Kit.Button("##latest-what", row, what, Btn.Outline, BtnSize.Sm, Icon.List, 0, false, "Its mechanics, in order")) Later(() => ShowPull(info));
+        x += Kit.ButtonWidth(what, BtnSize.Sm, Icon.List) + S(6.4f);
+        const string save = "Save as file";
+        if (Kit.Button("##latest-save", new Vector2(x, row.Y), save, Btn.Quiet, BtnSize.Sm, Icon.Download)) SaveAs(info);
+        x += Kit.ButtonWidth(save, BtnSize.Sm, Icon.Download, Btn.Quiet) + S(6.4f);
+        if (Linked && sentId == null && s is not { Result: null } && Kit.Button("##latest-send", new Vector2(x, row.Y), "Send", Btn.Quiet, BtnSize.Sm, Icon.Send, 0, false,
+                "It waits in the Raid Planner under From the game."))
+            Send(info);
+        Kit.Reserve(row, w, S(HSm));
     }
 
     // ---------------------------------------------------------------------------------------------
     // Settings → Account: the token.
 
     /// <summary>
-    /// One row: "Raid Planner account · Linked · rpp_••••3f2a" with Unlink, or, not linked, the token
-    /// field (masked) with Link and Get a token under its words.
+    /// The account's row: linked, a ready tick, its name, a green Linked tag and the token masked in
+    /// mono, Unlink dense; not linked, its words, the 40px well field lined up with every other row's
+    /// control and Link as the telegraph beside it, a bad token said in red under it, and Get a token.
     /// </summary>
     private void DrawAccountRow(int index)
     {
         const string name = "Raid Planner account";
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
+        var x = at.X + S(16);
+        var inner = w - S(32);
         if (Linked)
         {
             const string unlink = "Unlink";
-            SetRow(index, name, $"Linked · {SiteLink.Masked(config.SiteToken)}", Kit.ButtonWidth(unlink, BtnSize.Tiny, null, Btn.Glass), Kit.ButtonHeight(BtnSize.Tiny), p =>
+            var uw = Kit.ButtonWidth(unlink, BtnSize.Sm);
+            var nameH = S(14 * 1.3f);
+            var lineH = S(18);
+            var h = S(11) * 2 + MathF.Max(nameH + S(2) + lineH, S(HSm));
+            var top = at.Y + (h - nameH - S(2) - lineH) / 2;
+            Kit.Tick(dl, new Vector2(x + S(9), at.Y + h / 2));
+            var tx = x + S(18) + S(12);
+            Txt.Line(dl, new Vector2(tx, top), name, Face.SansMedium, 14, Palette.White, 14 * 1.3f);
+            var ly = top + nameH + S(2);
+            var tw = Kit.Tag(dl, new Vector2(tx, ly), "Linked", TagKind.Live, 18);
+            Txt.Line(dl, new Vector2(tx + tw + S(6.4f), ly), SiteLink.Masked(config.SiteToken), Face.Mono, 12, Palette.Muted, 18);
+            if (Kit.Pointed(new Vector2(x, top), new Vector2(x + inner - uw, top + nameH + lineH)))
+                Kit.Tooltip("Send to Raid Planner puts a pull straight into your account on the site, under From the game.");
+            if (Kit.Button("##site-unlink", new Vector2(at.X + w - S(16) - uw, at.Y + (h - S(HSm)) / 2), unlink, Btn.Outline, BtnSize.Sm, null, 0, false,
+                    "Forget the token here. Revoke it on the site too if you won't use it again."))
             {
-                if (Kit.Button("##site-unlink", p, unlink, Btn.Glass, BtnSize.Tiny, null, 0, false,
-                        "Forget the token here. Revoke it on the site too if you won't use it again."))
-                {
-                    config.SiteToken = string.Empty;
-                    config.Save();
-                    sends.Clear();
-                    Notify("Unlinked from the Raid Planner");
-                }
-            }, tip: "Send to Raid Planner puts a pull straight into your account on the site, under From the game.", icon: Icon.Link);
+                config.SiteToken = string.Empty;
+                config.Save();
+                sends.Clear();
+                Notify("Unlinked from the Raid Planner", ToastKind.News, Icon.Link);
+            }
+            Kit.Reserve(at, w, h);
             return;
         }
-        var width = Kit.Width - S(28);
+
+        // Not linked: the words, then the field and Link on a row, the reason under them in red, then Get a token.
+        var y = at.Y + S(11);
+        Txt.Line(dl, new Vector2(x, y), name, Face.SansMedium, 14, Palette.White, 14 * 1.3f);
+        y += S(14 * 1.3f) + S(2);
+        var note = new[] { new Run("Not linked yet. Make a token on the site (Settings, Raid Planner, In-game plugin) and paste it here.", Face.Sans, 12, Palette.Muted) };
+        y += Txt.Flow(new Vector2(x, y), inner, note, 17.4f, out _);
+        y += S(10);
         const string link = "Link";
-        const string get = "Get a token";
-        var linkW = Kit.ButtonWidth(link, BtnSize.Md, null, Btn.Primary);
-        var getW = Kit.ButtonWidth(get, BtnSize.Md, Icon.ExternalLink, Btn.Glass);
-        SetRow(index, name, tokenProblem ?? "Not linked yet. Make a token on the site (Settings → Raid Planner → In-game plugin) and paste it here.", width, S(36), p =>
+        var linkW = Kit.ButtonWidth(link, BtnSize.Md, Icon.Link, Btn.Tele);
+        var fieldW = MathF.Max(S(120), inner - linkW - S(6.4f));
+        var text = tokenDraft;
+        if (Kit.Field("##site-token", new Vector2(x, y), fieldW, ref text, "rpp_…", Icon.Link, 128, ImGuiInputTextFlags.Password, tokenProblem != null, Face.Mono, 13))
         {
-            var fieldW = MathF.Max(S(120), width - linkW - getW - S(16));
-            var text = tokenDraft;
-            if (Kit.Field("##site-token", p, fieldW, ref text, "rpp_…", Icon.Link, 128, ImGuiInputTextFlags.Password))
-            {
-                tokenDraft = text;
-                tokenProblem = null;
-            }
-            var x = p.X + fieldW + S(8);
-            if (Kit.Button("##site-link-btn", new Vector2(x, p.Y), link, Btn.Primary, BtnSize.Md, null, 0, tokenDraft.Trim().Length == 0))
-                LinkToken();
-            if (Kit.Button("##site-get", new Vector2(x + linkW + S(8), p.Y), get, Btn.Glass, BtnSize.Md, Icon.ExternalLink))
-                Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
-        }, below: true,
-            tip: "Linking lets the plugin send pulls straight to your Raid Planner. The token is made on the site, shown once, and can be revoked there.",
-            icon: Icon.Link);
+            tokenDraft = text;
+            tokenProblem = null;
+        }
+        if (Kit.Button("##site-link-btn", new Vector2(x + fieldW + S(6.4f), y), link, Btn.Tele, BtnSize.Md, Icon.Link, 0, tokenDraft.Trim().Length == 0))
+            LinkToken();
+        y += S(H) + S(10);
+        if (tokenProblem != null)
+        {
+            Icons.Draw(dl, Icon.CircleX, new Vector2(x, y + (S(18) - S(Kit.IconPx)) / 2), S(Kit.IconPx), Palette.Danger);
+            Txt.Line(dl, new Vector2(x + S(Kit.IconPx + 6.4f), y), Txt.Fit(tokenProblem, Face.Sans, 13, inner - S(Kit.IconPx + 6.4f)), Face.Sans, 13, Palette.DangerSoft, 18);
+            y += S(18) + S(10);
+        }
+        if (Kit.Button("##site-get", new Vector2(x, y), "Get a token", Btn.Outline, BtnSize.Sm, Icon.ExternalLink, 0, false,
+                "Opens the site's Settings, Raid Planner, In-game plugin, where a token is made (shown once, revoked there)."))
+            Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
+        y += S(HSm) + S(11);
+        Kit.Reserve(at, w, y - at.Y);
     }
 
     private void LinkToken()
@@ -284,6 +442,6 @@ public sealed partial class MainWindow
         tokenDraft = string.Empty;
         tokenProblem = null;
         sends.Clear();
-        Notify("Linked to the Raid Planner");
+        Notify("Linked to the Raid Planner", ToastKind.Ok);
     }
 }
