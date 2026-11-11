@@ -42,7 +42,7 @@ public sealed class CombatParser
     private readonly uint[] party = new uint[MostParty];
     private int partyCount;
 
-    /// <summary>Statuses the party put on others with an action: (on, status, party member) → the action and when.</summary>
+    /// <summary>Statuses the party put on anyone with an action: (on, status, party member) → the action and when.</summary>
     private readonly Dictionary<(uint On, uint Status, uint Member), (uint Action, double At)> applied = new();
 
     private readonly List<(uint, uint, uint)> stale = new();
@@ -208,11 +208,9 @@ public sealed class CombatParser
                 return;
             case EffectKind.StatusOn:
                 if (d.Status == 0) return;
-                if (!recipientParty)
-                {
-                    applied[(recipient, d.Status, from)] = (b.Action, b.T);
-                    if (applied.Count > 512) Prune(b.T);
-                }
+                // Remembered on anyone (the action a buff, a DoT or a HoT came from; a DoT's for sharing out a tick).
+                applied[(recipient, d.Status, from)] = (b.Action, b.T);
+                if (applied.Count > 512) Prune(b.T);
                 var kind = isShield(d.Status) ? FxKind.Shield : FxKind.Status;
                 if (kind == FxKind.Status && withAmount) return;
                 Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, kind, flags, 0, hp, max, d.Status, recipientParty, recipientHostile));

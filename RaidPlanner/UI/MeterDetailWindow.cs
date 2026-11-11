@@ -531,7 +531,7 @@ public sealed class MeterDetailWindow : Window
             var w = S(300) - S(11.2f);
             var dl = ImGui.GetWindowDrawList();
             var (here, others) = MeterView.Picker(m.Kept, shown, m.Best(shown.Content));
-            if (here.Count > 0) Kit.MenuEyebrow($"Tonight · {here[0].Fight.Duty}", w);
+            if (here.Count > 0) Kit.MenuEyebrow($"{(DateTime.Now.Hour >= 17 ? "Tonight" : "Today")} · {here[0].Fight.Duty}", w);
             foreach (var r in here.Concat(others))
             {
                 var f = r.Fight;

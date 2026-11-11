@@ -63,6 +63,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private double now;
     private double outOfCombatSince = double.NaN;
     private bool inCombat;
+    private bool anyAlive;
     private string duty = string.Empty;
     private uint content;
     private uint territory;
@@ -108,8 +109,21 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         duty = dutyName;
     }
 
-    /// <summary>The recorder's pull going on (0 for none): an encounter that starts during it takes its number.</summary>
-    public void RecordedPull(int pull) => recordedPull = pull;
+    /// <summary>
+    /// The recorder's pull going on (0 for none): an encounter that starts during it takes its number,
+    /// and so does one that started a moment before it (the first hit can come a frame before the
+    /// game's in-combat flag that starts the recorder's pull).
+    /// </summary>
+    public void RecordedPull(int pull)
+    {
+        recordedPull = pull;
+        if (pull <= 0 || live is not { OwnCount: true } f || f.Pull == pull || now - f.Start > 10) return;
+        ownPull = Math.Max(ownPull - 1, pull);
+        f.Pull = pull;
+        f.OwnCount = false;
+        f.Changed();
+        kept = null;
+    }
 
     /// <summary>
     /// This frame: the time (seconds, the clock every event is timed by), the party, and whether any of
@@ -133,6 +147,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             m.Dead = dead;
             if (known && !was && dead) live.Died(m, t, this);
         }
+        anyAlive = !allDown;
         if (live == null) return;
         if (allDown)
         {
@@ -195,7 +210,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     {
         var pull = recordedPull > 0 ? recordedPull : ownPull + 1;
         ownPull = Math.Max(ownPull + (recordedPull > 0 ? 0 : 1), recordedPull);
-        var f = new Fight(nextId++, pull, duty, content, t);
+        var f = new Fight(nextId++, pull, duty, content, t) { OwnCount = recordedPull <= 0 };
         foreach (var (who, slot) in Roles.Assign(party.Select(p => new Partier(p.Id, p.Job, p.Role)).ToList()))
             f.Add(party.First(p => p.Id == (uint)who.Key), slot);
         foreach (var p in party)
@@ -266,7 +281,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     public bool InEncounter => live != null;
 
-    public bool Waiting => live == null && inCombat && Problem == null;
+    public bool Waiting => live == null && inCombat && anyAlive && Problem == null;
 
     public IReadOnlyList<MeterEncounter> Kept
     {
@@ -406,7 +421,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private sealed class Fight
     {
         public readonly int Id;
-        public readonly int Pull;
+        public int Pull;
+
+        /// <summary>Numbered by the meter's own count (no recorded pull when it began).</summary>
+        public bool OwnCount;
         public readonly string Duty;
         public readonly uint Content;
         public readonly double Start;

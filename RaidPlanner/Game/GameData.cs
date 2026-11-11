@@ -4,6 +4,7 @@ using Dalamud.Game;
 using Lumina.Excel.Sheets;
 using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
+using Action = Lumina.Excel.Sheets.Action;
 
 namespace RaidPlanner.Game;
 
@@ -55,6 +56,19 @@ public sealed class GameData
     public string StatusName(uint id) => Status(id) is { Name.Length: > 0 } st ? st.Name : $"Status {id}";
 
     private readonly Lazy<(Dictionary<uint, int> Fails, HashSet<uint> Dots, HashSet<uint> Shields)> lists = new(ReadLists);
+
+    /// <summary>The status lists made on a worker as the plugin loads, so the first fight doesn't wait for them.</summary>
+    public GameData() => System.Threading.Tasks.Task.Run(() =>
+    {
+        try
+        {
+            _ = lists.Value;
+        }
+        catch (Exception)
+        {
+            // ReadLists says itself what went wrong (and never throws).
+        }
+    });
 
     /// <summary>
     /// The statuses the meter and the summary pick out, by their English names on the Status sheet

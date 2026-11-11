@@ -40,7 +40,7 @@ public static class Boss
 
     private const string AddShield = "M-40 -38 L-14 -33 L0 -40 L14 -33 L40 -38 L38 6 C35 27 19 39 0 49 C-19 39 -35 27 -38 6 Z";
 
-    private const string Face =
+    private const string FacePath =
         "M-27 -15 L-6 -5 L-8 4 L-26 -3 Z M27 -15 L6 -5 L8 4 L26 -3 Z M-24 10 L-15 27 L-8 17 L0 29 L8 17 L15 27 L24 10 L15 17 L8 11 L0 20 L-8 11 L-15 17 Z";
 
     /// <summary>The asleep Boss's lids over its eyes (the mock-ups' overlay, in the same units; it sits 2.5 lower).</summary>
@@ -100,7 +100,7 @@ public static class Boss
         foreach (var s in shield) Stroke(dl, s.Outline, At, Tint(col, 0.5f), MathF.Max(1, 3.4f * k));
 
         // The face, glowing.
-        var face = Get(Face);
+        var face = Get(FacePath);
         var faceColor = Tint(col, 0.45f);
         var glow = Palette.WithAlpha(Tint(col, 0.15f), 0.35f);
         if (mood == BossMood.Asleep)

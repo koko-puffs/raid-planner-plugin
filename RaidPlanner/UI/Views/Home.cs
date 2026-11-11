@@ -61,7 +61,11 @@ public sealed partial class MainWindow
         Frame.BeginBody("##home", null);
         var all = store.All;
         var recording = recorder.Current != null;
-        if (recording) DrawLive();
+        if (recording)
+        {
+            DrawLive();
+            Kit.Gap(22);
+        }
         else if (recorder.NotKept is { } nk && DateTime.UtcNow - nk.At < TimeSpan.FromMinutes(3)) NotKept(nk.Why);
 
         if (all.Count == 0)
@@ -158,7 +162,7 @@ public sealed partial class MainWindow
     /// The recording's cast bar: with a plan for this duty, its step's callout ("· step 12 of your
     /// plan") and the plan's length; without, the longest pull kept here.
     /// </summary>
-    private (string Name, string? Rest, double Length) LiveCast(string duty)
+    private (string Name, string? More, double Length) LiveCast(string duty)
     {
         if (plans.Plan is { } plan && plans.ForThisDuty)
         {

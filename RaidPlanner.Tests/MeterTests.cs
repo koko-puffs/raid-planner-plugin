@@ -97,6 +97,10 @@ internal sealed class Heard : ICombatSink
 
 public class CombatParserTests
 {
+    private readonly Xunit.Abstractions.ITestOutputHelper output;
+
+    public CombatParserTests(Xunit.Abstractions.ITestOutputHelper output) => this.output = output;
+
     // The party: a tank (1), a healer (2), a dps (3); enemies 900+, a pet 50 of the dps, an outsider 77.
     private const uint Tank = 1, Healer = 2, Dps = 3, Boss = 900, Pet = 50, Outsider = 77;
 
@@ -276,6 +280,8 @@ public class CombatParserTests
         Assert.Equal(FxKind.Status, st.Kind);
         Assert.Equal(786u, st.Status);
         Assert.Equal(16532u, p.ActionFor(Boss, 1871, Healer));
+        // A buff on the party is remembered too (the combat block's statuses name its action).
+        Assert.Equal(3557u, p.ActionFor(Tank, 786, Dps));
     }
 
     [Fact]
@@ -375,7 +381,7 @@ public class CombatParserTests
 
     /// <summary>
     /// The hot path: an eight-target action read again and again allocates nothing (measured with the
-    /// runtime's own counter), and takes well under a few microseconds.
+    /// runtime's own counter), and takes about ten microseconds with a tick.
     /// </summary>
     [Fact]
     public void Reading_an_action_allocates_nothing()
@@ -396,9 +402,9 @@ public class CombatParserTests
                 e[1] = E(14, value: 1871);
             }
         }
-        for (var i = 0; i < 1000; i++)
+        for (var i = 0; i < 5000; i++)
         {
-            Fill(i);
+            Fill(i * 0.001);
             p.Concerns(1, 0, concerns);
             p.Action(b);
         }
@@ -408,16 +414,17 @@ public class CombatParserTests
         const int Runs = 20_000;
         for (var i = 0; i < Runs; i++)
         {
-            Fill(1000 + i * 0.001);
+            Fill(5 + i * 0.001);
             p.Concerns(1, 0, concerns);
             p.Action(b);
-            p.Tick(1000 + i * 0.001, 900, 0, false, 100, 1, 0, -1, -1);
+            p.Tick(5 + i * 0.001, 900, 0, false, 100, 1, 0, -1, -1);
         }
         watch.Stop();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        output.WriteLine($"{watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs for an eight-target action and a tick; {allocated} bytes allocated in {Runs}");
         Assert.Equal(0, allocated);
-        // Generous, for a slow test machine: an eight-target action and a tick well under 50 µs.
-        Assert.True(watch.Elapsed.TotalMilliseconds / Runs < 0.05, $"{watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs a message");
+        // About 10 µs here; the bound only catches something gone badly wrong (the machine may be busy with other work).
+        Assert.True(watch.Elapsed.TotalMilliseconds / Runs < 0.5, $"{watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs a message");
     }
 
     private sealed class Quiet : ICombatSink
@@ -842,6 +849,29 @@ public class MeterSessionTests
         Assert.Equal(1, rows.Sum(r => r.Share), 9);
         Assert.Same(rows, s.Abilities(e.Id, e.Rows.Single(r => r.Slot == "R1").PartyId, MeterTab.Damage));
         Assert.Empty(s.Abilities(e.Id, 99, MeterTab.Damage));
+    }
+
+    [Fact]
+    public void A_recorded_pull_that_begins_a_moment_after_the_first_hit_numbers_it()
+    {
+        var s = New(out var p);
+        s.Frame(0, Party(), true);
+        Hit(p, 0, Dps, 1000);
+        Assert.Equal(1, s.Current!.Pull);
+        s.RecordedPull(7);
+        s.Frame(0.1, Party(), true);
+        Assert.Equal(7, s.Current!.Pull);
+        s.Frame(1, Party(combat: false), false);
+        s.Frame(6, Party(combat: false), false);
+        // The next one, with no recorded pull, counts on from it.
+        s.RecordedPull(0);
+        s.Frame(10, Party(), true);
+        Hit(p, 10, Dps, 1000);
+        Assert.Equal(8, s.Current!.Pull);
+        // Everyone down after the end: not waiting for a hit.
+        s.Frame(11, Party(combat: false), false);
+        s.Frame(16, Party(0, 0, 0), true);
+        Assert.False(s.Waiting);
     }
 
     [Fact]

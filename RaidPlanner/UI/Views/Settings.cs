@@ -36,6 +36,9 @@ public sealed partial class MainWindow
 
     private SettingsTab settingsTab;
 
+    /// <summary>The meter's background was dragged and not saved yet.</summary>
+    private bool backgroundDirty;
+
     /// <summary>Where Settings was opened from: its back button goes there.</summary>
     private Screen settingsFrom = Screen.Home;
 
@@ -73,7 +76,7 @@ public sealed partial class MainWindow
             SettingsTab.Plans => "##settings-plans",
             SettingsTab.Meter => "##settings-meter",
             _ => "##settings-recording",
-        }, null, 14);
+        }, null);
         switch (settingsTab)
         {
             case SettingsTab.Account:
@@ -287,9 +290,14 @@ public sealed partial class MainWindow
         if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
         {
             config.MeterBackground = bg;
-            if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) config.Save();
+            backgroundDirty = true;
         }
-        else if (ImGui.IsMouseReleased(ImGuiMouseButton.Left) && ImGui.IsWindowHovered()) config.Save();
+        // Saved once the knob is let go, not on every frame it's dragged.
+        if (backgroundDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
+            backgroundDirty = false;
+            config.Save();
+        }
         var end = StepperRow(i++, "##meter-end", "A fight ends after", "Nobody in combat for this long", $"{config.MeterEndAfter} s", config.MeterEndAfter > 2, config.MeterEndAfter < 15, pad: 10);
         if (end != 0)
         {

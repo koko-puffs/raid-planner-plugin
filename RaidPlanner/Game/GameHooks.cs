@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Network;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Network;
 using RaidPlanner.Core.Meter;
+using SubKind = Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind;
 
 namespace RaidPlanner.Game;
 
@@ -90,7 +90,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            missing.Add("where attacks land and whom they hit");
+            missing.Add("where attacks land, whom they hit and the party's own numbers");
             Services.Log.Error(ex, "Raid Planner couldn't hook action effects");
         }
         try
@@ -100,7 +100,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            missing.Add("head markers");
+            missing.Add("head markers and damage-over-time ticks");
             Services.Log.Error(ex, "Raid Planner couldn't hook actor control");
         }
         try
@@ -255,7 +255,7 @@ public sealed unsafe class GameHooks : IDisposable
         batch.Hp[k] = c->CharacterData.Health;
         batch.MaxHp[k] = c->CharacterData.MaxHealth;
         batch.Hostile[k] = c->GameObject.ObjectKind == ObjectKind.BattleNpc
-            && (BattleNpcSubKind)c->GameObject.SubKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart
+            && (SubKind)c->GameObject.SubKind is SubKind.Combatant or SubKind.BNpcPart
             && c->GameObject.OwnerId is 0 or InvalidId;
     }
 

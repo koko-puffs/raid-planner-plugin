@@ -530,6 +530,6 @@ public class FixtureTests
         Assert.Equal(json, Recording.Parse(json).ToJson());
         var path = Environment.GetEnvironmentVariable("RP_FIXTURE_OUT");
         if (string.IsNullOrWhiteSpace(path)) return;
-        File.WriteAllText(path, json + "\n");
+        File.WriteAllText(path, json);
     }
 }

@@ -534,7 +534,7 @@ public sealed class MeterWindow : Window
             var (here, others) = MeterView.Picker(m.Kept, shown, shown != null ? m.Best(shown.Content) : null);
             if (here.Count > 0)
             {
-                Kit.MenuEyebrow($"Tonight · {here[0].Fight.Duty}", w);
+                Kit.MenuEyebrow($"{(DateTime.Now.Hour >= 17 ? "Tonight" : "Today")} · {here[0].Fight.Duty}", w);
                 foreach (var r in here) PickRow(dl, r, w);
             }
             if (others.Count > 0)

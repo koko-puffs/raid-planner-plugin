@@ -194,7 +194,7 @@ public sealed class PlanWindow : Window
             Objects = objects,
             Big = s.Big,
             // The name under the callout, when the callout isn't just the name again.
-            Name = s.Callout is { Length: > 0 } && !string.Equals(s.Callout.Trim(), name, StringComparison.OrdinalIgnoreCase) ? name : null,
+            Name = !string.IsNullOrWhiteSpace(s.Callout) && !string.Equals(s.Callout.Trim(), name, StringComparison.OrdinalIgnoreCase) ? name : null,
             Lead = Format.StepNumber(step + 1),
             Eyebrow = rest,
             Count = $"{step + 1} / {plan.Steps.Count}",

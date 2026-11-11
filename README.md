@@ -13,16 +13,21 @@ Record the fights you're in, then make them into plans on
 - **Records each pull by itself** in trials, raids, ultimates and criterion dungeons, from the pull until the fight ends (a wipe, a
   clear, or combat simply over): the bosses' casts and where they were aimed, where each attack
   landed and whom it hit (which tells a stack from a spread), head markers, tethers, waymarks, the
-  arena changing, and where the bosses and (if you like) your party stood. Names are never kept,
-  only jobs.
+  arena changing, and where the bosses and (if you like) your party stood; how much each hit did
+  and everyone's HP, and your party's own hits, heals and buffs, for the site's numbers. Names are
+  never kept, only jobs.
 - **Sends a pull to the Raid Planner** with one press, once you've linked your account. It waits
   on the planner's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
 - **Or saves it as a file** to import on the site yourself (Import, on the planner's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
-- **Shows your plan in the duty.** A small window with the step, its board and its notes, which
-  moves along with the pull by itself. Callouts in chat a few seconds before each mechanic.
-- **Tracks your progress** (once linked): how far each pull got, for the site's progress tracker.
+- **Shows your plan in the duty.** A small window with the step's callout, its board and its notes,
+  which moves along with the pull by itself. Each step said in chat a few seconds before it comes.
+- **A meter over the fight**: damage, healing, damage taken and deaths for your party, worked out
+  in the game (no names leave it). Pick an earlier pull, pace against your best, open it up for
+  every column and a death's recap.
+- **Tracks your progress** (once linked): how far each pull got, the boss's HP left and each spot's
+  numbers, for the site's progress tracker.
 - **Only watches.** It never acts in the game or sends anything to it.
 
 ## Installing it
@@ -47,6 +52,7 @@ there; its list button picks any of your plans.
 
 `/raidplan stop` ends the pull being recorded (and keeps it). `/raidplan settings` opens Settings.
 `/raidplan plan` shows the plan window; `/raidplan next` and `/raidplan prev` move its step.
+`/raidplan meter` shows or hides the meter; `/raidplan meter unlock` gives it the mouse back.
 `/raidplan send last` sends the newest pull.
 
 ### Settings
@@ -58,11 +64,16 @@ there; its list button picks any of your plans.
   working out your own strats.
 - **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.
 - **Send each pull**: off. On, each pull is sent to the Raid Planner by itself.
-- **Track my progress**: on. How far each pull got and who died to what (spots and jobs, no names).
+- **Track my progress**: on. How far each pull got, who died to what, the boss's HP left and each
+  spot's damage, healing and fails (spots and jobs, no names).
 - **Show it in the server info bar**: on.
-- **Plans**: _Show my plan in duties_ (on), _Callouts_ (on), _Share my step with the site_ (off,
-  so Present can follow), and _Send my party to my roster_, which sends your party's names to your
-  own account, only when you press it (do it in the duty, where the game shows your whole party).
+- **Plan window**: _Show my plan in duties_ (on), _Lock it where it is_, _Say each step in chat_ (on),
+  _Share my step with the site_ (off, so Present can follow), and _Send my party to my roster_, which
+  sends your party's names to your own account, only when you press it (do it in the duty, where the
+  game shows your whole party).
+- **Meter**: _Show the meter_ (on, in duties or everywhere, folded or hidden out of combat), ENCDPS or
+  DPS, names or jobs only, lock and click-through, its background, when a fight ends, how many pulls
+  it keeps, and what pace compares with.
 
 ## Building it
 
@@ -80,4 +91,5 @@ See [DETAILS.md](DETAILS.md) for how it works, and [docs/PUBLISHING.md](docs/PUB
 release it. It's a third-party plugin from its own repository, so Dalamud's team hasn't reviewed
 it, and plugins are against Square Enix's terms of service: use it at your own risk.
 
-Licence: AGPL-3.0 (see LICENSE). The bundled Geist fonts are under the SIL Open Font License 1.1.
+Licence: AGPL-3.0 (see LICENSE). The bundled Geist, Geist Mono and Archivo fonts are under the SIL
+Open Font License 1.1.

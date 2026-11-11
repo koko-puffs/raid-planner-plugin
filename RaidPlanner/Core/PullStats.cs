@@ -286,13 +286,14 @@ public static class PullStats
             });
         }
 
-        JsonObject Make()
+        // The first so many hits and debuffs, with the names they use.
+        JsonObject Make(int hitCount, int debuffCount)
         {
             var names = new JsonObject();
-            foreach (var h in hits)
+            foreach (var h in hits.Take(hitCount))
                 if (!names.ContainsKey(Key(h.Action)) && r.Actions.TryGetValue(h.Action, out var a) && a.Name.Trim().Length > 0)
                     names[Key(h.Action)] = a.Name.Trim();
-            foreach (var d in debuffs)
+            foreach (var d in debuffs.Take(debuffCount))
                 if (!names.ContainsKey(Key(d.Status)) && r.Statuses.TryGetValue(d.Status, out var s) && s.Name.Trim().Length > 0)
                     names[Key(d.Status)] = s.Name.Trim();
             return new JsonObject
@@ -300,22 +301,31 @@ public static class PullStats
                 ["v"] = 1,
                 ["slots"] = slotsJson.DeepClone(),
                 ["lb"] = tally.LimitBreak.Damage,
-                ["hits"] = new JsonArray(hits.Select(h => (JsonNode)new JsonArray(h.Ds, h.Action, h.Mask, h.Damage)).ToArray()),
-                ["debuffs"] = new JsonArray(debuffs.Select(d => (JsonNode)new JsonArray(d.Ds, d.Status, d.Mask)).ToArray()),
+                ["hits"] = new JsonArray(hits.Take(hitCount).Select(h => (JsonNode)new JsonArray(h.Ds, (long)h.Action, (long)h.Mask, h.Damage)).ToArray()),
+                ["debuffs"] = new JsonArray(debuffs.Take(debuffCount).Select(d => (JsonNode)new JsonArray(d.Ds, (long)d.Status, (long)d.Mask)).ToArray()),
                 ["names"] = names,
             };
         }
 
-        var stats = Make();
-        // Too big: the latest hits go first, then the latest debuffs.
-        while (Size(stats) > MaxBytes && (hits.Count > 0 || debuffs.Count > 0))
+        // The most that fits: as many of the earliest hits as fit with every debuff; with none of the
+        // hits too big, as many of the earliest debuffs as fit.
+        static int Most(int count, Func<int, bool> fits)
         {
-            var over = Size(stats) - MaxBytes;
-            if (hits.Count > 0) hits.RemoveRange(Math.Max(0, hits.Count - Math.Max(1, over / 20)), Math.Min(hits.Count, Math.Max(1, over / 20)));
-            else debuffs.RemoveRange(Math.Max(0, debuffs.Count - Math.Max(1, over / 16)), Math.Min(debuffs.Count, Math.Max(1, over / 16)));
-            stats = Make();
+            int lo = 0, hi = count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi + 1) / 2;
+                if (fits(mid)) lo = mid;
+                else hi = mid - 1;
+            }
+            return lo;
         }
-        return stats;
+
+        var stats = Make(hits.Count, debuffs.Count);
+        if (Size(stats) <= MaxBytes) return stats;
+        if (Size(Make(0, debuffs.Count)) <= MaxBytes)
+            return Make(Most(hits.Count, n => Size(Make(n, debuffs.Count)) <= MaxBytes), debuffs.Count);
+        return Make(0, Most(debuffs.Count, n => Size(Make(0, n)) <= MaxBytes));
     }
 
     private static string Key(uint id) => id.ToString(CultureInfo.InvariantCulture);

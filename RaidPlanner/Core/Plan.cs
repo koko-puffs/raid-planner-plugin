@@ -128,7 +128,7 @@ public sealed record PlanStep(string Name, string Time, string Notes, IReadOnlyL
     public string? Callout { get; init; }
 
     /// <summary>What's said big for the step: its callout, else its name (without a "P2 · " in front).</summary>
-    public string Big => Callout is { Length: > 0 } c ? c : PlanJson.WithoutPhase(Name);
+    public string Big => !string.IsNullOrWhiteSpace(Callout) ? Callout.Trim() : PlanJson.WithoutPhase(Name);
 }
 
 /// <summary>Where a step's first mechanic goes off in the fight: the step, its action, seconds from the pull.</summary>
@@ -184,7 +184,7 @@ public static class PlanJson
             list.Add(new PlanListItem(id, Name(o["name"]), When(stamp), UInt(o["content"]) is { } c and > 0 ? c : null, Str(o["duty"], 120))
             {
                 Stamp = stamp,
-                Steps = UInt(o["steps"]) is { } n and <= MaxSteps * 10 ? (int)n : null,
+                Steps = UInt(o["steps"]) is { } count and <= MaxSteps * 10 ? (int)count : null,
             });
         }
         return list;

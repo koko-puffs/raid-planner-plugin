@@ -98,7 +98,7 @@ public sealed class Plugin : IDalamudPlugin
             meterDetail.Source = meterSource;
             meterDetail.ShowSmall = () => meterWindow.IsOpen = true;
             window.Meter = meterSource;
-            window.MeterProblem = () => meter.Session.Problem;
+            window.MeterProblem = () => meter.Source.Problem;
             plans.ShowWindow = open => planWindow.IsOpen = open;
             // With recording off, a pull is still followed when the plan window shows this duty's plan.
             recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;

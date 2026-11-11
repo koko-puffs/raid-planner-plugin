@@ -274,11 +274,14 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>The question has been brought to the front once (after that, only when the plugin's window is clicked).</summary>
     private bool confirmFocused;
 
+    /// <summary>When the question was asked (it fades in from then).</summary>
+    private double confirmAt;
+
     private void Ask(string title, string body, string yes, string no, Action onYes, bool danger = false, Icon? yesIcon = null)
     {
         confirm = new Confirmation(title, body, yes, no, onYes, danger, yesIcon);
         confirmFocused = false;
-        Kit.Since("##rp-confirm-in", true);
+        confirmAt = ImGui.GetTime();
     }
 
     /// <summary>The question goes unanswered: the window closed, or another screen opened.</summary>
@@ -326,12 +329,10 @@ public sealed partial class MainWindow : Window, IDisposable
         {
             if (!shown) return;
             var old = Palette.Opacity;
-            var since = Kit.Since("##rp-confirm-in", false);
+            var since = (float)(ImGui.GetTime() - confirmAt);
             Palette.Opacity = ReducedMotion ? 1 : Model.Ease.Out(Math.Clamp(since / TSettle, 0, 1));
             var dl = ImGui.GetWindowDrawList();
-            var r = ImGui.GetStyle().WindowRounding;
             dl.AddRectFilled(under, under + underSize, Palette.U32(Palette.Rgba(4, 4, 5, 0.74f)), S(Palette.RadiusLg), ImDrawFlags.RoundCornersBottom);
-            _ = r;
             var width = MathF.Min(S(440), winSize.X - S(48));
             var pad = S(24);
             var inner = width - pad * 2;

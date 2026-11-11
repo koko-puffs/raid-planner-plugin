@@ -34,6 +34,8 @@ public sealed class MeterPreview : IMeterSource
 
     public bool Waiting => false;
 
+    public string? Problem => null;
+
     public IReadOnlyList<MeterEncounter> Kept => kept;
 
     public MeterEncounter? Get(int id) => kept.FirstOrDefault(k => k.Id == id);
