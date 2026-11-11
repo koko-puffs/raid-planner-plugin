@@ -504,18 +504,27 @@ public sealed class MeterDetailWindow : Window
     // ---------------------------------------------------------------------------------------------
     // Deaths and the recap.
 
+    /// <summary>Where a death is in the fight's own list (the index the small meter opens a recap by).</summary>
+    private static int IndexIn(IReadOnlyList<DeathEntry> all, DeathEntry d)
+    {
+        for (var i = 0; i < all.Count; i++)
+            if (ReferenceEquals(all[i], d))
+                return i;
+        return -1;
+    }
+
     private void DrawDeaths(ImDrawListPtr dl, MeterEncounter e, Vector2 at, float w, float h, Vector2 recapAt, float recapW)
     {
         dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.Slab), S(Palette.RadiusLg));
         dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), S(Palette.RadiusLg), ImDrawFlags.None, 1f);
         var all = e.Deaths.OrderBy(d => d.At).ToList();
-        if (death == null || death >= e.Deaths.Count) death = all.Count > 0 ? e.Deaths.ToList().IndexOf(all.FirstOrDefault(d => !d.PartOfWipe) ?? all[0]) : null;
+        if (death == null || death >= e.Deaths.Count) death = all.Count > 0 ? IndexIn(e.Deaths, all.FirstOrDefault(d => !d.PartOfWipe) ?? all[0]) : null;
         var y = at.Y + S(6);
         var rowH = S(46);
         foreach (var d in all)
         {
             if (y + rowH > at.Y + h - S(6)) break;
-            var index = e.Deaths.ToList().IndexOf(d);
+            var index = IndexIn(e.Deaths, d);
             var min = new Vector2(at.X + S(6), y);
             var max = new Vector2(at.X + w - S(6), y + rowH);
             var picked = index == death;

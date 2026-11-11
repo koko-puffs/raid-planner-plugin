@@ -286,7 +286,8 @@ public sealed partial class MainWindow
             config.MeterClickThrough = !config.MeterClickThrough;
             config.Save();
         }
-        var bg = SliderRow(i++, "##meter-bg", "Background", "Rows stay solid", config.MeterBackground);
+        // 20% at the least, as the meter draws it (below that its edge and words would float on nothing).
+        var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", "Rows stay solid", Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
         if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
         {
             config.MeterBackground = bg;

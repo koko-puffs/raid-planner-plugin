@@ -464,8 +464,8 @@ public class StoreTests : IDisposable
         store.MarkSent(sent, "6f1c9a52-8a43-4c4e-9d55-9a1f5c3b2a10", DateTimeOffset.UtcNow);
         store.Save(RecordingTests.Sample());
         Assert.Equal(2, store.All.Count);
-        Assert.True(store.All.Any(i => i.File == first.File));
-        Assert.False(store.All.Any(i => i.File == sent.File));
+        Assert.Contains(store.All, i => i.File == first.File);
+        Assert.DoesNotContain(store.All, i => i.File == sent.File);
     }
 
     [Fact]

@@ -128,6 +128,9 @@ public sealed class RecordingBuilder
 
     public int Markers { get; private set; }
 
+    /// <summary>Tethers seen to appear so far (the window's live count, as a pull's screen counts them: each one put on).</summary>
+    public int TethersSeen { get; private set; }
+
     /// <summary>
     /// The furthest phase, from 1: one more each time every enemy that had been targetable was gone
     /// for <see cref="PhaseGap"/> seconds or more and then one became targetable (again, or for the
@@ -520,6 +523,7 @@ public sealed class RecordingBuilder
         foreach (var added in current.Except(tethers).ToList())
         {
             tethers.Add(added);
+            TethersSeen++;
             if (Room) recording.Events.Add(new TetherEvent(t, added.From, added.To, added.Kind, true));
         }
     }

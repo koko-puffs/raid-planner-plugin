@@ -211,31 +211,63 @@ public static class Format
 
     /// <summary>
     /// Words wrapped to a width, at most <paramref name="maxLines"/> lines: the last takes the rest,
-    /// and any line still too wide (one long word, or that last) is cut with "…".
+    /// and any line still too wide (that last) is cut with "…". A word wider than a whole line is
+    /// broken where it fills it (<c>overflow-wrap: anywhere</c>): Japanese and Chinese have no spaces,
+    /// so a step's callout or notes in them would otherwise be one word, cut on its first line.
     /// </summary>
     public static List<string> Wrap(string text, Func<string, float> measure, float width, int maxLines = int.MaxValue)
     {
-        var lines = new List<string>();
+        // Each line, and whether the next goes on with the same word (joined again without a space).
+        var lines = new List<(string Text, bool Broken)>();
         var cur = string.Empty;
         foreach (var w in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             var candidate = cur.Length == 0 ? w : cur + " " + w;
             if (cur.Length > 0 && measure(candidate) > width)
             {
-                lines.Add(cur);
+                lines.Add((cur, false));
                 cur = w;
             }
             else cur = candidate;
+            while (cur.Length > 1 && measure(cur) > width)
+            {
+                var n = Fitting(cur, measure, width);
+                lines.Add((cur[..n], true));
+                cur = cur[n..];
+            }
         }
-        lines.Add(cur);
+        if (cur.Length > 0 || lines.Count == 0) lines.Add((cur, false));
+        else if (lines.Count > 0) lines[^1] = (lines[^1].Text, false);
         if (maxLines >= 1 && lines.Count > maxLines)
         {
-            var rest = string.Join(' ', lines.GetRange(maxLines - 1, lines.Count - maxLines + 1));
+            var rest = new System.Text.StringBuilder();
+            for (var i = maxLines - 1; i < lines.Count; i++)
+            {
+                rest.Append(lines[i].Text);
+                if (i < lines.Count - 1 && !lines[i].Broken) rest.Append(' ');
+            }
             lines.RemoveRange(maxLines - 1, lines.Count - maxLines + 1);
-            lines.Add(rest);
+            lines.Add((rest.ToString(), false));
         }
-        for (var i = 0; i < lines.Count; i++) lines[i] = Fit(lines[i], measure, width);
-        return lines;
+        var result = new List<string>(lines.Count);
+        foreach (var (line, _) in lines) result.Add(Fit(line, measure, width));
+        return result;
+    }
+
+    /// <summary>How many of a word's first letters fit a width (one at least; a pair of surrogates kept whole).</summary>
+    public static int Fitting(string word, Func<string, float> measure, float width)
+    {
+        var lo = 1;
+        var hi = word.Length - 1;
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+            if (measure(word[..mid]) <= width) lo = mid;
+            else hi = mid - 1;
+        }
+        if (lo < word.Length && char.IsLowSurrogate(word[lo]) && lo > 1) lo--;
+        else if (lo < word.Length && char.IsLowSurrogate(word[lo])) lo++;
+        return lo;
     }
 
     /// <summary>

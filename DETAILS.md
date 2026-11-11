@@ -300,8 +300,9 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   (seconds from their first damage to their last), `deaths` (not counting the wipe: a wiped pull's
   deaths within 6 seconds of its last), `dd` and `vuln` (damage downs and vulnerability ups gained,
   with their stacks: a new one counts its stacks, one put on again the stacks it gained or 1).
-  `lb`, the limit break's damage. `hits`, the enemies' hits on the party (autos left out, as the
-  timeline leaves them out; 400 at most) as `[deciseconds, action, slot mask, damage]`, the mask's
+  `lb`, the limit break's damage. `hits`, the enemies' hits on the party (autos left out: "Attack",
+  "Auto-attack" and "Shot", as the site's `AUTO_ATTACK` names them; and a single target's hit on
+  someone not a tank, unless it's a cast buster; 400 at most) as `[deciseconds, action, slot mask, damage]`, the mask's
   bit i the i-th of `slots`, only those it landed on (a miss, a dodge or an invulnerable target isn't
   in it, as the site reads a recording's hits; a hit that landed on no one isn't sent); `debuffs`, the damage downs and vulnerability ups as they were gained
   (200 at most) as `[deciseconds, status, slot mask]`; `names`, those actions' and statuses' names
@@ -310,6 +311,17 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   (`GameData.FailKinds`: every row named exactly "Damage Down" or "Vulnerability Up", as the site's
   `model/debuffs.ts` lists them; "Physical Vulnerability Up" and "Magic Vulnerability Up" aren't
   failures: tankbusters put them on the tanks on purpose).
+
+The site reads these as the meter means them, and works the same numbers out from the pull's
+recording by the same rules (Review); `AlignmentTests` (`RaidPlanner.Tests/AlignmentTests.cs`) builds
+a whole pull with every kind of number in it (a party listed out of spot order, DoTs with ticks that
+named no one, a HoT, a shield, misses, dodges and an invulnerability, stacks of Vulnerability Up, a
+bleed, an instant death and a wipe) and, with `RP_ALIGN_OUT` set to the site's
+`src/features/raid-planner/model/__fixtures__` folder, writes it and its summary there
+(`align.raidrec.json`, `align.summary.json`) for the site's `alignment.spec.ts`, which checks each
+spot's numbers, the boss's HP, the phases, the deaths, the debuffs and the fails both ways. Write
+them again when the summary or the file changes (as `RP_FIXTURE_OUT` writes the shared
+`sample.raidrec.json`).
 
 No names. The
 summary is made on the worker that writes the pull, so it's there whatever happens to the file.
@@ -425,15 +437,18 @@ board, a square as big as leaves three lines for the notes (110 at the least); t
 there's more, with the scrollbar; and at the foot 32px square previous and next round the count in
 mono. Another plan on its way runs a slim cast bar under the header and keeps the old step until
 it's in; one that couldn't be read says so in red with a quiet retry. At its smallest (under 270
-wide or 400 tall) the callout is 16px, the board 110 and plain (no bezel), and the notes say "Notes:
-2 lines, make it taller" instead of vanishing. With no plan to show, the Boss says why over a small
+wide or 400 tall), as the mock-up draws it, the callout is 16px (three lines at most still), the
+list is the only button, the board 110 and plain (no bezel), there's no previous and next
+(`/raidplan next` and `prev` still move it), and the notes say "Notes: 2 lines, make it taller"
+instead of vanishing. A callout or notes in Japanese or Chinese (no spaces) wrap where a line fills
+(`Format.Wrap`), not cut on their first line; what's measured before the fonts are built isn't kept. With no plan to show, the Boss says why over a small
 callout, one line and one button (`EmptyState`): not linked (asleep in a dashed ring; _Link your
 account_, the telegraph, opens Settings → Account), reading (the party in a row over a running cast
 bar), gone wrong (awake; the error's first sentence as the callout, the rest under it; _Try again_
 outlined), no plans (asleep; _Open the Raid Planner_ outlined), no plan for this duty (its head
 tilted; _Pick a plan_, the telegraph, opens the menu), not in a duty (_Pick a plan_). The plans menu
 is the site's menu (raised #18181d, a white hairline at 12%, 14px corners, its shadow faked with
-rings): this duty's plans first under an eyebrow ("This duty · …"), the one shown with a ready
+rings in the menu's own draw list, so they show over the window it opens from): this duty's plans first under an eyebrow ("This duty · …"), the one shown with a ready
 tick and the others with the map, then "Other duties" with each plan's duty under its name; every
 row keeps a 20px slot at the left so the names line up, "19 steps" in mono on the right when it's
 known (the plan shown; others when the site's list says); _Read them again_ at the foot. What a step
@@ -446,7 +461,8 @@ from north, clockwise) to a square; the marks (rims, chevrons, badges) are sized
 yalms. The arena: its floor (#1b1c21, or its colour) lit a little in the middle, its grid (radial or
 square, faint), its edge (a #3a3b45 wall, an ember death wall with a glow, or a dashed drop), and for
 a round arena the bezel (a tick every 15°, longer at 45° and the cardinals) and the compass letters
-outside it. A custom arena's outlines are drawn with a floor where they're convex enough. Telegraphs
+outside it. A custom arena's outlines are drawn with their floor (each cut into triangles once, so a
+concave one, an L or a cross, fills as drawn) and their edge. Telegraphs
 (circles, donuts, cones in convex parts of 90°, rectangles, crosses, proteans): a soft fill (20 to
 25%), a glow inside the rim (three faint rings) and a crisp hot rim; a later hit in a run (`order`
 2 and on) hollow with a dashed rim, numbered with the board's badge. Stacks with their chevrons in,
@@ -485,9 +501,15 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   capitals written by the code; Geist 400 (11–14), 500 (12–14, the site's 550) and 600 (7, 8, 10,
   13–15, the site's 650 and 700); Geist Mono 500 (9–13) and 600 (10–13, 15, 16, 18 and 30 for the
   clock), for everything counted, so clocks hold still. Letter-spacing (eyebrows +0.09em, tags
-  +0.05em, intents +0.1em) is drawn glyph by glyph. On a Japanese client Archivo and Geist are
-  Dalamud's font (the callout drawn twice a pixel apart for its weight, and not put in capitals); the
-  mono stays Geist Mono.
+  +0.05em, intents +0.1em) is drawn glyph by glyph. 30 fonts on most clients (some 20,000 glyphs);
+  a size not loaded is drawn at the nearest (worked out once). On a Japanese client Archivo and Geist
+  are Dalamud's font from 11px up (the callout drawn twice a pixel apart for its weight, and not put
+  in capitals; the mono capitals stay capitals), the faces of one size sharing one font (8, not 17:
+  each carries the kanji); the spot labels (7–10px) stay Geist; the mono stays Geist Mono, and text
+  with Japanese in it (a duty's name in an eyebrow, a job's abbreviation) is drawn in the sans
+  instead (`Txt.For`). Dalamud's language's extra glyphs (Chinese, Korean) are added only to the
+  faces a plan's own words are drawn in (`Fonts.PlanText`: the callout at 16 and 22, Sans 12 and
+  13, SansMedium 14, SansSemibold 13): everything else is the game's words or the windows' own.
 - **Buttons** (`Kit.Button`): 40 tall with 10px corners (32 and 8 in dense rows), 13px words at 550.
   One telegraph a screen (`Btn.Tele`): ember with a hot inner rim, on-ember words at 650; pointed at,
   lighter with a glow of two rings; pressed, a ring goes out and fades over 420ms; held, the shape
@@ -519,7 +541,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 - **The question** (`MainWindow.DrawConfirm`): a window of its own over the plugin's, which dims it
   under the title bar (rgb 4 4 5 at 74%) and takes every click; the site's dialog in its middle
   (raised, 20px corners, a 12% hairline, a shadow faked with rings, its title a small callout, its
-  words at 14px, its answers on the right: a destructive one in the danger outline). Escape is No. It
+  words at 14px, its answers on the right: a destructive one in the danger outline). Escape is No (while it has the keyboard). It
   fades in over 280ms (it doesn't grow: text can't scale crisply).
 
 ## The main window (`UI/MainWindow.cs`, `UI/Views/`)
@@ -535,7 +557,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
   "Started 23:38"; the duty as a small callout; the clock in Geist Mono 600 30px over a cast bar
   running to the plan's length when you have a plan for the duty (named for its step: "Platforms:
   draw-in · step 12 of your plan"; the length is its last cue's time) or to the longest pull kept
-  here; what's being recorded in mono (Casts, Markers, the phase reached, Places "8 ×2 / s", or Off);
+  here; what's being recorded in mono (Casts, Markers, Tethers as each is put on, Places "8 ×2 / s", or Off);
   _Stop now_ in the danger outline. A pull that wasn't kept says why after a _Not kept_ tag, for
   three minutes. Then **Latest pull** (its age as the site says it): its number as a small callout,
   the outcome as a tag, its length in mono, the duty under it when the header doesn't already say
@@ -553,7 +575,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
 - **Sending** (`Views/Send.cs`, the latest pull and a pull's footer): not linked, _Link your account_
   is the telegraph and _Save as file_ outlined, "Link once, and each pull is a button away from being
   a plan."; linked, _Send to Raid Planner_ in the same place. Sending, it dims and holds still, a
-  quiet _Stop_ beside it (it cancels the send), and a cast bar "Sending pull 12 · 0.6 MB" runs under
+  quiet _Stop_ beside it (it cancels the send; so does _Unlink_), and a cast bar "Sending pull 12 · 0.6 MB" runs under
   it. Sent, a ready tick, "Sent. It's waiting in your Raid Planner." (or "Sent, with fewer of the
   party's places: it was too big whole."), _Open in Review_ and a quiet _Send again_ (or _Save as
   file_); sent in an earlier session, one line ("Sent yesterday at 23:52.") with _Open in Review ↗_.
@@ -576,8 +598,9 @@ above, 18 below), a footer on the basalt band where a screen has one.
   small in a 30px square well as the board draws it (`Glyphs`: circle, donut, cone, line, cross,
   stack, spread, tankbuster; a raidwide as rings; anything else a quiet ring), what it asks
   (Dodge, Share, Apart, Tanks) before its name, "×12" in mono; deaths as red rows with the spot and
-  what hit them ("H2 died · Exaflare"; the wipe's own, in a wiped pull's last 6 seconds, left out:
-  `Model/PullView`). Reading it, the party in a row over a running cast bar; a file that won't read,
+  what hit them ("H2 died · Exaflare"; the wipe's own, a wiped pull's deaths within 6 seconds of its
+  last, left out: `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the
+  site keep; before the review it counted back from the recording's end, which runs on past the wipe). Reading it, the party in a row over a running cast bar; a file that won't read,
   the Boss awake ("This pull won't open"); nothing in it, asleep ("Nothing went off"). The footnote
   in muted (it's read); the footer has the send with _Send to Raid Planner_ filling the row.
 - **Settings** (`Views/Settings.cs`): the square back button, "Settings" as a small callout, the tabs
@@ -703,31 +726,42 @@ Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `Com
   against the picked pull: "PACE · P2 +0:41", a 3px bar with this pull in ember and the other's tick
   in white, "on pull 4 +3.4%"), **Healing** (HPS and overheal %), **Taken** (damage taken and its
   share), **Deaths** (each death's spot, name and job, its time in red, what killed them and how big;
-  the wipe's left out; live, "7 alive"). Rows are 25 tall: the spot (18px), the name (or the job
+  the wipe's left out; live, "7 alive"; past the room cut, and said: "· 3 not shown"). Rows are 25 tall: the spot (18px), the name (or the job
   alone, _Jobs only_), the job in mono, the number in mono 600 13px, its second column, and a 2px bar
   under it to the top player's (grey; yours ember; a death's dimmer, its name muted with a red
   skull). The limit break has its own row under a hairline; the party's number at the foot ("Party ·
   165,000", "… HPS"), with where in the fight, "shields not counted", "incl. bleeds", "kept as pull
   12" or "click-through" on the right. Rows don't grow: a taller window only has room for more; past
-  the room they're cut. Before any fight, the Boss asleep, "No fight yet", "It starts on the first
-  hit."; in combat before the first hit, "0:00" with "Waiting for the first hit" and the party with
+  the room they're cut. A total of ten million or more is shortened in the 66px column ("13.1M";
+  "3,912,400" whole). The rows' words and bars are worked out once a snapshot (the source makes one
+  four times a second during a fight), not each frame (`MeterView.Lines`). Before any fight, the
+  Boss asleep, "No fight yet", "It starts on the first hit."; stopped (`IMeterSource.Problem`), the
+  Boss awake, "The meter has stopped" and why (`MeterView.StoppedLine`; a kept fight can still be
+  picked); in combat before the first hit, "0:00" with "Waiting for the first hit" and the party with
   dashes; between pulls it folds to one line (the last fight's length and tag, "Pull 12 · party
-  163,188", a chevron that opens it again), or hides with _Hide out of combat_. Pressing a row opens
-  the meter opened up on that player; a death, on its recap.
+  163,188", a chevron that opens it again), or hides with _Hide out of combat_. Folded, empty or
+  stopped, the window itself is as tall as what it shows (ImGui fits it, its width kept); showing a
+  fight again, it opens to the height it had then (kept in the settings, `MeterHeight`, once you let
+  go of its edge; 382 the first time). A new pull shows itself, whatever was picked before it.
+  Pressing a row opens the meter opened up on that player; a death, on its recap.
 - **The picker** (the site's menu, 300 wide): the shown fight's duty's fights newest first ("Tonight
   · Example Arena"), the one shown ticked, the live one tagged _Now_, the best (the one that got
   furthest) starred ("Pull 4 · the best", added at the end when it's older), each with its length in
   mono and its outcome's tag; other duties' after; and _Pace against_ (Best, Last, Off) at its foot.
-- **Opened up** (`MeterDetailWindow`, "Raid Planner meter", 1180×560 at first; `/raidplan meter
-  big`): the four tabs full size with their icons and the deaths counted; the clock, where in the
-  fight ("P2 · 0:41 in"), which pull ("Pull 12 · now ⌄"), ENCDPS or DPS, and _Small_ back to the
-  meter. A slab with every column (Damage: ENCDPS, DPS, damage, %, crit, DH, max hit, deaths;
+- **Opened up** (`MeterDetailWindow`, "Raid Planner meter", 1180×560 at first, 840×360 at the least;
+  `/raidplan meter big`): the four tabs full size with their icons and the deaths counted; the clock,
+  where in the fight ("P2 · 0:41 in"; these two only as they fit beside the tabs), which pull ("Pull
+  12 · now ⌄"), ENCDPS or DPS, and _Small_ back to the meter (turning _Show the meter_ on if it was
+  off). A slab with every column (Damage: ENCDPS, DPS, damage, %, crit, DH, max hit, deaths;
   Healing: HPS, healing, over, %, crit, max heal; Taken: taken, a second, %, max hit, deaths), a 34px
-  row a player, the picked one on a white wash under the reticle, the limit break, the party's total
-  under a stronger rule; beside it the picked player by ability (`IMeterSource.Abilities`), biggest
+  row a player, the picked one (the top one when none is, or the one picked isn't in this fight) on
+  a white wash under the reticle, the limit break (its biggest hit's action after its name), the
+  party's total under a stronger rule (no DPS, crit, DH or biggest hit: they don't add up); its cells
+  worked out once a snapshot. Beside it, from about 1100 wide (narrower, the table alone), the picked
+  player by ability (`IMeterSource.Abilities`), biggest
   first, a DoT's ticks tagged _DoT_ with blank crit and DH, _est._ when the game's tick was shared, a
   slim bar each, the rest summed as "9 more". On **Deaths**, the deaths (the wipe's muted, "The
-  wipe") and the picked one's recap: "Odette died at 2:51" as a small callout, the killing blow and
+  wipe"; two fifths of the width) and the picked one's recap: "Odette died at 2:51" as a small callout, the killing blow and
   how far over, then its last hits and heals oldest first (the time to a tenth, what it was with its
   note, the amount red for a hit and green for a heal, the HP before as a bar against their max HP
   (`DeathEntry.MaxHp`; the most the recap saw when it isn't known), amber when low, red at none), the
@@ -737,7 +771,7 @@ Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `Com
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
   (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it;
-  _Background_ (a slider with its value in mono); _A fight ends after_ (2 to 15 s) and _Keep the
+  _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it); _A fight ends after_ (2 to 15 s) and _Keep the
   last_ (5 to 50), read by the meter's session; _Pace against_; _Use ACT's numbers_ (not in this
   version: dimmed, saying so); _Kept fights_ · Clear. When the meter has stopped itself
   (`IMeterSource.Problem`), an amber warning box says why.
@@ -780,7 +814,11 @@ preview` shows a made-up fight in it (again to stop).
   baselines (Archivo's line is 1.088 of its size, Geist's 1.3), letter-spacing drawn glyph by glyph,
   the Boss's triangles and shading, the toast's own part of the window over the body, the dialog's
   window under the title bar, the meter's click-through and translucent background, and the glyphs
-  "●" (the info bar), "×", "→", "·", "–" and "−".
+  "●" (the info bar), "×", "→", "·", "–" and "−". Also: the meter folding to its line and opening
+  to its height again (ImGui's auto-fit with the width set; a window saved folded when the game
+  closed); the menus' shadow rings over the window under them; a Japanese client's fonts (8 of
+  Dalamud's, shared by size) and its eyebrows with a duty's name; the font atlas's size and build time
+  with Dalamud set to Chinese or Korean (the extra glyphs on six faces); a concave custom arena.
 - The combat parser and the round-three recording (0.3.0) want checking in the game, side by side
   with ACT (or IINACT) on a striking dummy and in one real fight: damage by job within 1% and the
   same crit and direct hit rates; DoTs (BRD, SCH, WHM, SAM, DRG), and two players' DoTs on one dummy
@@ -843,7 +881,9 @@ preview` shows a made-up fight in it (again to stop).
   zig-zagging in the plans menu; links that didn't look like links; a bad token read like the
   instructions; rows off without saying why, or looking on when off; the token row 4px wider than
   the rest; toasts that looked alike and painted over other windows; footnotes too faint to read;
-  notes vanishing in a small plan window; no lock until linked.
+  notes vanishing in a small plan window; no lock until linked; a callout or notes in Japanese or
+  Chinese (no spaces) cut on their first line instead of wrapping; a concave custom arena's floor
+  spilling out of it.
 
 ### 0.2.1
 

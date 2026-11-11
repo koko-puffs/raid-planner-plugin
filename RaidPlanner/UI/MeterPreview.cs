@@ -81,7 +81,8 @@ public sealed class MeterPreview : IMeterSource
         var rows = p.Select((x, i) => new MeterRow(i + 1, x.Slot, x.Name, x.Job, x.Role, x.Slot == "MT", false, x.Dmg, x.Enc, x.Dps, x.Pc / 100, x.Crit / 100, x.Dh / 100,
             x.Max, "Drakesbane", (long)(x.Hps * duration), (long)(x.Hps * duration * x.Over / (1 - x.Over)), x.Hps, x.Over, x.Hps / 19410, 0.2, 40000,
             x.Taken, x.Taken / duration, x.TakenPc / 100, 104880, x.Deaths, x.Deaths > 0, x.Deaths > 0 ? 171 : null, x.Deaths > 0 ? 168 : duration)).ToList();
-        rows.Add(new MeterRow(0, "LB", "Limit break", string.Empty, string.Empty, false, true, 1337000, 7000, 0, 0.042, 0, 0, 1337000, "Bladedance", 0, 0, 0, 0, 0, 0, 0,
+        // The limit break's row is party id −1, as the meter's own (the party's total is 0).
+        rows.Add(new MeterRow(-1, "LB", "Limit break", string.Empty, string.Empty, false, true, 1337000, 7000, 0, 0.042, 0, 0, 1337000, "Bladedance", 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, false, null, 0));
         var party = new MeterRow(0, string.Empty, "Party", string.Empty, string.Empty, false, false, 31515000, 165000, 165000, 1, 0.28, 0.4, 1337000, "Bladedance",
             3707310, 1200000, 19410, 0.3, 1, 0.2, 40000, 13103000, 13103000 / duration, 1, 104880, 1, false, null, duration);
@@ -93,7 +94,7 @@ public sealed class MeterPreview : IMeterSource
             new(167.9, "Cure II", 21400, 64710, "Sylvie"),
             new(171.3, "Exaflare", -104880, 86110, "With Vulnerability Up: the killing blow"),
         };
-        var deaths = new List<DeathEntry> { new(8, "H2", "Odette", 171.3, "Exaflare", 104880, 18770, false, recap) };
+        var deaths = new List<DeathEntry> { new(8, "H2", "Odette", 171.3, "Exaflare", 104880, 18770, false, recap, 97210) };
         return new MeterEncounter(pull, pull, "Example Arena", 1, ago, duration, live, ended, duration, "P2", 150, rows, party, deaths);
     }
 }

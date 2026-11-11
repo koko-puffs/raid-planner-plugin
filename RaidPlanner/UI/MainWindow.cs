@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private string? openFile;
 
     private DateTime dialogFailedAt;
+    private DateTime drawFailedAt;
 
     public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, PlanService plans, Uploads uploads, Fonts fonts)
         : base("Raid Planner###RaidPlannerMain")
@@ -192,6 +193,15 @@ public sealed partial class MainWindow : Window, IDisposable
                     Kit.Blocked = false;
                     DrawConfirm();
                 }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Said now and then, not every frame (Dalamud's own catch would log it sixty times a second).
+            if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
+            {
+                drawFailedAt = DateTime.UtcNow;
+                Services.Log.Error(ex, "Raid Planner's window couldn't draw");
             }
         }
         finally
@@ -364,7 +374,8 @@ public sealed partial class MainWindow : Window, IDisposable
                 close = true;
                 Later(c.OnYes);
             }
-            if (ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
+            // Escape is No, when the question has the keyboard (not an Escape meant for the game or another window).
+            if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
             Kit.Reserve(buttons, inner, Kit.ButtonHeight());
             Kit.PopBox();
             confirmCardH = Kit.At.Y - cardPos.Y + pad;

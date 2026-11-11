@@ -183,7 +183,18 @@ public static class Txt
                         spaces++;
                         j++;
                     }
-                    tokens.Add(new Token(word, r, word.Length == 0 ? 0 : ImGui.CalcTextSize(word).X, spaces * space));
+                    var ww = word.Length == 0 ? 0 : ImGui.CalcTextSize(word).X;
+                    // A word wider than a whole line (Japanese or Chinese have no spaces) is broken where it fills it.
+                    while (word.Length > 1 && ww > width)
+                    {
+                        var n = Format.Fitting(word, s => ImGui.CalcTextSize(s).X, width);
+                        if (n >= word.Length) break;
+                        var part = word[..n];
+                        tokens.Add(new Token(part, r, ImGui.CalcTextSize(part).X, 0));
+                        word = word[n..];
+                        ww = ImGui.CalcTextSize(word).X;
+                    }
+                    tokens.Add(new Token(word, r, ww, spaces * space));
                     i = j;
                 }
             }

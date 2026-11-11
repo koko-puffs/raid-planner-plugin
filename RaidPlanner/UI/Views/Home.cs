@@ -141,8 +141,7 @@ public sealed partial class MainWindow
         {
             new Kit.Fact("Casts", Format.Thousands(b.Casts)),
             new Kit.Fact("Markers", Format.Thousands(b.Markers)),
-            // The builder doesn't count tethers as it goes: the phase it's reached instead.
-            new Kit.Fact("Phase", $"P{Math.Max(1, b.Phase)}"),
+            new Kit.Fact("Tethers", Format.Thousands(b.TethersSeen)),
             config.RecordParty ? new Kit.Fact("Places", party.ToString(System.Globalization.CultureInfo.InvariantCulture), "×2 / s") : new Kit.Fact("Places", "Off", Color: Palette.Muted, Sans: true),
         });
         Kit.Gap(12);

@@ -182,11 +182,15 @@ public sealed class GameData
             ? Words.DutyName(place.Name.ExtractText())
             : "Unknown place";
 
-    /// <summary>A job's short name ("PLD") and role (1 tank, 2 melee, 3 ranged, 4 healer).</summary>
+    /// <summary>
+    /// A job's short name ("PLD") and role (1 tank, 2 melee, 3 ranged, 4 healer). Always the English
+    /// abbreviation, whatever the client's language: it goes into recordings and summaries, and the site
+    /// and the meter read jobs by these names.
+    /// </summary>
     public (string Job, byte Role) Job(uint classJob)
     {
         if (jobs.TryGetValue(classJob, out var known)) return known;
-        var result = Services.Data.GetExcelSheet<ClassJob>().TryGetRow(classJob, out var row)
+        var result = Services.Data.GetExcelSheet<ClassJob>(ClientLanguage.English).TryGetRow(classJob, out var row)
             ? (row.Abbreviation.ExtractText(), row.Role)
             : (string.Empty, (byte)0);
         jobs[classJob] = result;

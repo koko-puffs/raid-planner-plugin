@@ -138,8 +138,22 @@ public sealed class MeterWindow : Window
 
     public override void PreDraw()
     {
-        Decide();
-        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
+        try
+        {
+            Decide();
+        }
+        catch (Exception ex)
+        {
+            // Outside the window's own catch (before ImGui.Begin): a fault here would stop every window of the plugin drawing.
+            view = View.Nothing;
+            shown = null;
+            if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
+            {
+                drawFailedAt = DateTime.UtcNow;
+                Services.Log.Error(ex, "Raid Planner's meter couldn't read its numbers");
+            }
+        }
+        Flags =ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
         if (config.MeterLocked)
         {
             // Locked: no title bar, no moving or sizing; click-through, the mouse goes to the game.

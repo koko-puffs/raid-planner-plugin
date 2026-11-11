@@ -479,8 +479,8 @@ public static partial class Kit
 
     /// <summary>
     /// Opens a popup styled as the site's menu (`.menu`, raised #18181d, a white hairline at 12%, 14px
-    /// corners, 5.6px inside). Pair with <see cref="EndMenu"/> when true. Its faked shadow rings are
-    /// drawn by <see cref="MenuRings"/> once it knows its size.
+    /// corners, 5.6px inside), its shadow faked with rings round it (<see cref="Rings(ImDrawListPtr, Vector2, Vector2, float, float, float, float, float)"/>).
+    /// Pair with <see cref="EndMenu"/> when true.
     /// </summary>
     public static bool BeginMenu(string id)
     {
@@ -495,7 +495,12 @@ public static partial class Kit
         if (open)
         {
             Frame.Open.Push(true);
-            Rings(ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), S(Palette.RadiusLg), 6, 14);
+            // The rings go in the menu's own draw list, unclipped: on the background they'd sit under the
+            // window the menu opens over (all but hidden by its near-solid ground).
+            var dl = ImGui.GetWindowDrawList();
+            dl.PushClipRectFullScreen();
+            Rings(dl, ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), S(Palette.RadiusLg), 6, 14);
+            dl.PopClipRect();
         }
         return open;
     }
@@ -511,9 +516,12 @@ public static partial class Kit
     /// (`0 0 0 6px rgb(0 0 0/.25), 0 0 0 14px rgb(0 0 0/.12)` for menus and dialogs; 5 and 11 for
     /// windows), on the background, so they sit under every window.
     /// </summary>
-    public static void Rings(Vector2 min, Vector2 max, float radius, float inner, float outer, float innerAlpha = 0.25f, float outerAlpha = 0.12f)
+    public static void Rings(Vector2 min, Vector2 max, float radius, float inner, float outer, float innerAlpha = 0.25f, float outerAlpha = 0.12f) =>
+        Rings(ImGui.GetBackgroundDrawList(), min, max, radius, inner, outer, innerAlpha, outerAlpha);
+
+    /// <summary>The faked shadow's rings, in a draw list of your choosing (a menu's own, over the window under it).</summary>
+    public static void Rings(ImDrawListPtr dl, Vector2 min, Vector2 max, float radius, float inner, float outer, float innerAlpha = 0.25f, float outerAlpha = 0.12f)
     {
-        var dl = ImGui.GetBackgroundDrawList();
         var a = S(inner) / 2;
         var b = S(inner) + (S(outer) - S(inner)) / 2;
         dl.AddRect(min - new Vector2(a), max + new Vector2(a), Palette.U32(Palette.WithAlpha(Palette.Black, innerAlpha)), radius + a, ImDrawFlags.None, S(inner));

@@ -163,9 +163,9 @@ public class NewRecordingTests
         Assert.Equal(3, b.Phase);
         var events = b.Finish(70, Outcome.Wipe).Events.OfType<TargetEvent>().ToList();
         // 102 leaving the game is it going untargetable; 103 coming the first time is recorded.
-        Assert.True(events.Any(e => e.Actor == 102 && !e.On && e.T == 30));
-        Assert.True(events.Any(e => e.Actor == 103 && e.On && e.T == 38));
-        Assert.True(events.Any(e => e.Actor == 101 && e.On && e.T == 0));
+        Assert.Contains(events, e => e.Actor == 102 && !e.On && e.T == 30);
+        Assert.Contains(events, e => e.Actor == 103 && e.On && e.T == 38);
+        Assert.Contains(events, e => e.Actor == 101 && e.On && e.T == 0);
     }
 
     [Fact]
@@ -414,8 +414,8 @@ public class PlanJsonTests
         Assert.Equal(1, cues.Single(c => c.Action == 1).Step);
         Assert.Equal(0, cues.Single(c => c.Action == 2).Step);
         // Its phase is gone: the cue goes too, even with a step number in range.
-        Assert.False(cues.Any(c => c.Action == 3));
-        Assert.False(cues.Any(c => c.Action == 4));
+        Assert.DoesNotContain(cues, c => c.Action == 3);
+        Assert.DoesNotContain(cues, c => c.Action == 4);
         // No phase at all: its step number.
         Assert.Equal(1, cues.Single(c => c.Action == 5).Step);
     }

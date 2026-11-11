@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
+using RaidPlanner.UI.Model;
 using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
@@ -94,6 +96,20 @@ public static class PlanBoard
         }
     }
 
+    /// <summary>A custom arena's outlines, each cut into triangles once (indices into its points) and kept with it.</summary>
+    private static readonly ConditionalWeakTable<float[], int[]> Cut = new();
+
+    /// <summary>The triangles of an outline's first <paramref name="n"/> points (board units: the cut doesn't depend on the board's size).</summary>
+    private static int[] TrianglesOf(float[] outline, int n)
+    {
+        if (Cut.TryGetValue(outline, out var tris)) return tris;
+        var pts = new Vector2[n];
+        for (var i = 0; i < n; i++) pts[i] = new Vector2(outline[i * 2], outline[i * 2 + 1]);
+        tris = Polygon.Triangulate(pts);
+        Cut.AddOrUpdate(outline, tris);
+        return tris;
+    }
+
     private static void DrawArena(ImDrawListPtr dl, Vector2 c, float k, float unit, PlanArena arena, bool thumb)
     {
         var floorColor = arena.Color == PlanArena.Default.Color || arena.Color == 0x2a2a2f ? Palette.Floor : Palette.Hex(arena.Color);
@@ -140,13 +156,21 @@ public static class PlanBoard
             case "custom":
             {
                 Span<Vector2> pts = stackalloc Vector2[PlanJson.MaxOutlinePoints];
+                var fill = Palette.U32(Palette.WithAlpha(floorColor, 0.6f));
+                var uv = ImGui.GetFontTexUvWhitePixel();
                 foreach (var outline in arena.Outlines)
                 {
                     var n = Math.Min(outline.Length / 2, pts.Length);
                     if (n < 3) continue;
                     for (var i = 0; i < n; i++) pts[i] = c + new Vector2(outline[i * 2], outline[i * 2 + 1]) * k;
-                    // A floor where the outline is convex enough to fill; its edge either way.
-                    dl.AddConvexPolyFilled(ref pts[0], n, Palette.U32(Palette.WithAlpha(floorColor, 0.6f)));
+                    // Its floor, from the outline cut into triangles once (it may be concave: an L, a cross,
+                    // which ImGui's convex fill would spill out of), then its edge.
+                    var tris = TrianglesOf(outline, n);
+                    if (tris.Length >= 3)
+                    {
+                        dl.PrimReserve(tris.Length, tris.Length);
+                        foreach (var t in tris) dl.PrimVtx(pts[t], uv, fill);
+                    }
                     dl.AddPolyline(ref pts[0], n, edgeCol, ImDrawFlags.Closed, edgeW);
                 }
                 break;

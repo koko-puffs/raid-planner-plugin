@@ -140,6 +140,20 @@ public class UiFormatTests
     }
 
     [Fact]
+    public void A_word_wider_than_a_line_breaks_where_it_fills_it()
+    {
+        // Japanese has no spaces: a step's callout is one "word", and still wraps (it was cut on its first line).
+        var ja = "中央で待機して最初の波を抜ける";
+        Assert.Equal(new[] { "中央で待機して", "最初の波を抜け", "る" }, Format.Wrap(ja, Ten, 70));
+        // At most two lines: the rest goes on the last, joined again without a space, and is cut.
+        Assert.Equal(new[] { "中央で待機して", "最初の波を抜…" }, Format.Wrap(ja, Ten, 70, 2));
+        // A long word among others: broken, and the words after it go on as usual.
+        Assert.Equal(new[] { "Go", "abcdefghij", "klm now" }, Format.Wrap("Go abcdefghijklm now", Ten, 100));
+        // A pair of surrogates isn't split.
+        Assert.All(Format.Wrap("𠀋𠀋𠀋𠀋", Ten, 30), l => Assert.False(l.Length > 0 && char.IsLowSurrogate(l[0])));
+    }
+
+    [Fact]
     public void Errors_said_as_a_headline_and_a_line()
     {
         Assert.Equal(("Couldn't reach the site", "Check your connection."), Format.Headline("Couldn't reach the site. Check your connection."));
@@ -277,7 +291,7 @@ public class MeterViewTests
     private static MeterEncounter Fight(int id, int pull, uint content, double started, double duration, bool live = false, Outcome? ended = Outcome.Wipe) =>
         new(id, pull, "Arena " + content, content, started, duration, live, live ? null : ended, duration, "P2", duration - 41,
             new[] { Row(1, "MT", 15210, 15210, 2310, 3_912_400, you: true), Row(2, "M1", 27840, 28046, 410, 1_086_900), Row(3, "H2", 9050, 10289, 4120, 1_324_700, dead: true),
-                Row(0, "LB", 7000, 0, 0, 0, lb: true) },
+                Row(-1, "LB", 7000, 0, 0, 0, lb: true) },
             Row(0, "", 165000, 165000, 19410, 13_103_000), Array.Empty<DeathEntry>());
 
     [Fact]
@@ -299,7 +313,10 @@ public class MeterViewTests
         Assert.Equal("27,840", MeterView.ValueText(m1, MeterTab.Damage, MeterRank.EncDps));
         Assert.Equal("28,046", MeterView.ValueText(m1, MeterTab.Damage, MeterRank.Dps));
         Assert.Equal("3,912,400", MeterView.ValueText(e.Rows[0], MeterTab.Taken, MeterRank.EncDps));
-        Assert.Equal("3.91M", MeterView.ValueText(e.Rows[0], MeterTab.Taken, MeterRank.EncDps, narrow: true));
+        // The small meter's 66px column takes a total whole up to ten million (the mock-up's "3,912,400"), then shortened.
+        Assert.Equal("3,912,400", MeterView.ValueText(e.Rows[0], MeterTab.Taken, MeterRank.EncDps, narrow: true));
+        Assert.Equal("13.1M", MeterView.ValueText(Row(9, "OT", 0, 0, 0, 13_103_000), MeterTab.Taken, MeterRank.EncDps, narrow: true));
+        Assert.Equal("13,103,000", MeterView.ValueText(Row(9, "OT", 0, 0, 0, 13_103_000), MeterTab.Taken, MeterRank.EncDps));
         Assert.Equal("27.8", MeterView.Second(m1, MeterTab.Damage));
         Assert.Equal("25%", MeterView.Second(m1, MeterTab.Healing));
         Assert.Equal(("ENCDPS", "%"), MeterView.Heads(MeterTab.Damage, MeterRank.EncDps));
@@ -331,6 +348,38 @@ public class MeterViewTests
     }
 
     [Fact]
+    public void The_small_meters_rows_are_worked_out_once_with_their_words_and_bars()
+    {
+        var e = Fight(1, 12, 1, 0, 191, true);
+        var (rows, lb) = MeterView.Lines(e, MeterTab.Damage, MeterRank.EncDps);
+        Assert.Equal(new[] { "M1", "MT", "H2" }, rows.Select(l => l.Row.Slot));
+        Assert.Equal(new[] { "27,840", "15,210", "9,050" }, rows.Select(l => l.Value));
+        Assert.Equal("27.8", rows[0].Second);
+        Assert.Equal(1f, rows[0].Bar);
+        Assert.Equal(15210f / 27840f, rows[1].Bar, 4);
+        // Ids are unique (each row's hit-test), the limit break's apart from any member's.
+        Assert.Equal(rows.Count + 1, rows.Select(l => l.Id).Append(lb!.Id).Distinct().Count());
+        Assert.True(lb.Row.IsLimitBreak);
+        Assert.Equal(-1, lb.Row.PartyId);
+        Assert.Equal("7,000", lb.Value);
+        Assert.Equal(7000f / 27840f, lb.Bar, 4);
+        // The limit break has a row only on the Damage tab; the others rank by their own number.
+        var (heal, none) = MeterView.Lines(e, MeterTab.Healing, MeterRank.EncDps);
+        Assert.Null(none);
+        Assert.Equal(new[] { "H2", "MT", "M1" }, heal.Select(l => l.Row.Slot));
+        Assert.Equal("25%", heal[0].Second);
+    }
+
+    [Fact]
+    public void A_stopped_meter_says_why_without_saying_it_stopped_twice()
+    {
+        Assert.Equal("What it reads from the game made no sense, so the game has probably moved something.",
+            MeterView.StoppedLine("The meter has stopped: what it reads from the game made no sense, so the game has probably moved something."));
+        Assert.Equal("Something else.", MeterView.StoppedLine("Something else."));
+        Assert.Equal("An update to the plugin should bring it back.", MeterView.StoppedLine("The meter has stopped."));
+    }
+
+    [Fact]
     public void Pace_bar_puts_the_bigger_at_the_full_width()
     {
         Assert.Equal((1f, 0.5f), MeterView.PaceBar(new PaceLine(4, PaceAgainst.Best, "P2", 41, 200, 100, 1)));
@@ -359,6 +408,22 @@ public class PullViewTests
         };
         Assert.Equal(new[] { 0d, 160 }, PullView.PhaseStarts(events));
         Assert.Equal(new[] { 0d }, PullView.PhaseStarts(Array.Empty<TargetEvent>()));
+    }
+
+    [Fact]
+    public void The_recording_box_counts_each_tether_put_on()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", _ => null);
+        Assert.Equal(0, b.TethersSeen);
+        b.Tethers(10, new[] { (101, 2, 84u) });
+        b.Tethers(11, new[] { (101, 2, 84u) });
+        Assert.Equal(1, b.TethersSeen);
+        b.Tethers(12, new[] { (101, 2, 84u), (101, 3, 84u) });
+        b.Tethers(13, Array.Empty<(int, int, uint)>());
+        b.Tethers(14, new[] { (101, 2, 84u) });
+        Assert.Equal(3, b.TethersSeen);
+        // As a pull's screen counts them from the file: each one put on.
+        Assert.Equal(3, PullView.Build(b.Finish(20, Outcome.Wipe)).Tethers);
     }
 
     [Fact]
