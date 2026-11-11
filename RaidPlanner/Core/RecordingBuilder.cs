@@ -381,9 +381,11 @@ public sealed class RecordingBuilder
     }
 
     /// <summary>
-    /// A DoT or HoT tick: on whom, credited to whom (0 when the game didn't say). A damage tick on a party
-    /// member with its status known can be what killed them (<see cref="DeathEvent.ByStatus"/>), with
-    /// their HP before it when known (<paramref name="hpBefore"/>, −1 not: a tick as big as it could kill).
+    /// A DoT or HoT tick: on whom, credited to whom (0 when the game didn't say), and the HP the one it
+    /// ticked on had before it when the game side read it (<paramref name="hpBefore"/>, −1 not; kept in
+    /// the row, <c>combat.tick.h</c>: a HoT's overheal is measured against it). A damage tick on a party
+    /// member with its status known can be what killed them (<see cref="DeathEvent.ByStatus"/>): one as
+    /// big as the HP they had could kill.
     /// </summary>
     public void CombatTick(double t, int on, int source, uint status, long amount, bool heal, long hpBefore = -1)
     {
@@ -395,7 +397,7 @@ public sealed class RecordingBuilder
         }
         if (combat.Ticks.Count >= CombatLog.MaxRows) return;
         if (status != 0) RememberStatus(status);
-        combat.Ticks.Add(new TickRow(t, on, source, status, amount, heal));
+        combat.Ticks.Add(new TickRow(t, on, source, status, amount, heal, hpBefore < 0 ? -1 : hpBefore));
     }
 
     /// <summary>A party member began a cast (back-dated to when it began): known as finished when their action goes off, cancelled otherwise.</summary>

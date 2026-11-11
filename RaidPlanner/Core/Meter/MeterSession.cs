@@ -20,9 +20,11 @@ public readonly record struct PartyState(uint Id, string Name, string Job, byte 
 /// enemy, or the enemy's on the party; a DoT's tick never starts one), with the party's heals and
 /// shields from the second before folded in. It ends when nobody in the party has been in combat for
 /// <see cref="EndAfter"/> seconds (<c>Ended</c>), when the whole party is down (<c>Wipe</c>), when the
-/// duty says wiped or completed, or on leaving the zone. Its length runs from the first hit to the
-/// last damage or death. Phases are the recording's rule (<see cref="PhaseClock"/>), from the
-/// enemies' targetability the game side reports.
+/// duty says wiped or completed, or on leaving the zone. Its length (what ENCDPS, HPS and damage taken
+/// a second are over) runs from that first damage to the end: a wipe's last death, else the last damage
+/// between the party and an enemy, ticks included (ACT's convention): the one rule the summary's
+/// <c>stats.len</c> and the site's numbers follow too (<see cref="PullStats.Length"/>). Phases are the
+/// recording's rule (<see cref="PhaseClock"/>), from the enemies' targetability the game side reports.
 /// </summary>
 public sealed class MeterSession : IMeterSource, ICombatSink
 {
@@ -188,6 +190,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         if (last.Outcome is Outcome.Ended && now - last.EndedAt <= LateOutcome)
         {
             last.Outcome = how;
+            last.End = last.EndOf();
             last.MarkWipe();
             last.Changed();
             kept = null;
@@ -200,9 +203,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private void End(Outcome how)
     {
         if (live is not { } f) return;
-        f.End = Math.Max(f.Start, Math.Max(f.LastEvent, f.LastDeath));
-        f.EndedAt = now;
         f.Outcome = how;
+        f.End = f.EndOf();
+        f.EndedAt = now;
         f.MarkWipe();
         f.Changed();
         live = null;
@@ -476,6 +479,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         }
 
         public bool IsLive => double.IsNaN(End);
+
+        /// <summary>When it ended, by its outcome: a wipe at its last death, else at the last damage between the party and an enemy.</summary>
+        public double EndOf() => Math.Max(Start, Outcome == Core.Outcome.Wipe && Deaths.Count > 0 ? LastDeath : LastEvent);
 
         public double Duration(double now) => Math.Max(0, (IsLive ? now : End) - Start);
 

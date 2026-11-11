@@ -99,8 +99,9 @@ own function first and changes nothing):
 - **`PacketDispatcher.HandleActorControlPacket`**, category 34: a head marker over someone (its
   icon number, read after the game has unscrambled it, as BossMod reads it); since 0.3.0 category
   23, a DoT's or HoT's tick (its target, status, 3 damage or 4 a heal, amount and source, in the
-  order of FFXIVClientStructs' `StatusManager.ProcessHotDot`), to the parser: the combat block's
-  `tick`, and a bleed's status as a death's cause.
+  order of FFXIVClientStructs' `StatusManager.ProcessHotDot`), with the target's HP read for a heal
+  or a party member, to the parser: the combat block's `tick` (that HP its `h`), and a bleed's
+  status as a death's cause.
 - **`PacketDispatcher.HandleMapEffectPacket`**: the arena changing (its index and state, as one
   number: the state in the low half, the second half above it, as ACT logs and BossMod's modules
   compare). The game also sends several at once through three handlers FFXIVClientStructs doesn't
@@ -148,7 +149,8 @@ their cap), each table at most 200,000 rows: `fx`, each of the party's action ef
 heals with the recipient's HP before, a shield put on, a status put on with nothing else; pets'
 credited to their owner and flagged, a limit break flagged, a reflection credited to the tank it
 came from, a lifesteal on its caster); `tick`, DoT and HoT ticks (on the party, the party's, and on
-an enemy in the recording from no one the game named; another player's on an enemy isn't kept);
+an enemy in the recording from no one the game named; another player's on an enemy isn't kept),
+each with the HP before it the hook read (a HoT's target's, a party member's);
 `cast`, the party's casts; `st`, the statuses the party put on anyone (buffs, DoTs, Reprisal on the
 boss). About 15 to 25 KB a minute in an eight-player raid.
 
@@ -192,15 +194,17 @@ when it has nothing, so older readers read on as before):
   or changing stacks (`gain` stays true for older readers; not a new gain); `on` can be an actor.
 - `death`: `byStatus: true` when `by` is a status (a lethal tick).
 - `combat` (above): `{ "v": 1, "fx": { "t", "a", "o", "r", "v", "k", "h" }, "tick": { "t", "on", "src",
-  "s", "v", "heal" }, "cast": { "t", "src", "a", "dur", "x" }, "st": { "t", "on", "src", "s", "a", "dur",
+  "s", "v", "heal", "h" }, "cast": { "t", "src", "a", "dur", "x" }, "st": { "t", "on", "src", "s", "a", "dur",
   "n", "gain" }, "thinned": [ ... ] }`: columns of equal length; `t` in centiseconds from the row
   before (the first from the pull; written in time order, so never below 0); `k` the kind in its low
   3 bits (1 damage, 2 heal, 3 shield, 4 status only) and flags above (8 crit, 16 direct hit, 32 a
   pet's, 64 limit break, 128 reflected, 256 on the caster); `o` the party member credited; `r` the
   recipient (party or actor id, 0 not in the recording); `h` the recipient's HP before a heal (−1
   otherwise); a tick's `src` the party member credited, an enemy's actor id for a bleed, 0 when the
-  game didn't say; `x` 1 for a cast cancelled; `gain` 1 or 0. A table dropped to fit the site's limit
-  is left out and named in `thinned`.
+  game didn't say, and its `h` (since the alignment round; optional: a file without it reads as all
+  −1) the HP of the one it ticked on just before it, as the hook read it (a HoT's target's, a party
+  member's; −1 otherwise); `x` 1 for a cast cancelled; `gain` 1 or 0. A table dropped to fit the
+  site's limit is left out and named in `thinned`.
 
 `Recording.Parse` reads all of it back leniently: a hit's lists not as long as its targets, or a
 combat table whose columns aren't all arrays of the same length, are left out; a value that isn't a
@@ -296,12 +300,18 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
 - `stats` (at most 6 KB): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
   recording's order (the party list's), each with its spot: `dmg` (their damage, their pets' and DoTs' included; a tick the game sent without saying
   whose is shared between the party's DoTs on the target then, as the meter does), `heal` (what their
-  heals restored: the heal less what went past the HP missing then; a HoT's from the frames' HP),
+  heals restored: the heal less what went past the HP missing then; a HoT's tick against the HP read
+  as it ticked, its row's `h`, or in a file from before that the last frame's),
   `over`, `taken` (enemy hits and bleeds), `crit` and `dh` (of their direct hits, 0–1), `active`
   (seconds from their first damage to their last), `deaths` (not counting the wipe: a wiped pull's
   deaths within 6 seconds of its last), `dd` and `vuln` (damage downs and vulnerability ups gained,
   with their stacks: a new one counts its stacks, one put on again the stacks it gained or 1).
-  `lb`, the limit break's damage. `hits`, the enemies' hits on the party (autos left out: "Attack",
+  `lb`, the limit break's damage. `len` (since the alignment round; left out with no damage to
+  measure by), the fight's length in seconds (two decimals) the numbers are over, the meter's rule
+  (below): from the first damage between the party and an enemy (either way; a tick never starts
+  it) to a wipe's last death, else to the last damage between them, ticks included; the site works
+  each spot's ENCDPS out over it (the server keeps it once its `…_rp_stats_len` migration is in).
+  `hits`, the enemies' hits on the party (autos left out: "Attack",
   "Auto-attack" and "Shot", as the site's `AUTO_ATTACK` names them; and a single target's hit on
   someone not a tank, unless it's a cast buster; 400 at most) as `[deciseconds, action, slot mask, damage]`, the mask's
   bit i the i-th of `slots`, only those it landed on (a miss, a dodge or an invulnerable target isn't
@@ -314,15 +324,20 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   failures: tankbusters put them on the tanks on purpose).
 
 The site reads these as the meter means them, and works the same numbers out from the pull's
-recording by the same rules (Review); `AlignmentTests` (`RaidPlanner.Tests/AlignmentTests.cs`) builds
+recording by the same rules (Review); `AlignmentTests` (`RaidPlanner.Tests/AlignmentTests.cs`) plays
 a whole pull with every kind of number in it (a party listed out of spot order, DoTs with ticks that
 named no one, a HoT, a shield, misses, dodges and an invulnerability, stacks of Vulnerability Up, a
-bleed, an instant death and a wipe) and, with `RP_ALIGN_OUT` set to the site's
-`src/features/raid-planner/model/__fixtures__` folder, writes it and its summary there
-(`align.raidrec.json`, `align.summary.json`) for the site's `alignment.spec.ts`, which checks each
-spot's numbers, the boss's HP, the phases, the deaths, the debuffs and the fails both ways. Write
-them again when the summary or the file changes (as `RP_FIXTURE_OUT` writes the shared
-`sample.raidrec.json`).
+bleed, an instant death and a wipe) through the plugin as the game does (the game's messages read by
+the combat parser, the meter's session and the recording's `RecordingSink` listening, the game's
+status lists read each frame for the recording and the parser alike), checks that the meter after
+the fight reads as the summary (every spot's damage, healing, overheal, taken, deaths, crit and
+direct hit rates, active time, ENCDPS, HPS and DPS, the limit break, the length and the deaths) and,
+with `RP_ALIGN_OUT` set to the site's `src/features/raid-planner/model/__fixtures__` folder, writes
+the recording, its summary and the meter's numbers there (`align.raidrec.json`, `align.summary.json`,
+`align.meter.json`) for the site's `alignment.spec.ts`, which checks the meter's, Review's and
+Progress's numbers against each other (amounts exactly, the length to the hundredth, rates to a
+billionth). Write them again when the summary, the file or the meter changes (as `RP_FIXTURE_OUT`
+writes the shared `sample.raidrec.json`).
 
 No names. The
 summary is made on the worker that writes the pull, so it's there whatever happens to the file.
@@ -644,10 +659,18 @@ action whose ActionCategory is 9 or 15 is a limit break, flagged. The party is t
 entity ids (just you alone), read four times a second. Damage between party members isn't kept,
 nor anything between two others; a barrier (a status named on `CombatLists.ShieldNames`, found on the
 English Status sheet) is a shield put on, never healing. A tick (actor control 23) goes to the party
-member the game names (a pet's owner); one that names no one, on an enemy, is shared evenly between
-the party members with a DoT (`CombatLists.DotNames`) put on it within the last minute, and marked
-estimated; another player's is never the party's. Nonsense is dropped and counted: a hit or a heal
-over five million that isn't a limit break. A heal landing on an enemy (a combatant no one owns that
+member the game names (a pet's owner); a damage tick that names no one, on an enemy, is shared
+between the party members with one of the jobs' DoTs (`CombatLists.DotNames`) on it then (the tick's
+own status when it names one): a whole share each, the remainder to the first in the party list (the
+recording's lowest party id), marked estimated; with nobody to share it, it's nobody's; a HoT's tick
+that names no one is nobody's; another player's is never the party's. Which DoTs are on whom is what
+the game's status lists say (`CombatParser.StatusOn`): the recorder reads every enemy's list each
+frame of a pull (for the recording's `combat.st` and the parser at once), and with no pull going
+and the meter listening, every enemy's four times a second in combat; a DoT is on from the read
+that first has it to the read of its target that no longer does (an enemy out of sight keeps
+its own, for a minute). The summary and the site share a tick by the same rows (`combat.st`), so all
+three agree. Nonsense is dropped and counted: a hit or a heal over five million that isn't a limit
+break. A heal landing on an enemy (a combatant no one owns that
 the game calls hostile) is dropped too, never the party's healing, but isn't nonsense: an enemy that
 absorbs an element (as some of Eureka's do) is healed by the party's attacks. A FATE's escort or a
 quest's ally isn't an enemy, and healing it is healing.
@@ -657,9 +680,12 @@ way (a DoT's tick never starts one); in combat before it, the meter is _waiting_
 shields and statuses in the second before are folded in. It ends when nobody in the party has been
 in combat for _A fight ends after_ (4 seconds unless set), when the whole party is down (a wipe), when
 the duty says wiped or completed (said within 15 seconds after it ended, it still sets how), or on
-leaving the zone, logging out, or the meter going off. Its length runs from its first hit to its
-last damage or death. An encounter during a recorded pull takes the pull's number; else they're
-numbered from 1 in each zone. The last _Keep the last_ (20) are kept for the session, newest first.
+leaving the zone, logging out, or the meter going off. Its length (what ENCDPS, HPS and damage taken
+a second are over) runs from that first damage to its end: a wipe's last death, else the last damage
+between the party and an enemy, ticks included (ACT's convention); a wipe the duty calls a moment
+after it ended takes its last death as its end. The summary's `stats.len` and the site's numbers
+(Review's and Progress's) use the same rule (`PullStats.Length`). An encounter during a recorded
+pull takes the pull's number; else they're numbered from 1 in each zone. The last _Keep the last_ (20) are kept for the session, newest first.
 
 **The numbers**, for each party member and the limit break (its own row, never anyone's damage; the
 party's row is the sum of the rows, the limit break's included):
@@ -671,9 +697,10 @@ party's row is the sum of the rows, the limit break's included):
   Crit and direct hit rates are shares of their direct hits (the game's tick doesn't say whether it
   crit); the max hit is their biggest single one.
 - **Healing**: what each heal (and HoT tick) restored: the heal less its **overheal**, what went past
-  the HP the target was missing when the heal was announced (it reads a little high when a hit is on
-  its way, as ACT's does). HPS is that over the encounter; overheal % is overheal over all healed.
-  Shields aren't healing; lifesteal goes to whoever drew it; MP never.
+  the HP the target was missing when the heal was announced, or the tick came (it reads a little
+  high when a hit is on its way, as ACT's does; the recording keeps a tick's HP, `combat.tick.h`, so
+  the summary and the site measure a HoT's tick the same). HPS is that over the encounter's length;
+  overheal % is overheal over all healed. Shields aren't healing; lifesteal goes to whoever drew it; MP never.
 - **Taken**: every enemy hit (or instant death) on them and every damage tick on them (bleeds, the
   boss's DoTs), as the game took it off (mitigation already in); a miss or an invulnerable hit is
   nothing.
@@ -877,7 +904,12 @@ preview` shows a made-up fight in it (again to stop).
 - **Progress carries more**: each pull's summary has the boss's HP left, when each phase began, and
   each spot's damage, healing, overheal, damage taken, crit and direct hit rates, active time,
   deaths (the wipe's left out), damage downs and vulnerability ups, with the enemies' hits on the
-  party, so the site can chart them across every pull.
+  party, so the site can chart them across every pull, and the fight's length the numbers are over.
+- **The same pull reads the same** in the meter after the fight, in the site's Review and in its
+  Progress tab: one length for ENCDPS, HPS and damage taken a second (the first damage to a wipe's
+  last death, else the last damage); a tick that named no one shared by the game's status lists
+  (the DoTs on the target then, the remainder to the first in the party), never by when a DoT was put
+  on; and a HoT's overheal against the HP the game had as it ticked, which recordings now keep.
 - Fixed: the Party fact cut to "Where th…"; the info bar's tooltip promising a send; plan names
   zig-zagging in the plans menu; links that didn't look like links; a bad token read like the
   instructions; rows off without saying why, or looking on when off; the token row 4px wider than

@@ -19,8 +19,14 @@ namespace RaidPlanner.Core.Meter;
 /// - Damage is types 3, 5 and 6; heals type 4 (its crit in another byte); MP is never healing;
 ///   a barrier (a shield status) is never healing either.
 /// - Damage between party members, and anything between two others, isn't kept.
-/// - A tick is credited to the party member the game names (a pet's owner); when it names no one, it's
-///   shared out between the party's DoTs known to be on the target, and marked estimated.
+/// - A tick is credited to the party member the game names (a pet's owner); a damage tick on an enemy
+///   that names no one is shared out between the party members with one of the jobs' DoTs on the target
+///   then (the tick's own status when it names one), a whole share each and the remainder to the first
+///   in the party list, and marked estimated; with nobody to share it, it's nobody's. Which DoTs are on
+///   whom is what the game's status lists say, read by the game side (<see cref="BeginStatuses"/> …
+///   <see cref="EndStatuses"/>; every frame of a pull, in the same reads the recording's <c>combat.st</c>
+///   rows are made from, so the meter, the summary and the site share a tick alike; four times a second
+///   otherwise). A HoT's tick that names no one is nobody's.
 /// - Nonsense (a single non-limit-break hit or heal over <see cref="Absurd"/>) is dropped and counted
 ///   in <see cref="Anomalies"/>: the game has moved something the parser reads. A heal landing on an
 ///   enemy is dropped (never the party's healing) but isn't nonsense: an enemy that absorbs an element
@@ -28,7 +34,10 @@ namespace RaidPlanner.Core.Meter;
 /// </summary>
 public sealed class CombatParser
 {
-    /// <summary>How long a DoT put on an enemy is remembered for sharing out a tick that names no one (seconds).</summary>
+    /// <summary>
+    /// How long the action that put a status on is remembered (seconds): what a DoT's ticks are named after when
+    /// its status isn't in the game's lists (sharing goes by the lists, <see cref="StatusOn"/>).
+    /// </summary>
     public const double DotMemory = 60;
 
     /// <summary>A single hit bigger than this that isn't a limit break can't be right.</summary>
@@ -49,6 +58,13 @@ public sealed class CombatParser
     private readonly List<(uint, uint, uint)> stale = new();
     private readonly TickShare[] shares = new TickShare[MostParty];
     private readonly uint[] sharers = new uint[MostParty];
+
+    // The party's DoTs on enemies as the game's status lists show them, by (on, status, party member)
+    // with when each was first seen and last seen; those seen this frame, and whose lists were read this frame.
+    private readonly Dictionary<(uint On, uint Status, uint Member), (double Seen, double Last)> dots = new();
+    private readonly HashSet<(uint On, uint Status, uint Member)> dotsSeen = new();
+    private readonly HashSet<uint> dotsRead = new();
+    private readonly List<(uint On, uint Status, uint Member)> dotsGone = new();
 
     /// <param name="category">An action's ActionCategory row (limit breaks are 9 and 15).</param>
     /// <param name="isShield">Is a status a barrier (<see cref="CombatLists.ShieldNames"/>)?</param>
@@ -82,13 +98,16 @@ public sealed class CombatParser
                 party[partyCount++] = id;
     }
 
-    public bool IsParty(uint id)
+    public bool IsParty(uint id) => PartyIndex(id) >= 0;
+
+    /// <summary>Where someone is in the party list (0 first), −1 for someone not in it.</summary>
+    public int PartyIndex(uint id)
     {
-        if (id == 0) return false;
+        if (id == 0) return -1;
         for (var i = 0; i < partyCount; i++)
             if (party[i] == id)
-                return true;
-        return false;
+                return i;
+        return -1;
     }
 
     /// <summary>The party member an actor stands for: itself, or its owner (a pet, a summon); 0 for none.</summary>
@@ -132,6 +151,60 @@ public sealed class CombatParser
 
     /// <summary>The action that put a status on someone (0 when not known): what a DoT's ticks are named after.</summary>
     public uint ActionFor(uint on, uint status, uint member) => applied.TryGetValue((on, status, member), out var a) ? a.Action : 0;
+
+    // ---------------------------------------------------------------------------------------------
+    // The party's DoTs on enemies, from the game's status lists (the game side reads them every frame
+    // a pull is recorded, as it reads them for the recording's combat.st, and otherwise four times a
+    // second while the meter listens in combat): BeginStatuses, StatusesOf for each whose list is
+    // read, StatusOn for each status on them a party member (or their pet) put on, then EndStatuses.
+    // A DoT is on from the frame it's first seen to the frame a read of its target no longer has it,
+    // just as the recording's rows say it's gained and gone.
+
+    /// <summary>A frame's reading of statuses begins.</summary>
+    public void BeginStatuses()
+    {
+        dotsSeen.Clear();
+        dotsRead.Clear();
+    }
+
+    /// <summary>Someone whose statuses are read this frame (someone not read, out of sight, keeps theirs).</summary>
+    public void StatusesOf(uint on) => dotsRead.Add(on);
+
+    /// <summary>
+    /// A status on <paramref name="on"/> that party member <paramref name="member"/> (or their pet) put on,
+    /// seen this frame at <paramref name="t"/>. Only the jobs' DoTs on someone outside the party are kept.
+    /// </summary>
+    public void StatusOn(double t, uint on, uint status, uint member)
+    {
+        if (on == 0 || status == 0 || member == 0 || !isDot(status) || IsParty(on)) return;
+        var key = (on, status, member);
+        dotsSeen.Add(key);
+        dots[key] = (dots.TryGetValue(key, out var had) ? had.Seen : t, t);
+    }
+
+    /// <summary>
+    /// The frame's statuses are read: a DoT not seen on someone whose list was read is gone. One on
+    /// someone not read for <see cref="DotMemory"/> (gone from sight for good: no DoT lasts that long) is
+    /// forgotten too, so a long session in one zone doesn't keep every enemy it ever fought.
+    /// </summary>
+    public void EndStatuses(double t)
+    {
+        if (dots.Count == 0) return;
+        dotsGone.Clear();
+        foreach (var (key, when) in dots)
+            if (!dotsSeen.Contains(key) && (dotsRead.Contains(key.On) || t - when.Last > DotMemory))
+                dotsGone.Add(key);
+        foreach (var key in dotsGone) dots.Remove(key);
+    }
+
+    /// <summary>Is a party member's DoT on someone now (as the game's lists last said)? With <paramref name="status"/> 0, any of theirs.</summary>
+    public bool DotOn(uint on, uint member, uint status = 0)
+    {
+        foreach (var key in dots.Keys)
+            if (key.On == on && key.Member == member && (status == 0 || key.Status == status))
+                return true;
+        return false;
+    }
 
     /// <summary>An action went off (only actions, type 1, are read).</summary>
     public void Action(EffectBatch b)
@@ -275,11 +348,22 @@ public sealed class CombatParser
         foreach (var sink in sinks) sink.Tick(e, shares.AsSpan(0, n));
     }
 
-    /// <summary>A member's latest DoT on a target (its status and action), for naming a tick that came without its status.</summary>
+    /// <summary>
+    /// A member's latest DoT on a target (its status and the action that put it on), for naming a tick
+    /// that came without its status: the one on it now first seen last (the game's lists), else the last
+    /// they put on it in the last minute (their actions' effects).
+    /// </summary>
     private (uint Status, uint Action) LatestDot(uint target, uint member, double t)
     {
         (uint, uint) best = (0, 0);
         var at = double.NegativeInfinity;
+        foreach (var (key, when) in dots)
+        {
+            if (key.On != target || key.Member != member || when.Seen <= at) continue;
+            at = when.Seen;
+            best = (key.Status, ActionFor(target, key.Status, member));
+        }
+        if (at > double.NegativeInfinity) return best;
         foreach (var (key, value) in applied)
         {
             if (key.On != target || key.Member != member || !isDot(key.Status) || t - value.At > DotMemory || value.At <= at) continue;
@@ -289,22 +373,35 @@ public sealed class CombatParser
         return best;
     }
 
-    /// <summary>A tick that named no one, shared out evenly between the party members with a DoT on the target.</summary>
+    /// <summary>
+    /// A damage tick on an enemy that named no one, shared out between the party members with one of the
+    /// jobs' DoTs on it now (the tick's status when it names one), as the game's lists say: a whole share
+    /// each, the remainder to the first in the party list (the recording's lowest party id), so the
+    /// shares add up to the tick. None (nobody's) when no one has.
+    /// </summary>
     private int Share(double t, uint target, uint status, long amount)
     {
         var count = 0;
-        foreach (var (key, value) in applied)
+        foreach (var key in dots.Keys)
         {
-            if (key.On != target || !isDot(key.Status) || (status != 0 && key.Status != status) || t - value.At > DotMemory) continue;
+            if (key.On != target || (status != 0 && key.Status != status) || !IsParty(key.Member)) continue;
             if (Array.IndexOf(sharers, key.Member, 0, count) >= 0 || count >= sharers.Length) continue;
             sharers[count++] = key.Member;
         }
         if (count == 0) return 0;
+        // In the party list's order (a few at most: an insertion sort, nothing allocated).
+        for (var i = 1; i < count; i++)
+        {
+            var m = sharers[i];
+            var at = PartyIndex(m);
+            var j = i - 1;
+            for (; j >= 0 && PartyIndex(sharers[j]) > at; j--) sharers[j + 1] = sharers[j];
+            sharers[j + 1] = m;
+        }
         var each = amount / count;
         for (var i = 0; i < count; i++)
         {
             var (s, action) = status != 0 ? (status, ActionFor(target, status, sharers[i])) : LatestDot(target, sharers[i], t);
-            // The remainder to the first, so the shares add up to the tick.
             shares[i] = new TickShare(sharers[i], i == 0 ? amount - each * (count - 1) : each, s, action, true);
         }
         return count;
@@ -320,5 +417,9 @@ public sealed class CombatParser
     }
 
     /// <summary>Forget the statuses remembered (a new zone).</summary>
-    public void Forget() => applied.Clear();
+    public void Forget()
+    {
+        applied.Clear();
+        dots.Clear();
+    }
 }

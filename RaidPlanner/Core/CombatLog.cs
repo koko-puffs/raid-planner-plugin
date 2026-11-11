@@ -9,8 +9,13 @@ namespace RaidPlanner.Core;
 /// <summary>One of the party's action effects (<c>combat.fx</c>): time, action, origin (party id), recipient (party or actor id, 0 not in the recording), amount, kind + flags, the recipient's HP before (heals; −1 otherwise).</summary>
 public readonly record struct FxRow(double T, uint Action, int Origin, int Recipient, long Amount, int Kind, long HpBefore);
 
-/// <summary>A DoT or HoT tick (<c>combat.tick</c>): on whom, credited to whom (a party id; an actor's for an enemy's bleed; 0 when the game didn't say), the status, the amount, a heal.</summary>
-public readonly record struct TickRow(double T, int On, int Source, uint Status, long Amount, bool Heal);
+/// <summary>
+/// A DoT or HoT tick (<c>combat.tick</c>): on whom, credited to whom (a party id; an actor's for an enemy's bleed; 0 when the game
+/// didn't say), the status, the amount, a heal, and (since the alignment round, the optional column <c>h</c>) the HP the one it
+/// ticked on had just before it, as the game side read it (a HoT's target, or a party member; −1 not known): what a HoT's
+/// overheal is measured against, as the meter measures it.
+/// </summary>
+public readonly record struct TickRow(double T, int On, int Source, uint Status, long Amount, bool Heal, long HpBefore = -1);
 
 /// <summary>A party member's cast (<c>combat.cast</c>): when it began, who, the action, its cast time, and whether it was cancelled or interrupted.</summary>
 public readonly record struct CastRow(double T, int Source, uint Action, float Duration, bool Cancelled);
@@ -126,6 +131,7 @@ public sealed class CombatLog
             Column(w, "s", Ticks, tick, r => (long)r.Status);
             Column(w, "v", Ticks, tick, r => r.Amount);
             Column(w, "heal", Ticks, tick, r => r.Heal ? 1L : 0L);
+            Column(w, "h", Ticks, tick, r => r.HpBefore < 0 ? -1L : r.HpBefore);
             w.WriteEndObject();
         }
 
@@ -182,8 +188,11 @@ public sealed class CombatLog
         if (Table(o["tick"], out var tick, "t", "on", "src", "s", "v", "heal"))
         {
             var t = Times(tick[0]);
+            // `h` is optional (a file from before the alignment round has none): −1 where it's missing or not as long.
+            var h = o["tick"]!["h"] is JsonArray hp && hp.Count == tick[0].Count ? hp : null;
             for (var i = 0; i < t.Length; i++)
-                c.Ticks.Add(new TickRow(t[i], (int)I(tick[1], i), (int)I(tick[2], i), (uint)Math.Clamp(L(tick[3], i), 0, uint.MaxValue), L(tick[4], i), L(tick[5], i) != 0));
+                c.Ticks.Add(new TickRow(t[i], (int)I(tick[1], i), (int)I(tick[2], i), (uint)Math.Clamp(L(tick[3], i), 0, uint.MaxValue), L(tick[4], i), L(tick[5], i) != 0,
+                    h == null ? -1 : Hp(h, i)));
         }
         if (Table(o["cast"], out var cast, "t", "src", "a", "dur", "x"))
         {
@@ -237,4 +246,10 @@ public sealed class CombatLog
     }
 
     private static long I(JsonArray a, int i) => Math.Clamp(L(a, i), int.MinValue, int.MaxValue);
+
+    /// <summary>An HP column's value: a whole number from 0 (to a trillion), else −1 (not known; also for anything that isn't a number).</summary>
+    private static long Hp(JsonArray a, int i) =>
+        a[i] is JsonValue v && (v.TryGetValue<double>(out var d) || (v.TryGetValue<long>(out var l) && (d = l) == l)) && d is >= 0 and <= 1e12
+            ? (long)Math.Round(d)
+            : -1;
 }

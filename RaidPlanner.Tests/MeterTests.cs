@@ -329,26 +329,78 @@ public class CombatParserTests
         Assert.Equal(Dps, heard.Ticks[1].Shares.Single().Member);
     }
 
+    /// <summary>A frame's reading of statuses, as the game side does it: each target's list read, with the party's statuses on it (target, status, member).</summary>
+    internal static void Statuses(CombatParser p, double t, params (uint On, uint Status, uint Member)[] on)
+    {
+        p.BeginStatuses();
+        foreach (var target in on.Select(x => x.On).Append(Boss).Distinct()) p.StatusesOf(target);
+        foreach (var (target, status, member) in on) p.StatusOn(t, target, status, member);
+        p.EndStatuses(t);
+    }
+
     [Fact]
     public void A_tick_that_names_no_one_is_shared_between_the_partys_dots()
     {
         var p = Parser(out var heard);
         p.Action(Batch(1, Healer, 16532, 0, (Boss, new[] { E(14, value: 1871) }, -1, -1, true)));
         p.Action(Batch(1.5, Dps, 3560, 0, (Boss, new[] { E(14, value: 1200) }, -1, -1, true)));
-        // A buff the dps put on the boss that isn't a DoT (Reprisal-like): not a sharer.
+        // A buff the tank put on the boss that isn't a DoT (Reprisal-like): not a sharer.
         p.Action(Batch(1.6, Tank, 7535, 0, (Boss, new[] { E(14, value: 1193) }, -1, -1, true)));
+        // The game's lists, read the next frame: the DoTs (in the dps's order first, as a list may have them).
+        Statuses(p, 1.7, (Boss, 1200, Dps), (Boss, 1871, Healer), (Boss, 1193, Tank));
         p.Tick(3, Boss, 0, false, 1001, 0, 0, -1, -1);
         var shares = heard.Ticks.Single().Shares;
         Assert.Equal(2, shares.Length);
         Assert.All(shares, s => Assert.True(s.Estimated));
-        Assert.Equal(1001, shares.Sum(s => s.Amount));
-        Assert.Equal(new[] { Healer, Dps }.OrderBy(x => x), shares.Select(s => s.Member).OrderBy(x => x));
+        // In the party list's order, a whole share each and the remainder the first's.
+        Assert.Equal(new[] { Healer, Dps }, shares.Select(s => s.Member));
+        Assert.Equal(new long[] { 501, 500 }, shares.Select(s => s.Amount));
+        // Named after the DoT each put on, and the action that did.
+        Assert.Equal((1871u, 16532u), (shares[0].Status, shares[0].Action));
+        Assert.Equal((1200u, 3560u), (shares[1].Status, shares[1].Action));
+        // A tick naming its status: only those with that one on.
+        p.Tick(3.5, Boss, 1200, false, 900, 0, 0, -1, -1);
+        Assert.Equal(new[] { (Dps, 900L) }, heard.Ticks[1].Shares.Select(x => (x.Member, x.Amount)));
         // Another player's DoT (a source outside the party): never handed to the party.
         p.Tick(4, Boss, 0, false, 500, Outsider, 0, -1, -1);
-        Assert.Empty(heard.Ticks[1].Shares);
-        // Long after the DoTs were put on: no one.
-        p.Tick(100, Boss, 0, false, 500, 0, 0, -1, -1);
         Assert.Empty(heard.Ticks[2].Shares);
+        // A HoT's tick that names no one is nobody's.
+        p.Tick(4.5, Tank, 0, true, 3000, 0, 0, 50_000, 100_000);
+        Assert.Empty(heard.Ticks[3].Shares);
+    }
+
+    [Fact]
+    public void Who_shares_a_tick_is_what_the_games_lists_say_not_when_a_dot_was_put_on()
+    {
+        var p = Parser(out var heard);
+        // The healer's Dia put on long ago and still on (refreshed in the lists): still theirs to share.
+        p.Action(Batch(1, Healer, 16532, 0, (Boss, new[] { E(14, value: 1871) }, -1, -1, true)));
+        Statuses(p, 2, (Boss, 1871, Healer));
+        Statuses(p, 90, (Boss, 1871, Healer));
+        p.Tick(90.5, Boss, 0, false, 700, 0, 0, -1, -1);
+        Assert.Equal(new[] { Healer }, heard.Ticks[0].Shares.Select(s => s.Member));
+        // Gone from the boss's list (it ran out): nobody's, though it was put on a moment ago.
+        p.Action(Batch(91, Dps, 3560, 0, (Boss, new[] { E(14, value: 1200) }, -1, -1, true)));
+        Statuses(p, 92);
+        p.Tick(92.5, Boss, 0, false, 700, 0, 0, -1, -1);
+        Assert.Empty(heard.Ticks[1].Shares);
+        // An enemy whose list wasn't read (out of sight) keeps its DoTs; one not read for a minute is forgotten.
+        const uint Add = 901;
+        p.BeginStatuses();
+        p.StatusesOf(Add);
+        p.StatusOn(93, Add, 1200, Dps);
+        p.EndStatuses(93);
+        Statuses(p, 120);
+        p.Tick(120.5, Add, 0, false, 600, 0, 0, -1, -1);
+        Assert.Equal(new[] { (Dps, 600L) }, heard.Ticks[2].Shares.Select(x => (x.Member, x.Amount)));
+        Statuses(p, 160);
+        p.Tick(160.5, Add, 0, false, 600, 0, 0, -1, -1);
+        Assert.Empty(heard.Ticks[3].Shares);
+        // A status that isn't one of the jobs' DoTs, or a DoT on a party member, isn't kept.
+        Statuses(p, 161, (Boss, 1193, Tank), (Tank, 1871, Healer));
+        p.Tick(161.5, Boss, 0, false, 600, 0, 0, -1, -1);
+        Assert.Empty(heard.Ticks[4].Shares);
+        Assert.False(p.DotOn(Tank, Healer));
     }
 
     [Fact]
@@ -712,6 +764,37 @@ public class MeterSessionTests
     }
 
     [Fact]
+    public void Its_length_is_the_first_damage_to_a_wipes_last_death_else_to_the_last_damage()
+    {
+        // A wipe the duty called with the dps still up and hitting: it ended at the last death all the same.
+        var s = New(out var p);
+        s.Frame(0, Party(), true);
+        Hit(p, 2, Dps, 1000);
+        s.Frame(5, Party(tank: 0), true);
+        s.Frame(8, Party(tank: 0, healer: 0), true);
+        Hit(p, 9, Dps, 1000);
+        s.Frame(9.5, Party(tank: 0, healer: 0), true);
+        s.Said(Outcome.Wipe);
+        var e = s.Current!;
+        Assert.Equal(Outcome.Wipe, e.Ended);
+        Assert.Equal(6, e.Duration, 6);
+        Assert.Equal(2_000 / 6.0, e.Rows.Single(r => r.Slot == "R1").EncDps, 6);
+        // Ended out of combat: at the last damage, a bleed's tick included, a death after it not.
+        var t = New(out var q);
+        t.Frame(0, Party(), true);
+        Hit(q, 1, Dps, 1000);
+        q.Tick(4, Tank, 0, false, 500, Boss, 0, 50_000, 100_000);
+        t.Frame(4.5, Party(tank: 0), true);
+        t.Frame(5, Party(tank: 0, combat: false), false);
+        t.Frame(9.5, Party(tank: 0, combat: false), false);
+        Assert.Equal(Outcome.Ended, t.Current!.Ended);
+        Assert.Equal(3, t.Current!.Duration, 6);
+        // Called a wipe a moment later: then at the last death.
+        t.Said(Outcome.Wipe);
+        Assert.Equal(3.5, t.Current!.Duration, 6);
+    }
+
+    [Fact]
     public void Keeps_the_last_ones_newest_first_and_numbers_them_by_the_recorders_pull()
     {
         var s = New(out var p);
@@ -840,6 +923,7 @@ public class MeterSessionTests
         Hit(p, 1, Dps, 3_000, 100);
         Hit(p, 2, 50, 2_000, 200, 0, Dps);
         p.Action(CombatParserTests.Batch(2.5, Dps, 3560, 0, (Boss, new[] { CombatParserTests.E(14, value: 1200) }, -1, -1, true)));
+        CombatParserTests.Statuses(p, 2.6, (Boss, 1200, Dps));
         p.Tick(3, Boss, 0, false, 1_000, 0, 0, -1, -1);
         s.Frame(4, Party(), true);
         var e = s.Current!;

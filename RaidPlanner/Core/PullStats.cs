@@ -103,9 +103,24 @@ public static class PullStats
     /// taken (enemy hits and bleeds), crits and direct hits, and active time. A tick the game sent
     /// without saying whose is shared between the party's DoTs on the target then (<paramref name="isDot"/>).
     /// </summary>
-    public static Tally Totals(Recording r, Func<uint, bool>? isDot = null)
+    public static Tally Totals(Recording r, Func<uint, bool>? isDot = null) => Totals(r, isDot, out _);
+
+    /// <summary>
+    /// <see cref="Totals(Recording, Func{uint, bool}?)"/>, with when the damage between the party and the
+    /// enemies began and last went on (<paramref name="fought"/>, seconds from the pull; NaN without any): the
+    /// party's hits on an enemy (the limit break's too), an enemy's hit that did damage to one of them or
+    /// killed them outright, and (for the last only: a tick never starts it) a damage tick on one of them
+    /// or one credited to one of them, a tick shared out included (one nobody had a DoT for isn't).
+    /// </summary>
+    public static Tally Totals(Recording r, Func<uint, bool>? isDot, out (double First, double Last) fought)
     {
         var tally = new Tally();
+        double first = double.NaN, last = double.NaN;
+        void Fought(double t, bool tick)
+        {
+            if (!tick && (double.IsNaN(first) || t < first)) first = t;
+            if (double.IsNaN(last) || t > last) last = t;
+        }
         var party = r.Party.Select(p => p.Id).ToHashSet();
         var maxHp = r.Party.GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First().MaxHp);
         var hpAt = PartyHp(r);
@@ -118,7 +133,10 @@ public static class PullStats
                 switch ((FxKind)(f.Kind & 7))
                 {
                     case FxKind.Damage:
+                        // On the party (a cost of one's own) it isn't the party's damage (the parser doesn't keep it).
+                        if (party.Contains(f.Recipient)) break;
                         tally.Damage(f.Origin, f.T, f.Action, f.Amount, flags);
+                        Fought(f.T, false);
                         break;
                     case FxKind.Heal:
                         var max = maxHp.TryGetValue(f.Recipient, out var m) ? m : 0;
@@ -144,11 +162,18 @@ public static class PullStats
                 }
                 if (party.Contains(tick.On))
                 {
-                    if (!tick.Heal) tally.Taken(tick.On, tick.Status, true, tick.Amount);
+                    if (!tick.Heal)
+                    {
+                        tally.Taken(tick.On, tick.Status, true, tick.Amount);
+                        Fought(tick.T, true);
+                    }
                     else if (party.Contains(tick.Source))
                     {
+                        // A HoT's overheal against the HP the game side read as it ticked (as the meter does); a file
+                        // from before that was kept has only the frames' (the last before it).
                         var max = maxHp.TryGetValue(tick.On, out var m) ? m : 0;
-                        tally.Heal(tick.Source, 0, tick.Amount, PartyEffect.Over(tick.Amount, hpAt(tick.On, tick.T), max), FxFlags.None, true, tick.Status);
+                        var before = tick.HpBefore >= 0 ? tick.HpBefore : hpAt(tick.On, tick.T);
+                        tally.Heal(tick.Source, 0, tick.Amount, PartyEffect.Over(tick.Amount, before, max), FxFlags.None, true, tick.Status);
                     }
                     continue;
                 }
@@ -156,25 +181,49 @@ public static class PullStats
                 if (party.Contains(tick.Source))
                 {
                     tally.Damage(tick.Source, tick.T, 0, tick.Amount, FxFlags.None, true, tick.Status);
+                    Fought(tick.T, true);
                 }
                 else if (tick.Source == 0 && dots.TryGetValue(tick.On, out var on))
                 {
+                    // Each party member with one of the jobs' DoTs on it (the tick's status when it names one), in
+                    // the party's order: a whole share each, the remainder the first's (the meter's CombatParser.Share).
                     var sharers = on.Keys.Where(k => tick.Status == 0 || k.Status == tick.Status).Select(k => k.Source).Distinct().OrderBy(x => x).ToList();
                     if (sharers.Count == 0) continue;
                     var each = tick.Amount / sharers.Count;
                     for (var i = 0; i < sharers.Count; i++)
                         tally.Damage(sharers[i], tick.T, 0, i == 0 ? tick.Amount - each * (sharers.Count - 1) : each, FxFlags.None, true, tick.Status, true);
+                    Fought(tick.T, true);
                 }
             }
         }
         foreach (var h in r.Events.OfType<HitEvent>())
         {
-            if (h.Damage == null) continue;
+            if (h.Damage == null || party.Contains(h.Source)) continue;
             for (var i = 0; i < h.Targets.Count; i++)
-                if (party.Contains(h.Targets[i]) && h.Damage[i] > 0)
-                    tally.Taken(h.Targets[i], h.Action, false, h.Damage[i]);
+            {
+                if (!party.Contains(h.Targets[i])) continue;
+                if (h.Damage[i] > 0) tally.Taken(h.Targets[i], h.Action, false, h.Damage[i]);
+                if (h.Damage[i] > 0 || (h.Fx != null && (h.Fx[i] & Effects.FxInstantDeath) != 0)) Fought(h.T, false);
+            }
         }
+        fought = (first, last);
         return tally;
+    }
+
+    /// <summary>
+    /// The fight's length, seconds (two decimals, from the times as the file has them): what ENCDPS, HPS
+    /// and damage taken a second are over, the meter's rule (<see cref="MeterSession"/>): from the first
+    /// damage between the party and an enemy (either way; a tick never starts it) to the end, a wipe's
+    /// last death, else the last damage between them, ticks included (ACT's convention). Null when the
+    /// recording has no amounts (before 0.3.0) or no such damage.
+    /// </summary>
+    public static double? Length(Recording r, (double First, double Last) fought)
+    {
+        if (double.IsNaN(fought.First)) return null;
+        var party = r.Party.Select(p => p.Id).ToHashSet();
+        var deaths = r.Events.OfType<DeathEvent>().Where(d => party.Contains(d.Who)).Select(d => d.T).ToList();
+        var end = r.Outcome == Outcome.Wipe && deaths.Count > 0 ? deaths.Max() : fought.Last;
+        return Math.Max(0, CastEvent.Round(CastEvent.Round(end, 2) - CastEvent.Round(fought.First, 2), 2));
     }
 
     /// <summary>A party member's HP at a time, from the frames (the last at or before it; −1 when the frames don't have it).</summary>
@@ -217,7 +266,8 @@ public static class PullStats
         failKind ??= id => r.Statuses.TryGetValue(id, out var s) ? CombatLists.FailKind(s.Name) : CombatLists.NotAFail;
         var slots = r.Party.Take(MaxSlots).ToList();
         var bit = slots.Select((p, i) => (p.Id, i)).GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().i);
-        var tally = Totals(r, isDot);
+        var tally = Totals(r, isDot, out var fought);
+        var length = Length(r, fought);
         var wipe = WipeDeaths(r);
 
         // Damage downs and vulnerability ups gained, each gain counted with its stacks.
@@ -298,7 +348,7 @@ public static class PullStats
             foreach (var d in debuffs.Take(debuffCount))
                 if (!names.ContainsKey(Key(d.Status)) && r.Statuses.TryGetValue(d.Status, out var s) && s.Name.Trim().Length > 0)
                     names[Key(d.Status)] = s.Name.Trim();
-            return new JsonObject
+            var o = new JsonObject
             {
                 ["v"] = 1,
                 ["slots"] = slotsJson.DeepClone(),
@@ -307,6 +357,9 @@ public static class PullStats
                 ["debuffs"] = new JsonArray(debuffs.Take(debuffCount).Select(d => (JsonNode)new JsonArray(d.Ds, (long)d.Status, (long)d.Mask)).ToArray()),
                 ["names"] = names,
             };
+            // The fight's length the numbers are over (the meter's), when there was damage to measure it by.
+            if (length is { } len) o["len"] = len;
+            return o;
         }
 
         // The most that fits: as many of the earliest hits as fit with every debuff; with none of the

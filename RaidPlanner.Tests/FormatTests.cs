@@ -472,7 +472,8 @@ public class SummaryAdditionTests
         parser.Add(session);
         var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", _ => null);
         b.SetParty(new[] { new Partier(1, "PLD", 1, 100_000), new Partier(2, "WHM", 4, 100_000), new Partier(3, "BLM", 3, 100_000) });
-        parser.Add(new ToRecording(b));
+        b.Actor(900, "Boss", 5, 1);
+        parser.Add(new RecordingSink(() => b, () => 0));
         var party = new[] { new PartyState(1, "a", "PLD", 1, 100_000, 100_000, true, false), new PartyState(2, "b", "WHM", 4, 100_000, 100_000, true, false),
             new PartyState(3, "c", "BLM", 3, 100_000, 100_000, true, true) };
         session.Frame(0, party, true);
@@ -496,24 +497,82 @@ public class SummaryAdditionTests
             Assert.Equal(Math.Round(row.CritRate, 3), slots[i]!["crit"]!.GetValue<double>());
         }
     }
+}
 
-    /// <summary>What the game side's recording sink does, by the recording's numbers (entity ids 1–3 are party ids 1–3 here; the boss 900 is 101).</summary>
-    private sealed class ToRecording : ICombatSink
+/// <summary>The combat block's tick rows: the HP before each, written as <c>h</c> and read back, and a file from before it without one.</summary>
+public class TickHpTests
+{
+    [Fact]
+    public void A_ticks_hp_before_goes_through_the_file_and_an_older_file_reads_as_unknown()
     {
-        private readonly RecordingBuilder b;
+        var r = AlignmentTests.Pull();
+        var json = r.ToJson();
+        var back = Recording.Parse(json).Combat!.Ticks;
+        Assert.Equal(r.Combat!.Ticks.Select(t => t.HpBefore), back.Select(t => t.HpBefore));
+        Assert.Contains(back, t => t.Heal && t.HpBefore == 10_000);
+        // The bleed's ticks on the BRD: their HP as they ticked (what makes the last one lethal); the DoTs on the boss: not read.
+        Assert.Equal(new long[] { 79_000, 49_000, 19_000 }, back.Where(t => t.Status == 2088).Select(t => t.HpBefore));
+        Assert.All(back.Where(t => !t.Heal && t.On > 100), t => Assert.Equal(-1, t.HpBefore));
+        // Before the column: every tick's HP unknown, the rest as ever; a column not as long, or not numbers, the same.
+        var node = JsonNode.Parse(json)!.AsObject();
+        var tick = node["combat"]!["tick"]!.AsObject();
+        tick.Remove("h");
+        var old = Recording.Parse(node.ToJsonString()).Combat!.Ticks;
+        Assert.Equal(back.Count, old.Count);
+        Assert.All(old, t => Assert.Equal(-1, t.HpBefore));
+        Assert.Equal(back.Select(t => t with { HpBefore = -1 }), old);
+        tick["h"] = new JsonArray(JsonValue.Create(5));
+        Assert.All(Recording.Parse(node.ToJsonString()).Combat!.Ticks, t => Assert.Equal(-1, t.HpBefore));
+        tick["h"] = new JsonArray(back.Select(_ => (JsonNode?)JsonValue.Create("x")).ToArray());
+        Assert.All(Recording.Parse(node.ToJsonString()).Combat!.Ticks, t => Assert.Equal(-1, t.HpBefore));
+    }
+}
 
-        public ToRecording(RecordingBuilder b) => this.b = b;
+/// <summary>The summary's <c>stats.len</c>: the fight's length the numbers are over, the meter's rule.</summary>
+public class FightLengthTests
+{
+    private static RecordingBuilder Builder()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0", _ => new ActionInfo("Hit", 1, 3, 0, "", 0));
+        b.SetParty(new[] { new Partier(1, "PLD", 1, 100_000), new Partier(2, "WHM", 4, 100_000), new Partier(3, "BLM", 3, 100_000) });
+        b.Actor(900, "Boss", 5, 1);
+        return b;
+    }
 
-        public void Used(double t, uint member, uint caster, uint action) => b.PartyUsed(t, (int)member, action);
-
-        public void Effect(in PartyEffect e) =>
-            b.CombatFx(e.T, e.Action, (int)e.Member, e.Recipient == 900 ? 101 : (int)e.Recipient, e.Amount, (int)e.Kind | (int)e.Flags, e.Kind == FxKind.Heal ? e.HpBefore : -1);
-
-        public void Taken(in TakenHit e)
-        {
-        }
-
-        public void Tick(in TickEvent e, ReadOnlySpan<TickShare> shares) => b.CombatTick(e.T, e.Target == 900 ? 101 : (int)e.Target, e.SourceParty ? (int)e.Source : 0, e.Status, e.Amount, e.Heal);
+    [Fact]
+    public void From_the_first_damage_to_the_last_ticks_included_a_wipe_to_its_last_death()
+    {
+        var b = Builder();
+        // A heal and a DoT's tick before any damage don't start it; the enemy's hit at 3 does.
+        b.CombatFx(1, 135, 2, 1, 5_000, (int)FxKind.Heal, 90_000);
+        b.CombatTick(2, 101, 3, 1871, 500, false);
+        b.Hit(3.004, 101, 600, 0, 0, 0, 0, 0, new[] { 1 }, new long[] { 10_000 }, new[] { 0 }, new long[] { 100_000 });
+        b.CombatFx(4, 9, 1, 101, 12_000, (int)FxKind.Damage, -1);
+        // A tick credited at 20.5 is the last damage; a HoT's at 25 isn't damage; one nobody had a DoT for isn't either.
+        b.CombatTick(20.5, 101, 3, 1871, 500, false);
+        b.CombatTick(25, 1, 2, 158, 500, true);
+        b.CombatTick(27, 101, 0, 0, 500, false);
+        var ended = b.Finish(40, Outcome.Ended);
+        var stats = PullStats.Stats(ended, isDot: id => id == 1871);
+        Assert.Equal(17.5, stats["len"]!.GetValue<double>());
+        // A wipe: to its last death, whatever came after.
+        var w = Builder();
+        w.Hit(3, 101, 600, 0, 0, 0, 0, 0, new[] { 1 }, new long[] { 10_000 }, new[] { 0 }, new long[] { 100_000 });
+        foreach (var who in new[] { 1, 2, 3 }) w.Alive(0, who, false);
+        w.Alive(30.25, 1, true);
+        w.Alive(31.5, 2, true);
+        w.CombatFx(33, 9, 3, 101, 12_000, (int)FxKind.Damage, -1);
+        w.Alive(34, 3, true);
+        w.CombatTick(36, 101, 3, 1871, 500, false);
+        Assert.Equal(31, PullStats.Stats(w.Finish(50, Outcome.Wipe), isDot: id => id == 1871)["len"]!.GetValue<double>());
+        // An instant death with no amount starts it too; a pull with no damage at all has no length.
+        var d = Builder();
+        d.Hit(2, 101, 600, 0, 0, 0, 0, 0, new[] { 2 }, new long[] { 0 }, new[] { Effects.FxInstantDeath }, new long[] { 100_000 });
+        d.CombatFx(12, 9, 1, 101, 12_000, (int)FxKind.Damage, -1);
+        Assert.Equal(10, PullStats.Stats(d.Finish(20, Outcome.Ended))["len"]!.GetValue<double>());
+        var none = Builder();
+        none.Hit(2, 101, 600, 0, 0, 0, 0, 0, new[] { 2 }, new long[] { 0 }, new[] { Effects.FxDodged }, new long[] { 100_000 });
+        Assert.False(PullStats.Stats(none.Finish(20, Outcome.Ended)).ContainsKey("len"));
     }
 }
 

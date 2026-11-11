@@ -62,6 +62,12 @@ public sealed unsafe class FightRecorder : IDisposable
     private Outcome? outcome;
     private double outOfCombat;
     private double nextWaymarks;
+
+    /// <summary>When the party's DoTs on enemies are next read for the parser with no pull going (the meter alone listening).</summary>
+    private double nextDots;
+
+    /// <summary>A status's source that isn't in the party: the party member it's a pet or summon of, or 0 (a cache; cleared on a new zone or when big).</summary>
+    private readonly Dictionary<uint, uint> petOwners = new();
     private uint pullTerritory;
     private int pullInZone;
     private bool stopAsked;
@@ -128,7 +134,7 @@ public sealed unsafe class FightRecorder : IDisposable
         this.version = version;
         session.Start();
         Combat = new CombatParser(data.ActionCategory, data.IsShield, data.IsDot);
-        sink = new RecordingSink(this);
+        sink = new RecordingSink(() => Current, () => pullStart);
         hooks = new GameHooks(this);
         Services.Framework.Update += OnUpdate;
         Services.DutyState.DutyWiped += OnWiped;
@@ -265,6 +271,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (disposed) return;
         if (current != null) Finish(outcome ?? Outcome.Ended);
         ReleaseHeld();
+        petOwners.Clear();
         pullInZone = 0;
         pullTerritory = territory;
     });
@@ -353,6 +360,8 @@ public sealed unsafe class FightRecorder : IDisposable
         wasInCombat = combat;
         if (current == null)
         {
+            // The meter alone: the party's DoTs on the enemies for it to share a tick out by (in a pull they're read with the rest).
+            if (combat && Combat.Listening) ReadDots();
             stopAsked = false;
             if (!combat && !FightGoesOn()) waitForCombatToEnd = false;
             if (!combat || waitForCombatToEnd) return;
@@ -568,7 +577,9 @@ public sealed unsafe class FightRecorder : IDisposable
         tethers.Clear();
         partyTouching.Clear();
         var you = Services.Objects.LocalPlayer?.Position;
+        var now = Now;
         b.BeginStatuses();
+        Combat.BeginStatuses();
         foreach (var obj in Services.Objects)
         {
             if (obj == null || !obj.IsValid() || obj.EntityId is 0 or InvalidId) continue;
@@ -621,12 +632,15 @@ public sealed unsafe class FightRecorder : IDisposable
                 }
                 else if (obj is IBattleChara)
                 {
-                    // An enemy's own statuses (a boss's buff, a phase's marker) and the party's on it (DoTs, Reprisal).
+                    // An enemy's own statuses (a boss's buff, a phase's marker) and the party's on it (DoTs, Reprisal);
+                    // the party's DoTs for the parser too, from the same list in the same frame.
                     ReadStatuses(b, t, id, obj.EntityId, (BattleChara*)chara);
+                    ReadDots(now, obj.EntityId, (BattleChara*)chara);
                 }
             }
         }
         b.EndStatuses(t);
+        Combat.EndStatuses(now);
         b.EndTargets(t);
         partyTouched.Clear();
         partyTouched.UnionWith(partyTouching);
@@ -744,6 +758,57 @@ public sealed unsafe class FightRecorder : IDisposable
     }
 
     /// <summary>
+    /// With no pull going and the meter listening in combat: the party's DoTs on every enemy (the
+    /// combatants a pull's frame reads), four times a second, for the parser to share out a tick that
+    /// names no one (<see cref="CombatParser.StatusOn"/>).
+    /// </summary>
+    private void ReadDots()
+    {
+        var now = Now;
+        if (now < nextDots) return;
+        nextDots = now + 0.25;
+        Combat.BeginStatuses();
+        foreach (var obj in Services.Objects)
+        {
+            if (obj is not IBattleNpc npc || npc.BattleNpcKind != BattleNpcSubKind.Combatant || npc.EntityId is 0 or InvalidId) continue;
+            var bc = (BattleChara*)npc.Address;
+            if (bc != null) ReadDots(now, npc.EntityId, bc);
+        }
+        Combat.EndStatuses(now);
+    }
+
+    /// <summary>
+    /// An enemy's statuses the party put on, for the parser (it keeps the jobs' DoTs): each with the
+    /// party member it's from (a pet's or summon's owner).
+    /// </summary>
+    private void ReadDots(double now, uint onEntity, BattleChara* chara)
+    {
+        Combat.StatusesOf(onEntity);
+        var list = chara->StatusManager.Status;
+        for (var i = 0; i < list.Length; i++)
+        {
+            var id = (uint)list[i].StatusId;
+            if (id == 0 || !data.IsDot(id)) continue;
+            var from = list[i].SourceObject.ObjectId;
+            if (from is 0 or InvalidId) continue;
+            var member = Combat.IsParty(from) ? from : PetOwner(from);
+            if (member != 0) Combat.StatusOn(now, onEntity, id, member);
+        }
+    }
+
+    /// <summary>The party member whose pet or summon this is (0 for none), looked up once and kept.</summary>
+    private uint PetOwner(uint entity)
+    {
+        if (petOwners.TryGetValue(entity, out var owner)) return owner;
+        if (petOwners.Count > 256) petOwners.Clear();
+        owner = Services.Objects.SearchByEntityId(entity) is IBattleNpc npc && npc.OwnerId is not (0 or InvalidId) && Combat.IsParty(npc.OwnerId)
+            ? npc.OwnerId
+            : 0;
+        petOwners[entity] = owner;
+        return owner;
+    }
+
+    /// <summary>
     /// Who put a status on: no one (an enemy's kind, source 0), the party (a member, or their pet or
     /// summon: that member), an enemy or a helper (its number), or another player or someone else's pet
     /// (not kept). One gone from the game already is no one. With the party member's entity id.
@@ -857,48 +922,6 @@ public sealed unsafe class FightRecorder : IDisposable
 
     /// <summary>A pull is going on, recorded or followed (the hooks read nothing otherwise).</summary>
     internal bool Listening => current != null && !disposed;
-
-    /// <summary>
-    /// The parser's findings into the pull's combat block, by the recording's numbers (times from the
-    /// pull's start): the party's effects, their casts finishing, and ticks (on the party; the party's;
-    /// and on an enemy in the recording, from no one said). Registered only while a pull is recorded.
-    /// </summary>
-    private sealed class RecordingSink : ICombatSink
-    {
-        private readonly FightRecorder r;
-
-        public RecordingSink(FightRecorder recorder) => r = recorder;
-
-        public void Used(double t, uint member, uint caster, uint action)
-        {
-            if (member == caster && r.Current is { } b && b.PartyId(member) is { } id) b.PartyUsed(t - r.pullStart, id, action);
-        }
-
-        public void Effect(in PartyEffect e)
-        {
-            if (r.Current is not { } b || b.PartyId(e.Member) is not { } origin) return;
-            var kind = (int)e.Kind | (int)e.Flags;
-            b.CombatFx(e.T - r.pullStart, e.Action, origin, b.Who(e.Recipient), e.Amount, kind, e.Kind == FxKind.Heal ? e.HpBefore : -1);
-        }
-
-        public void Taken(in TakenHit e)
-        {
-            // The enemies' hits are the events' (OnHit), with what each did.
-        }
-
-        public void Tick(in TickEvent e, ReadOnlySpan<TickShare> shares)
-        {
-            if (r.Current is not { } b) return;
-            var on = b.Who(e.Target);
-            if (on == 0) return;
-            int src;
-            if (e.SourceParty) src = b.PartyId(e.Source) ?? 0;
-            else if (e.TargetParty) src = e.Source == 0 ? 0 : b.KnownActor(e.Source) ?? 0;
-            else if (e.Source == 0) src = 0;
-            else return; // someone else's DoT on an enemy
-            b.CombatTick(e.T - r.pullStart, on, src, e.Status, e.Amount, e.Heal, e.TargetParty ? e.HpBefore : -1);
-        }
-    }
 
     public void Dispose()
     {
