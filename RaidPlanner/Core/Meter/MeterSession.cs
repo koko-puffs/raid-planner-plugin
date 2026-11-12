@@ -59,7 +59,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     private static readonly string[] SlotOrder = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
 
-    /// <summary>The most events kept for an encounter (the first so many).</summary>
+    /// <summary>The most events kept for an encounter (the newest so many: a long pull's feed goes on to its end).</summary>
     public const int MostEvents = 200;
 
     private readonly Func<uint, string> actionName;
@@ -366,7 +366,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         live.Aggro(t, enemy, target, castTarget, this);
     }
 
-    /// <summary>An encounter's events (the Events tab), oldest first, the first <see cref="MostEvents"/>.</summary>
+    /// <summary>An encounter's events (the Events tab), oldest first, the newest <see cref="MostEvents"/>.</summary>
     public IReadOnlyList<MeterEvent> Events(int encounterId) => Find(encounterId)?.EventList(this) ?? (IReadOnlyList<MeterEvent>)Array.Empty<MeterEvent>();
 
     public void Effect(in PartyEffect e)
@@ -619,13 +619,17 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public readonly List<Death> Deaths = new();
 
         // Since 0.4.0: the events; the enemies' casts going on; who interrupted; each boss's target as a span, and the tank holding it.
-        private readonly List<Happening> happenings = new();
+        // The events in a ring (the newest MostEvents, nothing made per event), and how many there have been (what a list is made again by).
+        private readonly Happening[] happenings = new Happening[MostEvents];
+        private int happeningNext;
+        private int happeningCount;
+        private long happened;
         private readonly Dictionary<uint, (double T, uint Action, double End, bool Interruptible)> casts = new();
         private readonly CastWatch interrupts = new();
         private readonly Dictionary<uint, (uint On, double Since, bool CastTarget, bool Judged, Member? Held)> aggro = new();
         private readonly List<uint> judging = new();
         private IReadOnlyList<MeterEvent>? eventList;
-        private int eventCount = -1;
+        private long eventCount = -1;
 
         /// <summary>The party's damage in each second of the encounter (the limit break's too), for pace.</summary>
         private readonly List<long> perSecond = new();
@@ -711,7 +715,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
         private void Happen(in Happening h)
         {
-            if (happenings.Count < MostEvents) happenings.Add(h);
+            // The oldest let go of once there are MostEvents: the live feed shows the newest.
+            happenings[happeningNext] = h;
+            happeningNext = (happeningNext + 1) % happenings.Length;
+            happeningCount = Math.Min(happeningCount + 1, happenings.Length);
+            happened++;
         }
 
         /// <summary>
@@ -846,11 +854,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         /// <summary>The events as the window reads them (made again when there are more, or a death became the wipe's).</summary>
         public IReadOnlyList<MeterEvent> EventList(MeterSession s)
         {
-            var stamp = happenings.Count * 2 + (IsLive ? 0 : 1);
+            var stamp = happened * 2 + (IsLive ? 0 : 1);
             if (eventList != null && eventCount == stamp && !IsLive) return eventList;
             if (eventList != null && eventCount == stamp && IsLive && s.now - snapshotAt < RefreshEvery) return eventList;
             eventCount = stamp;
-            eventList = happenings.OrderBy(h => h.T).Select(h => Line(h, s)).ToList();
+            var kept = new List<Happening>(happeningCount);
+            for (var i = 0; i < happeningCount; i++) kept.Add(happenings[(happeningNext - happeningCount + i + happenings.Length) % happenings.Length]);
+            eventList = kept.OrderBy(h => h.T).Select(h => Line(h, s)).ToList();
             return eventList;
         }
 

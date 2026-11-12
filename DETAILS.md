@@ -295,6 +295,44 @@ optional; `combat.v` stays 1):
 combat table whose columns aren't all arrays of the same length, are left out; an optional column not
 as long as its table reads as its default; a value that isn't a number reads as 0; a delta below 0 as 0.
 
+## Diagnostics (`Core/DiagnosticsLog.cs`; Settings → Recording → _Diagnostics_)
+
+Off by default, and **off again each time the plugin loads** (it's never saved: the file holds names and
+grows while it's on). While on, the raw values behind each reading that hasn't been checked in the game
+(the [verify] notes above and in SPEC4 §7) go to **`diagnostics-<yyyy-MM-dd>.log`** in the recordings folder
+(the plugin's config folder's `recordings/`, beside the pulls). Plain text, one line per reading:
+`21:03:04.123 | zone 1122 <duty or place> | pull 3 @ 12.50 | <kind> | <numbers>` (`no pull` outside one).
+The kinds:
+
+- `party` (a pull's start): you, and each member's entity id, **name**, job and number in the recording,
+  so the ids in other lines can be read.
+- `cancel-cast`: actor control 15 as sent: the actor, party or not, its arguments 1–6 (2 the action type,
+  3 the action, 4 interrupted?).
+- `party-hit`: each of the party's damage effects (autos left out): action, caster, target, the effect's
+  type, Param0, Param1, the bonus % (Param2, signed), Param3, Param4, the value.
+- `enemy-hit`: an enemy's hit on a party member: every effect on them as sent `[type p0 p1 p2 p3 p4
+  value]` (knockbacks 31–36; Param4 & 4), their HP and the barrier read.
+- `action-type`: a party member's message that isn't an action (an item: type 2, its id as sent, the
+  high-quality +1,000,000).
+- `ground`: a party member's ground-placed action and the place the message carried (x, y, z).
+- `status`: the Raise, Weakness or Brink of Death status gained by someone: on whom (**name**), its source as
+  the game has it (id, **name**), whose kind the recorder took it for, its param, time left, their HP.
+- `hate` (once a second in a pull): the enmity list's target, length and every entry (entity id, enmity).
+- `lb-gauge` (on change, in a pull): current units, bar count, units a bar.
+- `signs` (on change, in a pull): the head signs' slots holding someone (slot, entity id, **name**).
+- `own-recast` (each action you use): the game's recast and how far into it, the adjusted recast (ms),
+  the most and current charges, and the sheet's recast, cooldown groups and charges.
+- `enemy-cast` (each new enemy cast in a pull): the action, its cast time, interruptible, its target.
+- `countdown` (starting and stopping, before a pull in a recorded duty): active and the time left.
+
+Readings come only while the plugin reads them (a pull recorded, before one in a recorded duty, or the
+meter or cooldown tracker on). Cheap: off, the hooks ask one bool; on, lines are gathered in memory and
+written on a worker at a pull's end, a zone change, turning it off, unloading, or past 64 K characters. A
+file stops at 5 MB: it's moved aside to `diagnostics-<date>.1.log` (one older part kept) and a new one
+begun; the newest six diagnostics files are kept, older ones deleted. Nothing in it throws: a line that
+can't be made or written is lost. **The file contains character names** (yours and your party's, and
+anyone a status line is about): look before you share it.
+
 ## Kept pulls (`Core/RecordingStore.cs`)
 
 In the plugin's config folder, `recordings/`, a file each (named for when, the duty and the
@@ -434,7 +472,7 @@ the combat parser, the meter's session and the recording's `RecordingSink` liste
 status lists read each frame for the recording and the parser alike), checks that the meter after
 the fight reads as the summary (every spot's damage, healing, overheal, taken, deaths, crit and
 direct hit rates, active time, ENCDPS, HPS and DPS, the limit break, the length and the deaths; since
-0.4.0 also GCDs, potions (the summary's less those before the pull, which no encounter has), raises
+0.4.0 also GCDs, potions (the pre-pull one included, both ways), raises
 given and taken, time dead and interrupts; the pull now also has uses before it and the countdown, an
 interrupt credited and an interruptible cast that went off, a stun resisted and one landed, a provoke
 and a tank swap, a non-tank holding the boss, the BRD raised and dying again with Weakness, potions,
@@ -832,15 +870,20 @@ party's row is the sum of the rows, the limit break's included):
 on after its effects, so an encounter its first hit starts has begun, and the meter folds in uses from
 the second before as it does effects), and the game side tells it more (below). For each member:
 **Casts** (GCDs used: `CombatKinds.Gcd`, the cooldown groups; pets' not), **Potions** (items used in the
-encounter), **Raises given** and **Raised** (a dead member's HP above 0 again, credited to the last raise
-used on them while down, or the healers' limit break 3 on everyone down then), **Time dead** (each death
+encounter, and those in the 30 seconds before it began: the pre-pull tincture, its event at its own time
+before 0, said "before the pull"; as the summary's `pots` count them), **Raises given** and **Raised** (a dead
+member's HP above 0 again, credited as the recording credits it: to the Raise status a party member put on
+them while down [verify that the raiser is its source], else the last raise used on them while down, or the
+healers' limit break 3 on everyone down then), **Time dead** (each death
 not the wipe's to when they were up, or the encounter's end), **Interrupts** (an enemy's cast the game
 said was interrupted, credited as the recording credits it: `CastWatch`). Each death carries when they
 were up again and who raised them, and whether Weakness or Brink of Death was on them. And the
-encounter's **events** (`IMeterSource.Events`, the first 200, oldest first; their text has names, so it
+encounter's **events** (`IMeterSource.Events`, the newest 200, oldest first; their text has names, so it
 stays in the game): deaths (the wipe's said so), raises, interrupts, interruptible casts that went off (a
 quarter second past their end with no word of them stopping), stuns, sleeps, binds, heavies and silences
-put on an enemy (a status-only effect: one that came with damage isn't seen), a status resisted, potions,
+a party member's action put on someone outside the party (its message's status-only effect: one that came
+with damage isn't seen, nor one with no status effect; the game side never reads whether such a target is
+hostile, so it goes by not the party's; the site counts the same, `pullEvents.ts`), a status resisted, potions,
 limit breaks, tank swaps (a boss's target held a second or more by a tank after another tank, not as its
 cast's target) and a non-tank holding a boss (said when it moves off, with how long). **The limit break
 gauge** (`IMeterSource.LimitBreak`): bars full, the bars there are, the units in the one filling, units a
@@ -911,7 +954,7 @@ one (both tested).
   dashes; between pulls it folds to one line (the last fight's length and tag, "Pull 12 · party
   163,188", a chevron that opens it again), or hides with _Hide out of combat_. A new pull shows itself, whatever was picked before it.
   Pressing a row opens the meter opened up on that player; a death, on its recap.
-- **Events** (0.4.0; `IMeterSource.Events`, the session's first 200 a fight): the fight's events as a
+- **Events** (0.4.0; `IMeterSource.Events`, the session's newest 200 a fight): the fight's events as a
   feed, the newest nearest the head (growing up too), a 23px row each (20 compact): the time in mono
   (11px, faint, in a 30px column), the kind's Lucide mark in its colour (`MeterText.Tone`: a death's
   skull, a cast that went off's warning and aggro lost red; a raise's heart and an interrupt green;
@@ -1172,8 +1215,8 @@ RaidPlanner/
   Plugin.cs, Services.cs, Configuration.cs
   Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), the
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
-              plans (Plan, CueFollower), pull summaries and their numbers (PullSummary, PullStats)
-              and the roster; Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
+              plans (Plan, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
+              the roster and the diagnostics file (DiagnosticsLog); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
               phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
               which is which (CombatLists, CombatKinds), who interrupted, the moments before a pull
               and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
@@ -1317,6 +1360,21 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   and MP, then the frames as before, then ground placements, casts, uses, ticks (frames by time now).
 - **Fixed**: a hit that did damage and had a status resisted (a stun on a boss immune to it) counted as
   not landed (the game's "status resisted" was read as "fully resisted").
+- **Settings → Recording → Diagnostics** (off; off again each time the plugin loads): while on, the raw
+  values behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, items' action
+  type, the Raise and Weakness statuses' sources, the enmity list, the gauge, head signs, your recasts,
+  ground placements) go to `diagnostics-<date>.log` in the recordings folder, for checking the plugin
+  against the game. It holds character names. Capped at 5 MB a file, the newest six kept.
+- **Fixed in review**: the meter never counted a stun (the game side doesn't read whether an enemy the
+  party only puts a status on is hostile, and the meter asked); now any control status put on someone
+  outside the party is one. The meter's potions include the pre-pull one (30 s before the encounter, at
+  its own time), as the summary's `pots` do. A raise is credited in the meter as in the recording (the
+  Raise status's source first, then the raise used). The Events feed keeps the newest 200 events (the
+  first 200 before, so a long pull's live feed stopped). Head signs on no one or past the 17 no longer
+  make a `signs` event every second. A detour that can't read a message says so once in a while, not on
+  every message. The parser's memory of statuses put on is pruned at most once a second and bounded. An
+  enemy cast with no length the game gave is taken as instant. The test fixtures' Weakness is no
+  longer marked as cleansable (the sheet says it isn't).
 - **Fixed before release** (the windows): the cooldown tracker found no row for Starry Muse (the
   sheet doesn't mark it the player's: it's placed through Scenic Muse), so a pictomancer's never
   showed; a cooldown above a member's level now (synced) isn't listed as ready; with recording off,

@@ -124,6 +124,26 @@ public class ReviewFiveMeterTests
     }
 
     [Fact]
+    public void A_long_pulls_feed_keeps_its_newest_events()
+    {
+        var (p, s) = Meter();
+        p.Action(Batch(1, Mt, 9001, 1, Boss, E(3, 10_000)));
+        // 250 potions, one a second (each an event): the newest 200 are kept, oldest first, the feed still moving at the end.
+        for (var i = 0; i < 250; i++)
+        {
+            p.Action(Batch(2 + i, Sch, 1_039_727, 2, Sch));
+            if (i == 99) Assert.Equal(100, s.Events(s.Current!.Id).Count);
+        }
+        var events = s.Events(s.Current!.Id);
+        Assert.Equal(MeterSession.MostEvents, events.Count);
+        Assert.Equal(1 + 50.0, events[0].At);
+        Assert.Equal(1 + 249.0, events[^1].At);
+        // The counts are every one's (a frame later: the live numbers are worked out again).
+        s.Frame(260, Party(), true);
+        Assert.Equal(250, s.Current!.Rows.Single(r => r.Slot == "H2").Potions);
+    }
+
+    [Fact]
     public void A_potion_in_another_zone_is_no_pulls_here()
     {
         var (p, s) = Meter();

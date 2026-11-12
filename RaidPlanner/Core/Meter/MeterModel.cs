@@ -261,7 +261,7 @@ public interface IMeterSource
     string? Problem { get; }
 
     /// <summary>
-    /// An encounter's events, oldest first, at most 200 (the first 200 kept). Empty for an unknown
+    /// An encounter's events, oldest first, at most 200 (the newest 200 kept). Empty for an unknown
     /// id. Added in 0.4.0 (a default so other sources build unchanged).
     /// </summary>
     IReadOnlyList<MeterEvent> Events(int encounterId) => Array.Empty<MeterEvent>();
