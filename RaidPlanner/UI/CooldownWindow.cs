@@ -18,7 +18,8 @@ namespace RaidPlanner.UI;
 /// the right ("Ready" in green; "1/2" before it for charges), the recharge filling the row behind it as
 /// the compact meter's bar does (yours ember). Yours are the game's own timers; the others' are
 /// learned from their uses (<see cref="CooldownBook"/>), an estimate the row's tooltip says is one. The
-/// limit break gauge last, when the party has one. A sample shows under a Preview tag.
+/// limit break gauge last, when the party has one. A sample shows under a Preview tag. Since 0.5.0, while your plan follows a
+/// pull, a cooldown the plan has its member use in the next 15 seconds is outlined in ember with "planned in 8 s".
 /// </summary>
 public sealed class CooldownWindow : OverlayWindow
 {
@@ -41,6 +42,18 @@ public sealed class CooldownWindow : OverlayWindow
 
     /// <summary>In a duty (shown only there unless Everywhere).</summary>
     public Func<bool>? InDuty { get; set; }
+
+    /// <summary>
+    /// Your plan while it follows a pull, and its clock (set by the plugin; since 0.5.0): a row whose cooldown the plan has its
+    /// member use in the next 15 seconds is outlined in ember with "planned in 8 s".
+    /// </summary>
+    public Func<(Core.Plan Plan, double Clock)?>? PlanNow { get; set; }
+
+    /// <summary>The plan's cooldowns placed on its clock, read once a plan.</summary>
+    private PlannedUses? planned;
+
+    /// <summary>"planned in 8 s" by its second (−1: "planned now"), made once each.</summary>
+    private readonly Dictionary<int, string> plannedWords = new();
 
     /// <summary>The limit break gauge now (the meter's), or null.</summary>
     public Func<LimitBreakGauge?>? Gauge { get; set; }
@@ -73,10 +86,21 @@ public sealed class CooldownWindow : OverlayWindow
         if (now - linesAt >= 1 / 15.0 || now < linesAt)
         {
             linesAt = now;
-            lines = CooldownView.Lines(game.Party, game.Action, Config.CooldownPicks, game.Book, game.Own, now, Config.CooldownsMine, Config.CooldownsHideReady);
+            lines = CooldownView.Lines(game.Party, game.Action, Config.CooldownPicks, game.Book, game.Own, now, Config.CooldownsMine, Config.CooldownsHideReady,
+                Planned(game));
         }
         gauge = Config.CooldownsGauge ? Gauge?.Invoke() : null;
         return lines.Count > 0 || gauge != null;
+    }
+
+    /// <summary>What the plan has each row's member use soon (null with no plan following a pull, or none planned).</summary>
+    private Func<CooldownMember, CooldownSpec, CooldownAction, (PlannedUse Use, double In)?>? Planned(PartyCooldowns g)
+    {
+        if (PlanNow?.Invoke() is not { } now) return null;
+        var uses = planned is { } p && ReferenceEquals(p.Plan, now.Plan) ? p : planned = new PlannedUses(now.Plan);
+        if (uses.All.Count == 0) return null;
+        var clock = now.Clock;
+        return (m, spec, a) => uses.Next(m.Slot, c => CooldownView.Matches(c, spec, a, g.KeyOf), clock) is { } u ? (u, u.At - clock) : null;
     }
 
     /// <summary>The rows, the hairlines between kinds, the gauge's row, a little air at each end; the head while previewing.</summary>
@@ -170,11 +194,26 @@ public sealed class CooldownWindow : OverlayWindow
             right -= S(6);
             right -= Txt.LineRight(dl, right, y, count, Face.Mono, compact ? 9 : 10, Palette.Faint, RowCss);
         }
+        // Planned soon (since 0.5.0): an ember outline round the row, "planned in 8 s" before the time in ember mono.
+        if (l.Planned is { } planned)
+        {
+            dl.AddRect(new Vector2(bx, y + 1), new Vector2(bx + bw, y + h - 1), Palette.U32(Palette.Ember), S(4), ImDrawFlags.None, MathF.Max(1, S(1)));
+            right -= S(6);
+            right -= Txt.LineRight(dl, right, y, PlannedWords(planned.In), Face.Mono, compact ? 9 : 10, Palette.Ember, RowCss);
+        }
         var npx = compact ? 11 : 12;
         var room = right - S(8) - x;
         if (room > S(16))
             Txt.Line(dl, new Vector2(x, y), Txt.Fit(l.Action.Name, Face.SansMedium, npx, room), Face.SansMedium, npx, l.Ready ? Palette.White : Palette.Muted, RowCss);
         _ = index;
+    }
+
+    private string PlannedWords(double inSeconds)
+    {
+        var key = inSeconds <= 0 ? -1 : (int)Math.Ceiling(inSeconds - 1e-9);
+        if (plannedWords.TryGetValue(key, out var text)) return text;
+        if (plannedWords.Count > 128) plannedWords.Clear();
+        return plannedWords[key] = PlannedUses.Soon(inSeconds);
     }
 
     /// <summary>The row's words ("42", "Ready", "1:05"; "1/2"), made again only when the second or the charges change.</summary>

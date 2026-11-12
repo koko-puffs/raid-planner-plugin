@@ -165,6 +165,27 @@ public class RecordingTests
     /// </summary>
     public static Recording Sample(bool partyPositions = true) => SampleBuilder(partyPositions, out _);
 
+    /// <summary>
+    /// The recording player's (the BLM's) gear as the pull began (since 0.5.0): Dark Horse Champion's (7.0's savage) with an
+    /// augmented tomestone ring, the rod taking both hands (so counted twice), and their attributes then. The items' ids, names
+    /// and item levels are the Item sheet's; the attributes are made up but of a level-100 caster's size.
+    /// </summary>
+    public static Gear SampleGear => new("BLM", Gear.AverageItemLevel(new[] { (0, 735), (2, 730), (3, 730), (4, 730), (6, 730), (7, 730), (8, 730), (9, 730), (10, 730), (11, 730), (12, 730) }, true),
+        new[]
+        {
+            new GearItem(0, 43107, false, "Dark Horse Champion's Rod"), new GearItem(2, 43153, false, "Dark Horse Champion's Hat of Casting"),
+            new GearItem(3, 43154, false, "Dark Horse Champion's Coat of Casting"), new GearItem(4, 43155, false, "Dark Horse Champion's Halfgloves of Casting"),
+            new GearItem(6, 43156, false, "Dark Horse Champion's Brais of Casting"), new GearItem(7, 43157, false, "Dark Horse Champion's Shoes of Casting"),
+            new GearItem(8, 43162, false, "Dark Horse Champion's Earring of Casting"), new GearItem(9, 43167, false, "Dark Horse Champion's Choker of Casting"),
+            new GearItem(10, 43172, false, "Dark Horse Champion's Bangle of Casting"), new GearItem(11, 43177, false, "Dark Horse Champion's Ring of Casting"),
+            new GearItem(12, 43100, false, "Augmented Quetzalli Ring of Casting"), new GearItem(13, 4548, false, "Soul of the Black Mage"),
+        },
+        new Dictionary<string, int>
+        {
+            ["str"] = 412, ["dex"] = 425, ["vit"] = 4105, ["int"] = 4886, ["mnd"] = 430, ["crit"] = 2613, ["dh"] = 1876, ["det"] = 2106,
+            ["sks"] = 420, ["sps"] = 1094, ["ten"] = 420, ["pie"] = 440,
+        });
+
     public static Recording SampleBuilder(bool partyPositions, out int phase)
     {
         var b = new RecordingBuilder(new DutyInfo("Test Arena (Savage)", 1, 99999), 3, new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero), partyPositions, "0.1.0",
@@ -178,6 +199,7 @@ public class RecordingTests
             new Partier(18, "BLM", 3, 78_000) };
         b.SetParty(party);
         b.SetSelf(18);
+        b.SetGear(SampleGear);
         var boss = b.Actor(900, "The Boss", 5, 1001);
         var helper = b.Actor(901, "", 0.5f, 1002);
         b.SeenTargetable(boss, 1_000_000);

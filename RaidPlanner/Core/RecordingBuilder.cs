@@ -218,6 +218,9 @@ public sealed class RecordingBuilder
             recording.Party[i] = recording.Party[i] with { Self = recording.Party[i].Id == id };
     }
 
+    /// <summary>The recording player's gear as the pull began (since 0.5.0; null: not read).</summary>
+    public void SetGear(Gear? gear) => recording.Gear = gear;
+
     /// <summary>The recording player's party id (0 not known).</summary>
     public int SelfId => recording.Party.FirstOrDefault(p => p.Self)?.Id ?? 0;
 

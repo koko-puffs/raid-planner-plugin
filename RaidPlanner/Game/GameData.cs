@@ -77,6 +77,20 @@ public sealed class GameData
         return info;
     }
 
+    private readonly Dictionary<uint, GearInfo?> gear = new();
+
+    /// <summary>A piece of gear by its Item sheet row: its name, item level, and whether it takes both hands (its slot category blocks the off hand). Since 0.5.0.</summary>
+    public GearInfo? Gear(uint row)
+    {
+        if (gear.TryGetValue(row, out var known)) return known;
+        GearInfo? info = null;
+        if (Services.Data.GetExcelSheet<Item>().TryGetRow(row, out var it))
+            info = new GearInfo(it.Name.ExtractText(), (int)it.LevelItem.RowId, it.EquipSlotCategory.ValueNullable is { } c && c.OffHand == -1);
+        if (gear.Count > 256) gear.Clear();
+        gear[row] = info;
+        return info;
+    }
+
     /// <summary>An item's name for the meter ("Item 1234" for one the sheet doesn't name; " (HQ)" after a high-quality one's).</summary>
     public string ItemName(uint id) => Item(id) is { Name.Length: > 0 } i ? i.Hq ? $"{i.Name} (HQ)" : i.Name : $"Item {id}";
 
@@ -328,3 +342,6 @@ public sealed class GameData
         return result;
     }
 }
+
+/// <summary>What the Item sheet says about a piece of gear (since 0.5.0): its name, item level, and whether it takes both hands.</summary>
+public sealed record GearInfo(string Name, int ItemLevel, bool TwoHanded);

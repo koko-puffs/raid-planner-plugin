@@ -136,7 +136,7 @@ public sealed partial class MainWindow
         Kit.Gap(12);
 
         // What's being recorded, counted in mono.
-        var party = Math.Max(1, Services.Party.Length);
+        var party = Game.PartyMembers.Count;
         Kit.Facts(new[]
         {
             new Kit.Fact("Casts", Format.Thousands(b.Casts)),

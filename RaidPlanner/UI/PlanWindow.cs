@@ -48,6 +48,9 @@ public sealed class PlanWindow : Window
         public required string Notes;
         public required double? CueAt;
         public required double? NextAt;
+
+        /// <summary>The step's planned cooldowns (since 0.5.0), in the order they go.</summary>
+        public required IReadOnlyList<PlanCooldown> Cooldowns;
         public string? Hidden;
         public List<string> Lines = new();
         public float LinesWidth = -1;
@@ -63,10 +66,6 @@ public sealed class PlanWindow : Window
     /// <summary>The plans menu's rows, made again when the list changes.</summary>
     private readonly List<(PlanListItem Item, bool Here)> menuRows = new();
     private int menuVersion = -1;
-
-    /// <summary>Your spot in the party now (its player on the board takes the reticle), read once a second.</summary>
-    private string? you;
-    private DateTime youAt;
 
     private DateTime drawFailedAt;
     private bool askedForList;
@@ -202,6 +201,7 @@ public sealed class PlanWindow : Window
             Notes = s.Notes,
             CueAt = cueAt,
             NextAt = nextAt,
+            Cooldowns = s.Cooldowns,
             Hidden = hidden > 0 ? $"{hidden} more objects not drawn" : null,
         };
     }
@@ -254,6 +254,13 @@ public sealed class PlanWindow : Window
             y += Kit.Cast(dl, new Vector2(left, y), w, "Following the pull", time, fraction, true, Face.SansMedium, 12, Palette.Text);
         }
 
+        // The step's planned cooldowns (since 0.5.0): who uses what and when, yours washed in ember.
+        if (v.Cooldowns.Count > 0)
+        {
+            y += S(small ? 6 : 10);
+            y += Cooldowns(v, left, y, w, small);
+        }
+
         // The footer: previous, where you are, next. At its smallest there's none (as the mock-up draws
         // it: the callout, the board and the notes' line take the room; /raidplan next and prev still move it).
         var footH = small ? 0 : S(HSm);
@@ -288,37 +295,71 @@ public sealed class PlanWindow : Window
         ImGui.Dummy(Vector2.Zero);
     }
 
-    /// <summary>Your spot (MT, H1…) from the party as the game lists it now, read once a second.</summary>
+    /// <summary>Your spot (MT, H1…) from the party now (<see cref="PartyMembers.YourSpot"/>, read once a second).</summary>
     private string? You()
     {
-        if (DateTime.UtcNow - youAt < TimeSpan.FromSeconds(1)) return you;
-        youAt = DateTime.UtcNow;
         try
         {
-            var me = Services.Objects.LocalPlayer;
-            if (me == null) return you = null;
-            var party = new List<Partier>();
-            foreach (var m in Services.Party)
-            {
-                if (m.EntityId == 0) continue;
-                var (job, role) = data.Job(m.ClassJob.RowId);
-                party.Add(new Partier(m.EntityId, job, role));
-            }
-            if (party.Count == 0)
-            {
-                var (job, role) = data.Job(me.ClassJob.RowId);
-                party.Add(new Partier(me.EntityId, job, role));
-            }
-            foreach (var (who, slot) in Roles.Assign(party))
-                if (who.Key == me.EntityId) return you = slot;
-            return you = null;
+            return PartyMembers.YourSpot(data);
         }
         catch (Exception)
         {
             // The party can't be read this frame (a zone change): no reticle, not an error.
-            return you = null;
+            return null;
         }
     }
+
+    /// <summary>The most planned cooldowns listed in the window (past it, the last row says how many more; all in its tooltip).</summary>
+    private const int CooldownRows = 4;
+
+    /// <summary>
+    /// The step's planned cooldowns (since 0.5.0): a row each (20 tall), the spot in its role's colour, the action, its time off the
+    /// step's ("−3 s") in mono, its note muted; yours washed in ember. Four at most (the fourth "+3 more" past that, every one in its
+    /// tooltip). At its smallest, one line: yours ("You: Reprisal"), else how many. Returns the height used.
+    /// </summary>
+    private float Cooldowns(StepView v, float left, float y, float w, bool small)
+    {
+        var dl = Kit.Dl;
+        var you = You();
+        var lh = S(20);
+        if (small)
+        {
+            var line = PlannedUses.YouLine(v.Plan.Steps[v.Step], you) ?? (v.Cooldowns.Count == 1 ? "1 cooldown planned" : $"{v.Cooldowns.Count} cooldowns planned");
+            Txt.Line(dl, new Vector2(left, y), Txt.Fit(line, Face.Sans, 13, w), Face.Sans, 13, line.StartsWith("You:", StringComparison.Ordinal) ? Palette.White : Palette.Muted, 20);
+            if (Kit.Pointed(new Vector2(left, y), new Vector2(left + w, y + lh))) Kit.Tooltip(CooldownsTip(v.Cooldowns));
+            return lh;
+        }
+        var shown = v.Cooldowns.Count <= CooldownRows ? v.Cooldowns.Count : CooldownRows - 1;
+        for (var i = 0; i < shown; i++)
+        {
+            var c = v.Cooldowns[i];
+            var top = y + lh * i;
+            var mine = c.Spot == you;
+            if (mine) dl.AddRectFilled(new Vector2(left - S(4), top), new Vector2(left + w + S(4), top + lh), Palette.U32(Palette.EmberWash), S(4));
+            Kit.Spot(dl, new Vector2(left + S(8), top + lh / 2), 16, c.Spot, Palette.SpotColor(c.Spot), 1.5f);
+            var x = left + S(16 + 8);
+            var right = left + w;
+            if (c.At != 0) right -= Txt.LineRight(dl, right, top, c.AtWords, Face.Mono, 11, Palette.Muted, 20) + S(8);
+            var nw = Txt.Line(dl, new Vector2(x, top), Txt.Fit(c.Name, Face.SansSemibold, 13, MathF.Max(0, right - x)), Face.SansSemibold, 13, mine ? Palette.White : Palette.Text, 20);
+            if (c.Note is { } note && right - (x + nw + S(8)) > S(24))
+                Txt.Line(dl, new Vector2(x + nw + S(8), top), Txt.Fit(note, Face.Sans, 12, right - (x + nw + S(8))), Face.Sans, 12, Palette.Muted, 20);
+            if (Kit.Pointed(new Vector2(left, top), new Vector2(left + w, top + lh))) Kit.Tooltip(CooldownTip(c));
+        }
+        if (shown < v.Cooldowns.Count)
+        {
+            var top = y + lh * shown;
+            var more = $"+{v.Cooldowns.Count - shown} more";
+            Txt.Line(dl, new Vector2(left + S(16 + 8), top), more, Face.Sans, 12, Palette.Muted, 20);
+            if (Kit.Pointed(new Vector2(left, top), new Vector2(left + w, top + lh))) Kit.Tooltip(CooldownsTip(v.Cooldowns));
+            shown++;
+        }
+        return lh * shown;
+    }
+
+    private static string CooldownTip(PlanCooldown c) =>
+        $"{c.Spot} · {c.Name}{(c.At != 0 ? $" {c.AtWords}" : string.Empty)}{(c.Note is { } n ? $" · {n}" : string.Empty)}";
+
+    private static string CooldownsTip(IReadOnlyList<PlanCooldown> list) => string.Join("\n", list.Select(CooldownTip));
 
     /// <summary>The notes, wrapped once for the width, in a part of their own that scrolls, fading at the foot when there's more.</summary>
     private void Notes(StepView v, float left, float y, float w, float h, bool small)

@@ -38,6 +38,90 @@ public sealed record DutyInfo(string Name, uint Territory, uint Content, bool Fi
 /// </summary>
 public sealed record PartyMember(int Id, string Slot, string Job, string Role, long MaxHp = 0, bool Self = false);
 
+/// <summary>
+/// One piece of the recording player's gear (since 0.5.0): its place in the game's equipped-items container
+/// (<paramref name="Slot"/>: 0 main hand, 1 off hand, 2 head, 3 body, 4 hands, 6 legs, 7 feet, 8 ears, 9 neck,
+/// 10 wrists, 11 and 12 rings, 13 the soul crystal), its Item sheet row, whether high-quality and its name.
+/// </summary>
+public sealed record GearItem(int Slot, uint Id, bool Hq, string Name);
+
+/// <summary>
+/// The recording player's gear as the pull began (since 0.5.0; <c>gear</c>, absent when it couldn't be read): their job,
+/// average item level (<paramref name="ItemLevel"/>, the items' own as the character window works it out, before any level
+/// sync), the items, and their attributes then (<paramref name="Stats"/>, by <see cref="StatKeys"/>; level sync applied, as the
+/// game had them). Read from the game's equipped-items container and the player's attributes [verify].
+/// </summary>
+public sealed record Gear(string Job, int ItemLevel, IReadOnlyList<GearItem> Items, IReadOnlyDictionary<string, int> Stats)
+{
+    /// <summary>The attributes kept, in the order they're written: the site's keys.</summary>
+    public static readonly string[] StatKeys = { "str", "dex", "vit", "int", "mnd", "crit", "dh", "det", "sks", "sps", "ten", "pie" };
+
+    /// <summary>The most items kept (the container's 14 places).</summary>
+    public const int MostItems = 14;
+
+    /// <summary>
+    /// The average item level as the character window works it out [verify]: the 12 places that count (not the waist's,
+    /// 5, nor the soul crystal, 13), an empty one 0, the main hand counted again in the off hand's place when it takes both
+    /// hands; over 12, rounded down.
+    /// </summary>
+    public static int AverageItemLevel(IEnumerable<(int Slot, int ItemLevel)> items, bool twoHanded)
+    {
+        var sum = 0L;
+        var main = 0;
+        foreach (var (slot, ilvl) in items)
+        {
+            if (slot is 5 or >= 13 or < 0 || (slot == 1 && twoHanded)) continue;
+            sum += Math.Max(0, ilvl);
+            if (slot == 0) main = Math.Max(0, ilvl);
+        }
+        if (twoHanded) sum += main;
+        return (int)(sum / 12);
+    }
+
+    internal void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteString("job", Job);
+        w.WriteNumber("ilvl", Math.Max(0, ItemLevel));
+        w.WriteStartArray("items");
+        foreach (var i in Items.OrderBy(i => i.Slot))
+        {
+            w.WriteStartObject();
+            w.WriteNumber("slot", i.Slot);
+            w.WriteNumber("id", i.Id);
+            w.WriteBoolean("hq", i.Hq);
+            w.WriteString("name", i.Name);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteStartObject("stats");
+        foreach (var key in StatKeys)
+            if (Stats.TryGetValue(key, out var v) && v > 0)
+                w.WriteNumber(key, v);
+        w.WriteEndObject();
+        w.WriteEndObject();
+    }
+
+    /// <summary>Read leniently: a bad item (a slot outside 0–13, no id) or stat (unknown key, not a whole number above 0) is left out; null when it isn't an object.</summary>
+    internal static Gear? Read(JsonNode? n, Func<JsonNode?, double?> num, Func<JsonNode?, string?> str, Func<JsonNode?, bool> boolean)
+    {
+        if (n is not JsonObject o) return null;
+        var items = new List<GearItem>();
+        if (o["items"] is JsonArray a)
+            foreach (var i in a.OfType<JsonObject>())
+                if (num(i["slot"]) is { } slot && slot is >= 0 and < MostItems && slot == Math.Floor(slot)
+                    && num(i["id"]) is { } id && id is > 0 and <= uint.MaxValue && items.All(x => x.Slot != (int)slot))
+                    items.Add(new GearItem((int)slot, (uint)id, boolean(i["hq"]), str(i["name"]) ?? string.Empty));
+        var stats = new Dictionary<string, int>();
+        if (o["stats"] is JsonObject s)
+            foreach (var key in StatKeys)
+                if (num(s[key]) is { } v && v is > 0 and <= int.MaxValue)
+                    stats[key] = (int)v;
+        var ilvl = num(o["ilvl"]) is { } l && l is >= 0 and <= 10000 ? (int)l : 0;
+        return new Gear(str(o["job"]) ?? string.Empty, ilvl, items, stats);
+    }
+}
+
 /// <summary>What an enemy or other actor in the fight is, as the plan draws it.</summary>
 public enum ActorKind
 {
@@ -436,6 +520,9 @@ public sealed class Recording
     /// <summary>The party's own fight (since 0.3.0), or null in older files.</summary>
     public CombatLog? Combat { get; set; }
 
+    /// <summary>The recording player's gear as the pull began (since 0.5.0), or null (older files; it couldn't be read).</summary>
+    public Gear? Gear { get; set; }
+
     /// <summary>The mechanics in it: the enemies' casts, and their hits that came without one.</summary>
     public int MechanicCount => Timeline.Build(this).Count;
 
@@ -480,6 +567,11 @@ public sealed class Recording
             w.WriteEndObject();
         }
         w.WriteEndArray();
+        if (Gear != null)
+        {
+            w.WritePropertyName("gear");
+            Gear.Write(w);
+        }
 
         w.WriteStartArray("actors");
         foreach (var a in Actors)
@@ -602,6 +694,7 @@ public sealed class Recording
         r.Events.AddRange(Events);
         r.Frames.AddRange(frames);
         r.Combat = combat;
+        r.Gear = Gear;
         return r;
     }
 
@@ -669,6 +762,7 @@ public sealed class Recording
                 r.Frames.Add(new Frame(Num(f["t"]) ?? 0, at2, hp));
             }
         if (o["combat"] is JsonObject combat) r.Combat = CombatLog.Read(combat);
+        r.Gear = Gear.Read(o["gear"], Num, Str, Bool);
         return r;
     }
 

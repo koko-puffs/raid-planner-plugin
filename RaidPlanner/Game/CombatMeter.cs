@@ -19,6 +19,8 @@ namespace RaidPlanner.Game;
 /// during an encounter which enemies can be targeted (the phases). The duty's wipe and clear, a zone
 /// change and logging out end an encounter. On the framework thread.
 ///
+/// Since 0.5.0 the party is <see cref="PartyMembers"/>'s: a cross-world party outside a duty counts (before, only you did).
+///
 /// It turns itself off rather than show nonsense: when the parser has dropped three effects that make
 /// no sense (<see cref="CombatParser.Anomalies"/>), the game has moved something it reads; the session
 /// says so (<see cref="MeterSession.Problem"/>) until the plugin is updated.
@@ -161,18 +163,19 @@ public sealed unsafe class CombatMeter : IDisposable
 
         var count = 0;
         var anyInCombat = Services.Condition[ConditionFlag.InCombat];
-        foreach (var m in Services.Party)
+        // The party (since 0.5.0 a cross-world party's group too, outside a duty: PartyMembers), each with a known entity id.
+        foreach (var m in PartyMembers.Read())
         {
             if (m.EntityId is 0 or InvalidId || count >= party.Length) continue;
-            var (name, job, role) = Who(m.EntityId, m);
-            var (inCombat, weak) = Read(m.EntityId, Session.InEncounter);
-            anyInCombat |= inCombat;
-            party[count++] = new PartyState(m.EntityId, name, job, role, m.CurrentHP, m.MaxHP, inCombat, m.EntityId == me.EntityId, weak);
+            var (name, job, role) = Who(m.EntityId, m.ClassJob, m.Name);
+            var weak = Weakness(m.EntityId, Session.InEncounter);
+            anyInCombat |= m.InCombat;
+            party[count++] = new PartyState(m.EntityId, name, job, role, m.Hp, m.MaxHp, m.InCombat, m.IsYou, weak);
         }
         if (count == 0)
         {
-            var (name, job, role) = Who(me.EntityId, null);
-            var (_, weak) = Read(me.EntityId, Session.InEncounter);
+            var (name, job, role) = Who(me.EntityId, me.ClassJob.RowId, null);
+            var weak = Weakness(me.EntityId, Session.InEncounter);
             party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true, weak);
         }
         var lb = LimitBreakController.Instance();
@@ -188,41 +191,33 @@ public sealed unsafe class CombatMeter : IDisposable
     }
 
     /// <summary>
-    /// A party member's name, job and role, read the first time they're seen and again when their job
-    /// changes (outside a duty, with the meter everywhere): reading a name makes a string.
+    /// A party member's name, job and role, kept the first time they're seen and again when their job
+    /// changes (outside a duty, with the meter everywhere). <paramref name="name"/> null: yours, read here.
     /// </summary>
-    private (string Name, string Job, byte Role) Who(uint entityId, Dalamud.Game.ClientState.Party.IPartyMember? m)
+    private (string Name, string Job, byte Role) Who(uint entityId, uint classJob, string? name)
     {
-        var me = m == null && Services.Objects.LocalPlayer is { } local && local.EntityId == entityId ? local : null;
-        if (m == null && me == null) return (string.Empty, string.Empty, 0);
-        var classJob = m != null ? m.ClassJob.RowId : me!.ClassJob.RowId;
         if (known.TryGetValue(entityId, out var was) && was.ClassJob == classJob && was.Job.Length > 0) return (was.Name, was.Job, was.Role);
-        var name = m != null ? m.Name.TextValue : me!.Name.TextValue;
+        name ??= Services.Objects.LocalPlayer is { } local && local.EntityId == entityId ? local.Name.TextValue : string.Empty;
         var (job, role) = data.Job(classJob);
         if (known.Count > 256) known.Clear();
         known[entityId] = (classJob, name, job, role);
         return (name, job, role);
     }
 
-    /// <summary>
-    /// A party member's in-combat flag, from the game's own look-up (false when they're out of range), and (during an encounter)
-    /// Weakness (1) or Brink of Death (2) on them from their status list.
-    /// </summary>
-    private (bool InCombat, byte Weakness) Read(uint entityId, bool statuses)
+    /// <summary>During an encounter, Weakness (1) or Brink of Death (2) on a party member, from their status list (0 when they aren't near).</summary>
+    private byte Weakness(uint entityId, bool statuses)
     {
+        if (!statuses) return 0;
         var manager = CharacterManager.Instance();
-        if (manager == null) return (false, 0);
+        if (manager == null) return 0;
         var bc = manager->LookupBattleCharaByEntityId(entityId);
-        if (bc == null) return (false, 0);
+        if (bc == null) return 0;
         byte weak = 0;
-        if (statuses)
-        {
-            var list = bc->StatusManager.Status;
-            for (var i = 0; i < list.Length; i++)
-                if (list[i].StatusId != 0 && data.Kinds.Weakness(list[i].StatusId) is var w and > 0)
-                    weak = (byte)Math.Max(weak, w);
-        }
-        return (((Character*)bc)->CharacterData.InCombat, weak);
+        var list = bc->StatusManager.Status;
+        for (var i = 0; i < list.Length; i++)
+            if (list[i].StatusId != 0 && data.Kinds.Weakness(list[i].StatusId) is var w and > 0)
+                weak = (byte)Math.Max(weak, w);
+        return weak;
     }
 
     private string Place(uint territory)

@@ -17,21 +17,24 @@ Record the fights you're in, then make them into plans on
   and everyone's HP, and your party's own hits, heals and buffs, for the site's numbers; every action
   and potion your party used (the moments before the pull too), raises, interrupts and stuns, whom the
   boss was on and its enmity list, MP, barriers and the limit break gauge, for the site's replay,
-  timelines and events. Names are never kept, only jobs.
+  timelines and events; and your own gear and stats as the pull began. Names are never kept, only jobs.
 - **Sends a pull to the Raid Planner** with one press, once you've linked your account. It waits
   on the planner's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
 - **Or saves it as a file** to import on the site yourself (Import, on the planner's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
 - **Shows your plan in the duty.** A small window with the step's callout, its board and its notes,
-  which moves along with the pull by itself. Each step said in chat a few seconds before it comes,
-  and the next few on screen, counting down to each, with a sound if you like.
+  which moves along with the pull by itself, and who uses which cooldown in it. Each step said in chat
+  a few seconds before it comes, and the next few on screen, counting down to each (with yours: "You:
+  Reprisal"), with a sound if you like.
 - **A meter over the fight**: damage, healing, damage taken and deaths for your party, worked out
   in the game (no names leave it). Pick an earlier pull, pace against your best, open it up for
   every column and a death's recap, see the fight's events (raises, interrupts, potions, limit
-  breaks, tank swaps) and the limit break gauge, and copy it as text for chat.
+  breaks, tank swaps) and the limit break gauge, and copy it as text for chat. A cross-world party
+  counts too, outside duties as well (on a target dummy with a friend).
 - **A party cooldown tracker**: your party's raid buffs, mitigation and Swiftcast, each with the
-  time until it's ready (yours from the game's own timers, the others' from when they used them).
+  time until it's ready (yours from the game's own timers, the others' from when they used them), and
+  a cooldown your plan has someone use soon outlined ("planned in 8 s").
 - **Tracks your progress** (once linked): how far each pull got, the boss's HP left and each spot's
   numbers, for the site's progress tracker.
 - **Only watches.** It never acts in the game or sends anything to it.
@@ -81,8 +84,7 @@ callouts (`unlock`, `preview` or `settings` after either).
   to `diagnostics-<date>.log` in the recordings folder, for checking it; the file holds character names.
 - **Plan window**: _Show my plan in duties_ (on), _Lock it where it is_, _Say each step in chat_ (on),
   _Share my step with the site_ (off, so Present can follow), and _Send my party to my roster_, which
-  sends your party's names to your own account, only when you press it (do it in the duty, where the
-  game shows your whole party). _On-screen callouts_ (on): how far ahead, how many, a sound before
+  sends your party's names to your own account, only when you press it. _On-screen callouts_ (on): how far ahead, how many, a sound before
   each step (off; one of the game's own), and where and how the window sits.
 - **Meter**: _Show the meter_ (on, in duties or everywhere, folded or hidden out of combat), ENCDPS or
   DPS, names or jobs only, lock and click-through, which way it grows (down, or up with its clock and

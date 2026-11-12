@@ -16,7 +16,7 @@ namespace RaidPlanner.UI;
 /// <see cref="CooldownCatalog"/> lists, found by their English names on the Action sheet (read once on a
 /// worker); each use goes into <see cref="Book"/>, which learns the others' recasts. Your own cooldowns are
 /// read from the game's own timers each frame (<c>ActionManager</c>: exact, charges and all). The party is
-/// the party list's (spots by <see cref="Roles"/>), read four times a second. A new zone forgets every
+/// <see cref="PartyMembers"/>'s (the party list, or a cross-world party's group; spots by <see cref="Roles"/>), read four times a second. A new zone forgets every
 /// use, as does the duty starting again after a wipe (the game resets recasts then). The hooks are kept on
 /// while it's wanted (<see cref="WantsHooks"/>: the plugin asks the recorder). Never throws into the game.
 /// </summary>
@@ -99,6 +99,9 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     /// <summary>The recast the others' uses are counted by: for a role action you have too, the game's for you (your role's traits at this level), else the sheet's.</summary>
     private double RecastFor(string key, CooldownAction a) => roleRecast.TryGetValue(key, out var r) && r > 0 ? r : a.Recast;
 
+    /// <summary>The tracker's key for an Action sheet row (null: not a tracked cooldown, or the sheet isn't read yet). Since 0.5.0, for the plan's cooldowns.</summary>
+    public string? KeyOf(uint action) => Ready && lookup.Result.KeyOf.TryGetValue(action, out var key) ? key : null;
+
     /// <summary>One of your own cooldowns now (exact), or null when it isn't yours.</summary>
     public OwnCooldown? Own(string key) => own.TryGetValue(key, out var o) ? o : null;
 
@@ -168,12 +171,13 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     {
         partiers.Clear();
         levels.Clear();
-        foreach (var m in Services.Party)
+        // The party (since 0.5.0 a cross-world party's group too, outside a duty: PartyMembers). Everyone takes a spot (as the plan
+        // window's), but only those with a known entity id get rows: a cross-world member who isn't near can't be heard using anything.
+        foreach (var m in PartyMembers.Read())
         {
-            if (m.EntityId is 0 or InvalidId) continue;
-            var (job, role) = data.Job(m.ClassJob.RowId);
-            partiers.Add(new Partier(m.EntityId, job, role));
-            levels[m.EntityId] = m.Level;
+            var (job, role) = data.Job(m.ClassJob);
+            partiers.Add(new Partier(m.Key, job, role));
+            if (m.EntityId is not (0 or InvalidId)) levels[m.EntityId] = m.Level;
         }
         if (partiers.Count == 0)
         {
@@ -184,7 +188,9 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         levels[meId] = myLevel;
         party.Clear();
         foreach (var (who, slot) in Roles.Assign(partiers))
-            party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId, levels.TryGetValue((uint)who.Key, out var lv) ? lv : 0));
+            // A key in the levels is a known entity id (yours always is).
+            if (who.Key <= uint.MaxValue && levels.TryGetValue((uint)who.Key, out var lv))
+                party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId, lv));
     }
 
     /// <summary>Your own tracked cooldowns, from the game's timers (and the recast your role's actions have for you, for the others').</summary>
