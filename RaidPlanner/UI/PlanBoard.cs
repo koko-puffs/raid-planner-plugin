@@ -21,7 +21,8 @@ public readonly record struct DrawnObj(BoardObj O, Vector4 Color, string? Glyph)
 /// towers, exaflares, gazes, knockbacks and the rest drawn as themselves; enemies as the Boss's
 /// shield; players as spots on a dark halo, you under the reticle. Board units are the site's
 /// (±500, the arena within ±420, y down; rotation in degrees, 0 north, clockwise); the marks are
-/// sized by the arena's yalms.
+/// sized by the arena's yalms. A real arena (<c>poly</c>, since 0.5.0) is its polygons, holes cut
+/// out, made ready once a plan (<see cref="ArenaFloor"/>).
 /// </summary>
 public static class PlanBoard
 {
@@ -125,9 +126,13 @@ public static class PlanBoard
         var squareGrid = arena.Grid is "square" or "both";
         switch (arena.Shape)
         {
+            case "poly" when ArenaFloor.Of(arena) is { } real:
+                DrawReal(dl, c, k, real, floor, grid, squareGrid, radialGrid, arena.Edge, edgeCol, edgeW);
+                break;
             case "rectangle":
             case "square":
             case "custom" when arena.Outlines.Count == 0:
+            case "poly":
             {
                 var half = arena.Shape == "rectangle"
                     ? arena.Aspect <= 1 ? new Vector2(e, e * arena.Aspect) : new Vector2(e / arena.Aspect, e)
@@ -221,6 +226,55 @@ public static class PlanBoard
                 }
                 break;
             }
+        }
+    }
+
+    /// <summary>The most corners of a floor's triangles given to ImGui at once (well under its 65,536 a draw).</summary>
+    private const int FloorChunk = 3 * 4096;
+
+    /// <summary>
+    /// A real arena (<c>poly</c>), as the site draws it (a custom arena's way, its holes even-odd): each polygon's floor
+    /// from its triangles (cut once, <see cref="ArenaFloor"/>), the grid cut to the floor, and the rim along every ring,
+    /// outlines and holes alike (a wall, an ember death wall with its glow, or a dashed drop). No bezel, no compass (as
+    /// the board's other shapes but the round one).
+    /// </summary>
+    private static void DrawReal(ImDrawListPtr dl, Vector2 c, float k, ArenaFloor real, uint floor, uint grid, bool squareGrid, bool radialGrid,
+        string edge, uint edgeCol, float edgeW)
+    {
+        var uv = ImGui.GetFontTexUvWhitePixel();
+        foreach (var tris in real.Floors)
+            for (var i = 0; i < tris.Length; i += FloorChunk)
+            {
+                var n = Math.Min(FloorChunk, tris.Length - i);
+                dl.PrimReserve(n, n);
+                for (var j = 0; j < n; j++) dl.PrimVtx(c + tris[i + j] * k, uv, floor);
+            }
+        if (squareGrid)
+            foreach (var (a, b) in real.SquareGrid) dl.AddLine(c + a * k, c + b * k, grid, 1f);
+        if (radialGrid)
+            foreach (var (a, b) in real.RadialGrid) dl.AddLine(c + a * k, c + b * k, grid, 1f);
+
+        Span<Vector2> pts = stackalloc Vector2[Rings.MaxPoints + 2];
+        if (edge == "drop")
+        {
+            var col = Palette.U32(Palette.Hex(0x3a3b45));
+            foreach (var dash in real.Dashes)
+            {
+                var n = Math.Min(dash.Length, pts.Length);
+                if (n < 2) continue;
+                for (var i = 0; i < n; i++) pts[i] = c + dash[i] * k;
+                dl.AddPolyline(ref pts[0], n, col, ImDrawFlags.None, edgeW);
+            }
+            return;
+        }
+        var glow = Palette.U32(Palette.WithAlpha(Palette.Ember, 0.3f));
+        foreach (var rim in real.Rims)
+        {
+            var n = Math.Min(rim.Length, pts.Length);
+            if (n < 3) continue;
+            for (var i = 0; i < n; i++) pts[i] = c + rim[i] * k;
+            if (edge == "death") dl.AddPolyline(ref pts[0], n, glow, ImDrawFlags.Closed, edgeW * 3);
+            dl.AddPolyline(ref pts[0], n, edgeCol, ImDrawFlags.Closed, edgeW);
         }
     }
 

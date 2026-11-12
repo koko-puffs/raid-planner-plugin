@@ -598,7 +598,7 @@ mid-pull, what's been said and matched (`CueFollower.CarryFrom`), so nothing is 
 number is left out or given its usual value, text is cut short (names 200, callouts 200, notes
 4,000, labels 40), coordinates are kept within ±5,000, and there are caps: 200 plans, 400 steps, 600
 objects a step, 500 cues, 16 arena outlines of 512 points, 256 points a pen stroke. A plan without an
-id or steps isn't one. Since 0.3.0 it reads each step's `callout` (what a raid lead says: the plan
+id or steps isn't one. A real arena's rings (since 0.5.0, below) are read as the site cleans them. Since 0.3.0 it reads each step's `callout` (what a raid lead says: the plan
 window's big words and the chat line, `PlanStep.Big` falling back to the step's name without its
 "P2 · "), the board's `order`, `reach`, `spacing`, `dashed`, `noIcon` and a pen's `points`, the
 arena's `yalms`, `edge` (wall, death, drop) and `grid`, and a list entry's `steps` when the site
@@ -729,6 +729,43 @@ you (your spot in the party now, from `PartyMembers` and `Core/Roles.cs`, read o
 reticle; waymarks as their lettered circle or numbered square; head markers (limit cut dots,
 PlayStation shapes, signs). At most 160 objects (players, waymarks and enemies kept first; the
 tooltip over the board says how many weren't drawn), in the site's layers, clipped to the board.
+
+**A real arena** (since 0.5.0; the site's `shape: 'poly'`, its model/rings.ts, from 12 November 2026):
+the arena's exact shape from the game or the encounter data, as polygons with holes. `rp_plugin_plan`
+sends the plan's arena as stored, so it comes as `rings` (`[polygon][its outline, then its holes][x0,
+y0, x1, y1, …]`, yalms from the board's centre, x east, y south, as the objects), `yalms` (twice its
+reach), `aspect` 1, `outlines: []`, and, only for information, `center` (`{ x, z }`, the world point at
+the board's centre) and `duty` (the ContentFinderCondition it was picked from), either of which may be
+missing; never its floor picture (nor a step's own arena, as before). `Core/Rings.cs` reads the rings
+as the site's `cleanRings` does, never throwing: numbers only, two to a corner, a corner that isn't a
+finite number dropped with its pair (an odd one left over too), kept within ±500 yalms and to 0.01; a
+ring of fewer than three corners dropped, a polygon whose outline isn't one dropped with its holes (a bad
+hole after a good outline is just skipped); at most 32 polygons of 32 rings of 512 corners, 4,096
+corners in all, the first kept. A `poly` with no ring left is drawn as a plain square (as the site does);
+without `yalms` its size is twice the rings' reach, rounded up to a tenth; `edge` missing is a wall. On
+the board a corner is at its value × 840 / yalms. Rings aren't closed and are read **even-odd**: a point
+is on the floor when, in any one polygon, it's inside an odd number of that polygon's rings
+(`PlanArena.OnFloor`, as the site's `inRings`; the other shapes answer too), so which way a ring goes
+doesn't matter, a hole is a ring inside its outline, platforms that overlap are floor where they
+overlap, and a split arena's gap isn't floor.
+
+Drawn as the site draws it (as a custom arena's outlines, holes even-odd): each polygon's floor in the
+arena's colour, then the grid, then the rim along every ring, outlines and holes alike, in the edge's
+style (the #3a3b45 wall, the ember death wall with its glow, the dashed drop); no bezel and no compass
+(as the board's other shapes but the round one). ImGui fills only convex shapes and has no even-odd
+rule, so `UI/Model/ArenaFloor.cs` cuts each polygon once, the first time the plan's step is shown, and
+keeps it with the arena (never in a frame): a scanline, slabs at every corner's height and wherever two
+edges cross, the edges through a slab paired off left to right (even-odd), each pair a trapezoid of two
+triangles, joined with the one above while the same two edges bound it. It needs no winding and takes
+holes, touching rings, overlapping polygons (each fills, as the site's paths do) and rings crossing
+themselves; its work is bounded (24,576 triangles, a fixed amount of looking), so a broken shape draws
+in part and never holds the game up (a real 4,096-corner arena takes about 60 ms, once). Made with it, in
+board units: each ring's corners for the rim, a drop's dashes along every ring (0.9 on, 0.6 off in the
+marks' units, as the board dashes a drop elsewhere; 8,192 at most, longer past that), and the grid cut to
+the floor, even-odd along each line (the square grid's lines at −½, 0 and ½ of the half-width, the radial
+grid's rings every quarter and its four diameters, out to the floor's furthest corner), as the site clips
+its grid to the arena. A frame only scales and moves what's made, and gives ImGui the triangles in
+batches well under its 65,536 corners a draw.
 
 ## The windows' look (`UI/Kit/`)
 
@@ -1320,7 +1357,7 @@ RaidPlanner/
   Plugin.cs, Services.cs, Configuration.cs
   Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), the
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
-              plans (Plan, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
+              plans (Plan, a real arena's rings: Rings, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
               the roster and the diagnostics file (DiagnosticsLog), who the party is (PartyPick),
               the gear (Recording: Gear); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
               phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
@@ -1337,7 +1374,8 @@ RaidPlanner/
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
-              (PlannedUses), the overlays' settings (Overlay),
+              (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
+              settings (Overlay),
               /raidplan's words (Commands), SVG
               paths, dashes), tested
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
@@ -1464,6 +1502,12 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   `callout`, which it never sent before, so the plan window's big words and the chat line now use a
   step's callout rather than its name).
 - The cooldown tracker's and the callouts' samples show a planned cooldown.
+- **Real arenas in the plan window.** A plan whose arena is a real arena's exact shape (the site's new
+  `poly` arenas: the game's walkable outline or the encounter data's, polygons with holes) is drawn as
+  it is: each platform's floor with its holes cut out, the grid kept to the floor, and the rim (wall,
+  death wall or drop) along every outline and hole. Its shape is read leniently (anything malformed is
+  left out, never an error) and cut into triangles once, when the step is first shown, so drawing stays
+  as cheap as before.
 
 ### 0.4.0
 
