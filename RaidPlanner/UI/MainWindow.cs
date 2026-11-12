@@ -60,7 +60,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
         Size = new Vector2(560, 800);
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(440, 520), MaximumSize = new Vector2(1400, 2400) };
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(460, 520), MaximumSize = new Vector2(1400, 2400) };
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
         dialogs.AddedWindowFlags = ImGuiWindowFlags.NoCollapse;
     }

@@ -147,11 +147,26 @@ public static class Txt
     public static float SpacedWidth(string text, Face face, int px, float em) =>
         Spaced(default, Vector2.Zero, text, face, px, Vector4.Zero, em, draw: false);
 
-    /// <summary>The text cut to fit a width, with an ellipsis.</summary>
+    /// <summary>Text cut to fit (its face, size and whole pixels wide): kept, so a row cut every frame makes no strings.</summary>
+    private static readonly Dictionary<(string Text, Face Face, int Px, int Width), string> FitKept = new();
+
+    /// <summary>
+    /// The text cut to fit a width, with an ellipsis. Text that fits is itself; a cut is kept (by the
+    /// whole pixels it's cut to, so it never runs over), but not while the face isn't built yet.
+    /// </summary>
     public static string Fit(string text, Face face, int px, float width)
     {
-        using (Fonts.Push(For(face, text), px))
-            return Format.Fit(text, s => ImGui.CalcTextSize(s).X, width);
+        var f = For(face, text);
+        using (Fonts.Push(f, px))
+        {
+            if (ImGui.CalcTextSize(text).X <= width) return text;
+            var w = (int)MathF.Floor(width);
+            if (FitKept.TryGetValue((text, f, px, w), out var kept)) return kept;
+            var cut = Format.Fit(text, s => ImGui.CalcTextSize(s).X, w);
+            if (!Ready(f, px)) return cut;
+            if (FitKept.Count > 512) FitKept.Clear();
+            return FitKept[(text, f, px, w)] = cut;
+        }
     }
 
     /// <summary>Words wrapped to a width, at most <paramref name="maxLines"/> lines (the last cut with "…").</summary>

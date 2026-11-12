@@ -6,7 +6,7 @@
     from RaidPlanner.json and, in Release, zips the plugin to bin\x64\Release\RaidPlanner\latest.zip.
   -->
   <PropertyGroup>
-    <Version>0.3.1.0</Version>
+    <Version>0.4.0.0</Version>
     <AssemblyName>RaidPlanner</AssemblyName>
     <RootNamespace>RaidPlanner</RootNamespace>
     <Description>Record the fights you're in and turn them into plans on Koko's Raid Planner.</Description>

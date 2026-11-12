@@ -71,7 +71,7 @@ public class FormatAdditionTests
         c.Fx.Add(new FxRow(1.234, 102, 1, 101, 7000, 1, -1));
         var r = new Recording { Combat = c };
         var json = r.ToJson();
-        Assert.Contains("\"fx\":{\"t\":[30,20,73],\"a\":[101,100,102],\"o\":[2,1,1],\"r\":[1,101,101],\"v\":[900,5000,7000],\"k\":[2,9,1],\"h\":[45000,-1,-1]}", json);
+        Assert.Contains("\"fx\":{\"t\":[30,20,73],\"a\":[101,100,102],\"o\":[2,1,1],\"r\":[1,101,101],\"v\":[900,5000,7000],\"k\":[2,9,1],\"h\":[45000,-1,-1],\"b\":[0,0,0]}", json);
         var back = Recording.Parse(json).Combat!;
         Assert.Equal(new[] { 0.3, 0.5, 1.23 }, back.Fx.Select(f => f.T));
         Assert.Equal(new[] { 101u, 100u, 102u }, back.Fx.Select(f => f.Action));
@@ -323,6 +323,7 @@ public class FitTests
         Assert.True(SiteLink.ServerSize(fit.Value.Json) <= SiteLink.MaxBytes);
         var back = Recording.Parse(fit.Value.Json);
         Assert.Empty(back.Frames);
+        // 0.4.0's order: the enmity list and MP (none here, so not said), the frames, the ground placements (none), then the casts.
         Assert.Equal(new[] { "cast" }, back.Combat!.Thinned);
         Assert.Empty(back.Combat.Casts);
         Assert.Equal(30_000, back.Combat.Fx.Count);

@@ -103,25 +103,49 @@ public class RecordingTests
         [500] = new ActionInfo("attack", 1, 0, 0, "", 0),
         [600] = new ActionInfo("Crushing Blow", 1, 0, 0, "", 5),
         [700] = new ActionInfo("Exaflare", 2, 6, 0, "general_1bf", 0),
-        // The party's own (since 0.3.0, with their category and recast): a weaponskill, a heal, a DoT,
-        // a pet's, a cast spell, a buff, and a limit break.
-        [9001] = new ActionInfo("Fast Blade", 1, 3, 0, "", 0, 3, 2.5f),
-        [9002] = new ActionInfo("Cure II", 1, 30, 0, "", 2, 2, 2.5f),
-        [9003] = new ActionInfo("Dia", 1, 25, 0, "", 0, 2, 2.5f),
+        // Since 0.4.0: an interruptible cast.
+        [800] = new ActionInfo("Gaze of Ruin", 1, 0, 0, "", 3),
+        // The party's own (since 0.3.0, with their category and recast; since 0.4.0 their cooldown groups, charges, ground
+        // placement): a weaponskill, a heal, a DoT, a pet's, a cast spell, a buff, and a limit break; an interrupt, a provoke,
+        // a raise, a ground heal, a two-charge oGCD.
+        [9001] = new ActionInfo("Fast Blade", 1, 3, 0, "", 0, 3, 2.5f, 58),
+        [9002] = new ActionInfo("Cure II", 1, 30, 0, "", 2, 2, 2.5f, 58),
+        [9003] = new ActionInfo("Dia", 1, 25, 0, "", 0, 2, 2.5f, 58),
         [9004] = new ActionInfo("Phantom Kamaitachi", 2, 3, 0, "", 0, 3, 0),
-        [9005] = new ActionInfo("Fire IV", 2, 25, 5, "", 2.8f, 2, 2.5f),
-        [9006] = new ActionInfo("Battle Litany", 2, 0, 30, "", 0, 4, 120),
+        [9005] = new ActionInfo("Fire IV", 2, 25, 5, "", 2.8f, 2, 2.5f, 58),
+        [9006] = new ActionInfo("Battle Litany", 2, 0, 30, "", 0, 4, 120, 19),
         [9007] = new ActionInfo("Meteor", 2, 25, 8, "", 4.5f, 9, 0),
+        [7538] = new ActionInfo("Interject", 1, 3, 0, "", 0, 4, 30, 44),
+        [7533] = new ActionInfo("Provoke", 1, 25, 0, "", 0, 4, 30, 43),
+        [125] = new ActionInfo("Raise", 1, 30, 0, "", 8, 2, 2.5f, 58),
+        [3569] = new ActionInfo("Asylum", 7, 30, 10, "", 0, 4, 90, 18, 0, 0, 0, true),
+        [16151] = new ActionInfo("Aurora", 1, 30, 0, "", 0, 4, 60, 15, 0, 2),
     };
+
+    /// <summary>The items the sample's party uses (by the Item sheet's row: a high-quality one's sent id less 1,000,000).</summary>
+    public static readonly Dictionary<uint, ItemInfo> ItemData = new()
+    {
+        [39727] = new ItemInfo("Grade 2 Gemdraught of Intelligence", 22457, false),
+    };
+
+    public static ItemInfo? Item(uint id) => ItemData.TryGetValue(id > 1_000_000 ? id - 1_000_000 : id, out var i) ? i : null;
 
     public static readonly Dictionary<uint, StatusInfo> StatusData = new()
     {
         [1138] = new StatusInfo("Physical Vulnerability Up", 215532),
         [1769] = new StatusInfo("Doom", 215502),
         [1000] = new StatusInfo("Party Buff", 210001),
-        [1871] = new StatusInfo("Dia", 212675),
-        [786] = new StatusInfo("Battle Litany", 212578),
+        [1871] = new StatusInfo("Dia", 212675, 2, true),
+        [786] = new StatusInfo("Battle Litany", 212578, 1),
+        // Since 0.4.0, with their categories and whether they can be cleansed: a raise's, Weakness.
+        [148] = new StatusInfo("Raise", 210402, 1),
+        // As the Status sheet has it: Weakness can't be cleansed (CanDispel False).
+        [43] = new StatusInfo("Weakness", 215009, 2),
     };
+
+    /// <summary>What's what in the sample (interrupts, raises…), by its names, as the game side finds them on the English sheets.</summary>
+    public static readonly CombatKinds Kinds = CombatKinds.FromNames(id => Data.TryGetValue(id, out var a) ? a.Name : null,
+        id => StatusData.TryGetValue(id, out var s) ? s.Name : null, id => Data.TryGetValue(id, out var a) && CombatLists.IsGcd(a.CooldownGroup, a.CooldownGroup2));
 
     /// <summary>
     /// A small made-up pull: a raidwide, a cone, a pair stack, spreads, autos, a buster and an exaflare
@@ -131,18 +155,29 @@ public class RecordingTests
     /// HP before) and the party's own fight (the combat block: hits, a crit, a heal with overheal, a
     /// pet's hit, a DoT's ticks credited and one that named no one, a bleed, a cast finished and one
     /// cancelled, a buff and the DoT as statuses, a limit break). The site's test fixture is this,
-    /// written by the plugin's own code (<see cref="FixtureTests"/>).
+    /// written by the plugin's own code (<see cref="FixtureTests"/>). Since 0.4.0 also every new table, event and
+    /// column: the BLM's spot as the recording player's, the boss's interruptible cast interrupted by the OT's
+    /// Interject (credited), the BLM's Fire IV cancelled (the game said so), the boss's target (the MT, the OT after
+    /// their Provoke, the BRD for a moment, the MT again after the phase), what the party used (GCDs, the oGCDs, a
+    /// potion, the limit break, H1's raise on H2 and Asylum on the ground), H2 raised at 57.5 (the Raise status from
+    /// H1) with Weakness, the enmity list, MP and barriers, the gauge, head signs, the uses before the pull and the
+    /// countdown, the raidwide's and the buster's barriers and places, a hit's bonus %, the statuses' categories.
     /// </summary>
     public static Recording Sample(bool partyPositions = true) => SampleBuilder(partyPositions, out _);
 
     public static Recording SampleBuilder(bool partyPositions, out int phase)
     {
         var b = new RecordingBuilder(new DutyInfo("Test Arena (Savage)", 1, 99999), 3, new DateTimeOffset(2026, 11, 2, 20, 0, 0, TimeSpan.Zero), partyPositions, "0.1.0",
-            id => Data.TryGetValue(id, out var a) ? a : null, id => StatusData.TryGetValue(id, out var st) ? st : null);
+            id => Data.TryGetValue(id, out var a) ? a : null, id => StatusData.TryGetValue(id, out var st) ? st : null, Kinds, Item)
+        {
+            // The recording player's own Aurora: two charges at 60 s by the game (its traits).
+            OwnRecast = id => id == 16151 ? (60f, 2) : null,
+        };
         var party = new[] { new Partier(11, "PLD", 1, 100_000), new Partier(12, "WAR", 1, 102_000), new Partier(13, "WHM", 4, 80_000),
             new Partier(14, "SGE", 4, 80_500), new Partier(15, "DRG", 2, 85_000), new Partier(16, "NIN", 2, 84_000), new Partier(17, "BRD", 3, 79_000),
             new Partier(18, "BLM", 3, 78_000) };
         b.SetParty(party);
+        b.SetSelf(18);
         var boss = b.Actor(900, "The Boss", 5, 1001);
         var helper = b.Actor(901, "", 0.5f, 1002);
         b.SeenTargetable(boss, 1_000_000);
@@ -155,15 +190,19 @@ public class RecordingTests
             for (var i = 1; i <= 8; i++)
             {
                 at[i] = (100 + i, 105, 3.14f);
-                hp[i] = (i == 4 && t >= 45.5) || (i == 8 && t >= 56.2) ? 0 : party[i - 1].MaxHp;
+                hp[i] = Down(i, t) ? 0 : party[i - 1].MaxHp;
             }
             b.Positions(t, at, hp);
         }
         var all = Enumerable.Range(1, 8).ToList();
         long[] Each(long dmg, int n) => Enumerable.Repeat(dmg, n).ToArray();
         long[] Hp(IEnumerable<int> who) => who.Select(i => party[i - 1].MaxHp).ToArray();
+        // Before the pull (since 0.4.0): the countdown (15 s, the pull 0.42 s after zero), the BLM's potion at −2.1, their Fire IV precast.
+        b.PrePull(new[] { (-2.1, 8, 1_039_727u, 8, (int)UseFlags.Item), (-1.5, 8, 9005u, 0, 0) }, (15, 0.42));
         b.Cast(5, boss, 100, 5, 100, 100, 0, 0, null, null);
-        b.Hit(10, boss, 100, 100, 100, 0, 100, 100, all, Each(30_000, 8), new int[8], Hp(all));
+        // The raidwide: everyone's barrier before it (the SGE's on the tanks) and where they stood.
+        b.Hit(10, boss, 100, 100, 100, 0, 100, 100, all, Each(30_000, 8), new int[8], Hp(all), new[] { 12, 12, 0, 0, 0, 0, 0, 0 },
+            all.Select(i => 100f + i).ToArray(), all.Select(_ => 105f).ToArray());
         b.Cast(12, boss, 200, 4.7f, 100, 100, 3.14f, 1, null, null);
         b.Hit(16.8, boss, 200, 100, 100, 3.14f, 100, 100, new[] { 1, 5 }, new long[] { 45_000, 60_000 }, new[] { 0, 0 }, new long[] { 100_000, 85_000 });
         b.Hit(20, boss, 500, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 8_000 }, new[] { 4 }, new long[] { 100_000 });
@@ -175,18 +214,42 @@ public class RecordingTests
         b.Cast(29, boss, 400, 3, 100, 100, 0, 0, null, null);
         foreach (var i in all) b.Hit(32, helper, 400, 90, 90, 0, 100 + i, 105, new[] { i }, new long[] { 15_000 }, new[] { 0 }, new[] { party[i - 1].MaxHp });
         b.Cast(35, boss, 600, 5, 100, 100, 0, 1, null, null);
-        b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 90_000 }, new[] { 0 }, new long[] { 100_000 });
+        b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 90_000 }, new[] { Effects.FxAbsorbed }, new long[] { 100_000 }, new[] { 20 },
+            new[] { 101.25f }, new[] { 105.5f });
         for (var k = 0; k < 5; k++)
             b.Hit(45 + k * 1.1, helper, 700, 90, 90, 0, 90 + k * 4, 90, k == 0 ? new[] { 4 } : Array.Empty<int>(),
                 k == 0 ? new long[] { 104_880 } : Array.Empty<long>(), k == 0 ? new[] { 0 } : Array.Empty<int>(), k == 0 ? new long[] { 80_500 } : Array.Empty<long>());
         b.Cast(51, boss, 100, 5, 100, 100, 0, 0, null, null);
+        // The boss's interruptible cast (since 0.4.0), stopped by the OT's Interject.
+        b.Cast(57, boss, 800, 3, 100, 100, 0, 0, null, null, interruptible: true);
+        b.PartyUse(58.4, 2, 7538, boss, 1, (int)UseFlags.Interrupted);
+        b.Cancel(58.5, boss, 800, true);
         b.Hit(56, boss, 100, 100, 100, 0, 100, 100, new[] { 1, 2, 3, 5, 6, 7, 8 }, new long[] { 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 90_000 },
             new int[7], new long[] { 100_000, 102_000, 80_000, 85_000, 84_000, 79_000, 70_000 });
         // The party's own fight: the PLD's hits (one a crit), the WHM's Cure II on the MT (a little
         // overheal), the NIN's Bunshin (a pet's hit, credited to the NIN), Dia's ticks (one the game
         // didn't say whose), a bleed on the MT, the BLM's Fire IV finished then one cancelled, the
         // DRG's Battle Litany on the party, Dia on the boss, and the BLM's Meteor (a limit break).
-        for (var k = 0; k < 20; k++) b.CombatFx(2 + k * 2.5, 9001, 1, boss, 12_000 + k * 100, (int)FxKind.Damage | (k == 3 ? (int)FxFlags.Crit : 0), -1);
+        for (var k = 0; k < 20; k++)
+        {
+            b.CombatFx(2 + k * 2.5, 9001, 1, boss, 12_000 + k * 100, (int)FxKind.Damage | (k == 3 ? (int)FxFlags.Crit : 0), -1, k == 5 ? 25 : 0);
+            b.PartyUse(2 + k * 2.5, 1, 9001, boss, 1, 0);
+        }
+        // What else the party used (since 0.4.0): the heal, Dia, the pet's, Battle Litany, Fire IV and Meteor (the limit
+        // break), the OT's Provoke, the BLM's potion, Asylum on the ground, the BLM's Aurora (theirs: its recast the game's).
+        b.PartyUse(17.5, 3, 9002, 1, 1, 0);
+        b.PartyUse(6, 3, 9003, boss, 1, 0);
+        b.PartyUse(28, 6, 9004, boss, 1, (int)UseFlags.Pet);
+        b.PartyUse(12, 5, 9006, 5, 8, 0);
+        b.PartyUse(10.8, 8, 9005, boss, 1, 0);
+        b.PartyUse(38.5, 8, 9007, boss, 1, (int)UseFlags.LimitBreak);
+        b.PartyUse(19.9, 2, 7533, boss, 1, (int)UseFlags.Threat);
+        b.PartyUse(15, 8, 1_039_727, 8, 1, (int)UseFlags.Item);
+        b.PartyUse(25, 3, 3569, 0, 0, (int)UseFlags.NoTarget);
+        b.Area(25, 3, 3569, 100.5f, 101.25f);
+        b.PartyUse(26, 8, 16151, 8, 1, 0);
+        // H1's Raise on H2 (dead since 45.5): the Raise status from H1 at 56.5, H2 up at 57.5.
+        b.PartyUse(56.4, 3, 125, 4, 1, 0);
         b.CombatFx(17.5, 9002, 3, 1, 25_000, (int)FxKind.Heal, 80_000);
         b.CombatFx(28, 9004, 6, boss, 18_000, (int)FxKind.Damage | (int)FxFlags.Pet, -1);
         b.CombatFx(6, 9003, 3, boss, 4_000, (int)FxKind.Damage, -1);
@@ -197,6 +260,8 @@ public class RecordingTests
         b.PartyUsed(10.8, 8, 9005);
         b.CombatFx(10.8, 9005, 8, boss, 55_000, (int)FxKind.Damage | (int)FxFlags.Crit | (int)FxFlags.DirectHit, -1);
         b.PartyCast(30, 8, 9005, 2.8f);
+        // The game said the BLM's Fire IV was cancelled (they moved).
+        b.Cancel(31, 8, 9005, false);
         b.PartyCast(34, 8, 9007, 4.5f);
         b.PartyUsed(38.5, 8, 9007);
         b.CombatFx(38.5, 9007, 8, boss, 2_400_000, (int)FxKind.Damage | (int)FxFlags.LimitBreak, -1);
@@ -204,6 +269,22 @@ public class RecordingTests
         b.Tethers(50, new[] { (boss, 2, 84u) });
         b.Tethers(55, Array.Empty<(int, int, uint)>());
         b.MapEffect(44, 0x10, 0x00020001);
+        // The enmity list (the BLM's target, the boss), MP and barriers, the gauge, the head signs (since 0.4.0).
+        b.Hate(1, boss, new[] { (1, 100), (2, 80), (8, 40) });
+        b.Hate(20, boss, new[] { (2, 100), (1, 96), (8, 41) });
+        b.Hate(30, boss, new[] { (2, 100), (8, 98), (1, 90) });
+        b.Hate(41, boss, new[] { (2, 100), (1, 90) });
+        foreach (var i in all) b.Resources(0, i, 10_000, i <= 2 ? 12 : 0);
+        b.Resources(10.5, 1, 10_000, 0);
+        b.Resources(10.5, 2, 10_000, 0);
+        b.Resources(17.6, 3, 9_000, 0);
+        b.Resources(25.1, 3, 8_000, 0);
+        b.LimitGauge(0, 10_000, 30_000);
+        b.LimitGauge(20, 20_000, 30_000);
+        b.LimitGauge(38.5, 0, 30_000);
+        b.LimitGauge(50, 4_400, 30_000);
+        b.Signs(1, new Dictionary<int, int> { [0] = boss });
+        b.Signs(25, new Dictionary<int, int> { [0] = boss, [5] = 7 });
         // Every frame (and at the moments things happen): the party's statuses, who's down, the boss's
         // targetability; the vulnerability and Doom with their stacks and time left as they run down.
         var frames = Enumerable.Range(0, 121).Select(i => i * 0.5).Concat(new[] { 6.1, 12.1, 16.9, 23, 31, 41, 45.5, 50, 56.2 }).Distinct().OrderBy(x => x);
@@ -221,7 +302,12 @@ public class RecordingTests
                 // The DRG's Battle Litany on everyone (a party buff: a combat row, not an event) for 20 s.
                 if (t >= 12.1 && t < 32.1 && !b.StatusKnown(t, i, 786, 15, 0, (float)(20 - (t - 12.1))))
                     b.StatusGained(t, i, 786, 15, StatusFrom.Party, 5, 0, (float)(20 - (t - 12.1)), 9006);
-                b.Alive(t, i, (i == 4 && t >= 45.5) || (i == 8 && t >= 56.2));
+                // The Raise from H1 on H2 (a party status on the dead), then Weakness from no one once they're up.
+                if (i == 4 && t >= 56.5 && t < 57.5 && !b.StatusKnown(t, 4, 148, 13, 0, (float)(57.5 - t)))
+                    b.StatusGained(t, 4, 148, 13, StatusFrom.Party, 3, 0, (float)(57.5 - t));
+                if (i == 4 && t >= 57.5 && !b.StatusKnown(t, 4, 43, 0, 0, (float)(100 - t)))
+                    b.StatusGained(t, 4, 43, 0, StatusFrom.Enemy, 0, 0, (float)(100 - t));
+                b.Alive(t, i, Down(i, t));
             }
             // Dia on the boss, read with the boss's statuses, until it runs out at 36.1.
             b.StatusesOf(boss);
@@ -230,9 +316,14 @@ public class RecordingTests
             b.EndStatuses(t);
             b.Targetable(t, boss, t < 41 || t >= 50);
             b.EndTargets(t);
+            // The boss's target while it can be targeted: the MT, the OT from their Provoke, the BRD for 1.5 s, the OT, the MT after the phase.
+            if (t < 41 || t >= 50) b.Aggro(t, boss, t < 20 ? 1 : t < 30 ? 2 : t < 31.5 ? 7 : t < 41 ? 2 : 1);
         }
         phase = b.Phase;
         return b.Finish(61, Outcome.Wipe);
+
+        // H2 down from the exaflare until raised (57.5); R2 from 56.2.
+        static bool Down(int i, double t) => (i == 4 && t >= 45.5 && t < 57.5) || (i == 8 && t >= 56.2);
     }
 
     [Fact]
@@ -376,7 +467,7 @@ public class TimelineTests
         var names = lines.Select(l => l.Name).ToList();
         // Autos ("attack") never show; each cast and hit-only mechanic does, in order.
         Assert.DoesNotContain("attack", names);
-        Assert.Equal(new[] { "Raidwide Roar", "Cleaving Arc", "Pairs", "Spread Out", "Crushing Blow", "Exaflare", "Raidwide Roar" }, names);
+        Assert.Equal(new[] { "Raidwide Roar", "Cleaving Arc", "Pairs", "Spread Out", "Crushing Blow", "Exaflare", "Raidwide Roar", "Gaze of Ruin" }, names);
         Assert.Equal(MechanicKind.Raidwide, lines[0].Kinds[0]);
         Assert.Equal(MechanicKind.Cone, lines[1].Kinds[0]);
         Assert.Equal(MechanicKind.Stack, lines[2].Kinds[0]);
@@ -414,7 +505,7 @@ public class StoreTests : IDisposable
         Assert.EndsWith(Words.Extension, info.File);
         Assert.Single(store.All);
         Assert.Equal("Test Arena (Savage)", store.All[0].Duty);
-        Assert.Equal(7, store.All[0].Mechanics);
+        Assert.Equal(8, store.All[0].Mechanics);
         var back = store.Read(info);
         Assert.Equal(3, back.Pull);
 

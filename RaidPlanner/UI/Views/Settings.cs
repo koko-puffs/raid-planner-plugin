@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
@@ -14,6 +16,9 @@ public enum SettingsTab
     Recording,
     Plans,
     Meter,
+
+    /// <summary>The party cooldown tracker (0.4.0).</summary>
+    Cooldowns,
     Account,
 }
 
@@ -29,9 +34,26 @@ public sealed partial class MainWindow
 {
     private const string ReleasesUrl = "https://github.com/koko-puffs/raid-planner-plugin/releases";
 
-    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Plan window"), new("Meter"), new("Account") };
+    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Plan window"), new("Meter"), new("Cooldowns"), new("Account") };
 
     private static readonly string[] GrowsItems = { "Down", "Up" };
+
+    private static readonly string[] GaugeItems = { "Head", "Foot", "Off" };
+
+    private static readonly string[] WhereItems = { "In duties", "Everywhere" };
+
+    /// <summary>The cooldown tracker's sample: on now, and starting or stopping it (set by the plugin).</summary>
+    public Func<bool>? CooldownsSampleOn { get; set; }
+
+    public Action? ToggleCooldownsSample { get; set; }
+
+    /// <summary>The callouts' sample: on now, and starting or stopping it (set by the plugin).</summary>
+    public Func<bool>? CalloutsSampleOn { get; set; }
+
+    public Action? ToggleCalloutsSample { get; set; }
+
+    /// <summary>Plays one of the game's sound effects (&lt;se.N&gt;), to hear the callouts' (set by the plugin).</summary>
+    public Action<int>? PlaySound { get; set; }
 
     /// <summary>How Send my party to my roster went, and when (shown for a while under the slab).</summary>
     private (string Text, bool Ok, DateTime At)? rosterNote;
@@ -52,12 +74,15 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Opens Settings on the meter's tab (the meter's Settings, /raidplan meter settings).</summary>
-    public void ShowMeterSettings()
+    public void ShowMeterSettings() => ShowSettingsOn(SettingsTab.Meter);
+
+    /// <summary>Opens Settings on a tab (/raidplan cooldowns settings, /raidplan callouts settings).</summary>
+    public void ShowSettingsOn(SettingsTab tab)
     {
         Dismiss();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
-        settingsTab = SettingsTab.Meter;
+        settingsTab = tab;
         IsOpen = true;
     }
 
@@ -68,8 +93,10 @@ public sealed partial class MainWindow
             screen = settingsFrom == Screen.Pull && openFile != null && store.Find(openFile) != null ? Screen.Pull : Screen.Home;
         Kit.Gap(10);
         var at = Kit.At;
-        settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", at, SettingsTabs, (int)settingsTab, TabSize.Md, true, Kit.Width);
-        Kit.Reserve(at, Kit.Width, S(H));
+        // The five tabs at their size where they fit, else dense (a narrow window).
+        var tabSize = Kit.TabsWidth(SettingsTabs, TabSize.Md) <= Kit.Width ? TabSize.Md : TabSize.Sm;
+        settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", at, SettingsTabs, (int)settingsTab, tabSize, true, Kit.Width);
+        Kit.Reserve(at, Kit.Width, S(tabSize == TabSize.Md ? H : HSm));
         Frame.EndHeader();
 
         Frame.BeginBody(settingsTab switch
@@ -77,12 +104,16 @@ public sealed partial class MainWindow
             SettingsTab.Account => "##settings-account",
             SettingsTab.Plans => "##settings-plans",
             SettingsTab.Meter => "##settings-meter",
+            SettingsTab.Cooldowns => "##settings-cooldowns",
             _ => "##settings-recording",
         }, null);
         switch (settingsTab)
         {
             case SettingsTab.Account:
                 DrawAccountTab();
+                break;
+            case SettingsTab.Cooldowns:
+                DrawCooldownsTab();
                 break;
             case SettingsTab.Plans:
                 DrawPlansTab();
@@ -141,6 +172,13 @@ public sealed partial class MainWindow
             config.RecordParty = !config.RecordParty;
             config.Save();
         }
+        if (SwitchRow(i++, "##smooth", "Smoother replays", "Places four times a second, not two: bigger files", config.SmoothReplays,
+                "Where everyone stands is kept four times a second instead of two, so the site's replay of the pull moves more smoothly. Files grow by about 30 KB a minute of an eight-player pull; a pull too big to send is thinned back to two first.",
+                sub: true, off: !config.RecordParty))
+        {
+            config.SmoothReplays = !config.SmoothReplays;
+            config.Save();
+        }
         var delta = StepperRow(i++, "##keep", "Keep the last", "Past that, the oldest sent ones go first", config.Keep.ToString(System.Globalization.CultureInfo.InvariantCulture),
             config.Keep > 5, config.Keep < 100,
             "Pulls are kept in the plugin's folder until there are more than this; then, as each new one is kept, the oldest you've sent goes first (the site keeps your newest 30 sends), and only then the oldest you haven't. Lowering it deletes nothing now.");
@@ -171,6 +209,9 @@ public sealed partial class MainWindow
             config.ShowInBar = !config.ShowInBar;
             config.Save();
         }
+        if (SwitchRow(i++, "##diagnostics", "Diagnostics", "Writes what it reads from the game to a file, for checking", recorder.Diagnostics.On,
+                "While on (until the plugin next loads), the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written."))
+            recorder.Diagnostics.On = !recorder.Diagnostics.On;
         if (ButtonRow(i, "##folder", "Recordings folder", "Where the pulls are kept", "Open", Btn.Outline, false, null, store.Folder))
             Dalamud.Utility.Util.OpenLink(store.Folder);
         Kit.EndPanel();
@@ -235,6 +276,209 @@ public sealed partial class MainWindow
             Kit.Gap(12);
         }
         Txt.Note("Send my party sends names to your own account only, and only when you press it. Nothing else the plugin sends has names in it.");
+        Kit.Gap(18);
+        DrawCalloutSettings();
+    }
+
+    /// <summary>
+    /// Plan window → On-screen callouts (0.4.0): show them, how far ahead and how many, the sound (on,
+    /// which of the game's, how early, and a button to hear it), the window's lock, click-through, Grows,
+    /// compact and background, and a sample to place it.
+    /// </summary>
+    private void DrawCalloutSettings()
+    {
+        var o = config.CalloutOverlay;
+        Kit.Section("##sec-callouts", "On-screen callouts", "Your plan's next steps, over the fight");
+        Kit.Gap(10);
+        Kit.BeginPanel("##set-callouts", 0, 0, 0);
+        var i = 0;
+        if (SwitchRow(i++, "##co-show", "Show the callouts", "While your plan follows a pull. /raidplan callouts too", o.Show,
+                "While your plan follows a pull, its next steps' callouts sit over the fight, the next one big, each counting down to when it goes off (the plan's own times, kept to the fight by its cues).",
+                pad: 10))
+        {
+            o.Show = !o.Show;
+            config.Save();
+        }
+        var ahead = StepperRow(i++, "##co-ahead", "How far ahead", "Steps going off within this", $"{config.CalloutAhead} s", config.CalloutAhead > 5, config.CalloutAhead < 60, pad: 10);
+        if (ahead != 0)
+        {
+            config.CalloutAhead = Math.Clamp(config.CalloutAhead + ahead * 5, 5, 60);
+            config.Save();
+        }
+        var count = StepperRow(i++, "##co-count", "How many", "Steps shown at once", config.CalloutCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            config.CalloutCount > 1, config.CalloutCount < 5, pad: 10);
+        if (count != 0)
+        {
+            config.CalloutCount = Math.Clamp(config.CalloutCount + count, 1, 5);
+            config.Save();
+        }
+        if (SwitchRow(i++, "##co-sound", "A sound before each step", "One of the game's own, as <se.N> in a macro", config.CalloutSound,
+                "A few seconds before each step goes off, the game plays one of its own sound effects (the ones a macro's <se.1> to <se.16> play), once a step, each pull. It follows your game's sound settings.",
+                pad: 10))
+        {
+            config.CalloutSound = !config.CalloutSound;
+            config.Save();
+        }
+        var which = StepperRow(i++, "##co-which", "Which sound", "The game's numbering", $"<se.{config.CalloutSoundId}>", config.CalloutSoundId > 1, config.CalloutSoundId < 16, pad: 10);
+        if (which != 0)
+        {
+            config.CalloutSoundId = Math.Clamp(config.CalloutSoundId + which, 1, 16);
+            config.Save();
+            PlaySound?.Invoke(config.CalloutSoundId);
+        }
+        var lead = StepperRow(i++, "##co-lead", "How early", "Before the step goes off", $"{config.CalloutSoundLead} s", config.CalloutSoundLead > 1, config.CalloutSoundLead < 10, pad: 10);
+        if (lead != 0)
+        {
+            config.CalloutSoundLead = Math.Clamp(config.CalloutSoundLead + lead, 1, 10);
+            config.Save();
+        }
+        if (ButtonRow(i++, "##co-hear", "Hear it", "Plays it now", "Play", Btn.Outline, PlaySound == null, null, null, icon: Icon.Volume, pad: 10))
+            PlaySound?.Invoke(config.CalloutSoundId);
+        OverlayRows(o, "co", ref i, "Locked, the callouts have no title bar and can't be moved or sized.");
+        var sampleOn = CalloutsSampleOn?.Invoke() == true;
+        if (ButtonRow(i, "##co-sample", "See them", sampleOn ? "Made-up steps under a Preview tag" : "Made-up steps counting down, to place them",
+                sampleOn ? "Stop the sample" : "Show a sample", Btn.Outline, ToggleCalloutsSample == null, null,
+                "A few made-up steps counting down and starting again, as the callouts show your plan's: to place and size them without a pull.", pad: 10))
+            ToggleCalloutsSample?.Invoke();
+        Kit.EndPanel();
+        Kit.Gap(12);
+        Txt.Note("The callouts follow the plan window's own clock: a plan made from a pull on the site carries when each step's mechanic went off.");
+    }
+
+    /// <summary>An overlay's own rows: Lock it where it is, Click-through when locked, Grows, Compact, Background.</summary>
+    private void OverlayRows(OverlaySettings o, string id, ref int i, string lockTip)
+    {
+        if (SwitchRow(i++, $"##{id}-lock", "Lock it where it is", null, o.Locked, lockTip, pad: 10))
+        {
+            o.Locked = !o.Locked;
+            config.Save();
+        }
+        if (SwitchRow(i++, $"##{id}-through", "Click-through when locked", "The mouse goes through to the game", o.ClickThrough,
+                "It doesn't take the mouse at all while it's locked: its command with unlock, or this, gives it back.", sub: true, pad: 10, off: !o.Locked))
+        {
+            o.ClickThrough = !o.ClickThrough;
+            config.Save();
+        }
+        var grows = SegmentRow(i++, $"##{id}-grows", "Grows", "Which edge stays put as it grows", GrowsItems, (int)o.Grows,
+            tip: "Down: its top edge stays where you put it and it grows downwards. Up: its foot stays, and it grows upwards.");
+        if (grows != (int)o.Grows)
+        {
+            o.Grows = (MeterGrows)grows;
+            config.Save();
+        }
+        if (SwitchRow(i++, $"##{id}-compact", "Compact", "Smaller rows and words", o.Compact, null, pad: 10))
+        {
+            o.Compact = !o.Compact;
+            config.Save();
+        }
+        var bg = Math.Clamp(SliderRow(i++, $"##{id}-bg", "Background", "Its words stay solid", Math.Clamp(o.Background, 0, 1)), 0, 1);
+        if (MathF.Abs(bg - o.Background) > 0.001f)
+        {
+            o.Background = bg;
+            backgroundDirty = true;
+        }
+        if (backgroundDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
+            backgroundDirty = false;
+            config.Save();
+        }
+    }
+
+    /// <summary>Each kind's section and panel ids (by the kind's number), made once.</summary>
+    private static readonly (string Section, string Panel)[] KindIds =
+        Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => ($"##cd-kind{k}", $"##set-cd{k}")).ToArray();
+
+    /// <summary>Each cooldown's switch id and its jobs ("PLD, WAR, DRK, GNB"), as the catalogue lists them, made once.</summary>
+    private static readonly (string Id, string Jobs)[] SpecWords = CooldownCatalog.All.Select(s => ("##cd-" + s.Key, string.Join(", ", s.Jobs))).ToArray();
+
+    private static readonly Dictionary<(int, int), string> OnOfWords = new();
+
+    /// <summary>"3 of 12", made once each.</summary>
+    private static string OnOf(int on, int of)
+    {
+        if (!OnOfWords.TryGetValue((on, of), out var text)) OnOfWords[(on, of)] = text = $"{on} of {of}";
+        return text;
+    }
+
+    /// <summary>
+    /// Cooldowns (0.4.0): the tracker (show it, where, yours too, those ready, the limit break gauge,
+    /// its window), a sample, then each kind's cooldowns with a switch each (the kind's head turns them
+    /// all on or off).
+    /// </summary>
+    private void DrawCooldownsTab()
+    {
+        var o = config.Cooldowns;
+        Kit.BeginPanel("##set-cooldowns", 0, 0, 0);
+        var i = 0;
+        if (SwitchRow(i++, "##cd-show", "Show the tracker", "The party's cooldowns over the fight. /raidplan cooldowns too", o.Show,
+                "Small rows of your party's raid buffs, mitigation and the rest you pick below, each with the time until it's ready: yours from the game's own timers, the others' worked out from when they used them.",
+                pad: 10))
+        {
+            o.Show = !o.Show;
+            config.Save();
+        }
+        var where = SegmentRow(i++, "##cd-where", "Where", null, WhereItems, o.Everywhere ? 1 : 0, sub: true, off: !o.Show);
+        if (where != (o.Everywhere ? 1 : 0))
+        {
+            o.Everywhere = where == 1;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##cd-mine", "Yours too", "From the game's own timers, exactly", config.CooldownsMine,
+                "Your own cooldowns are read from the game's timers (as your hotbars show them). Off, only the rest of the party's are listed.", pad: 10))
+        {
+            config.CooldownsMine = !config.CooldownsMine;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##cd-hide", "Hide those ready", "Only what's recharging is listed", config.CooldownsHideReady,
+                "Off, every tracked cooldown has its row (\"Ready\" in green when it is). On, a row comes when it's used and goes when it's back.", pad: 10))
+        {
+            config.CooldownsHideReady = !config.CooldownsHideReady;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##cd-gauge", "Limit break gauge", "Its bars as the last row", config.CooldownsGauge,
+                "The party's limit break bars as the tracker's last row, when the party has a gauge (it's read with the meter's numbers).", pad: 10))
+        {
+            config.CooldownsGauge = !config.CooldownsGauge;
+            config.Save();
+        }
+        OverlayRows(o, "cd", ref i, "Locked, the tracker has no title bar and can't be moved or sized.");
+        var sampleOn = CooldownsSampleOn?.Invoke() == true;
+        if (ButtonRow(i, "##cd-sample", "See it", sampleOn ? "A made-up party under a Preview tag" : "A made-up party's cooldowns, to place it",
+                sampleOn ? "Stop the sample" : "Show a sample", Btn.Outline, ToggleCooldownsSample == null, null,
+                "A made-up party's cooldowns recharging and coming back, with the ones you've picked: to place and size the tracker without a party.", pad: 10))
+            ToggleCooldownsSample?.Invoke();
+        Kit.EndPanel();
+
+        foreach (var kind in CooldownCatalog.Kinds)
+        {
+            Kit.Gap(18);
+            var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
+            var all = on == of;
+            if (Kit.Section(KindIds[(int)kind].Section, CooldownCatalog.KindWord(kind), OnOf(on, of), all ? "Turn all off" : "Turn all on"))
+            {
+                foreach (var spec in CooldownCatalog.All)
+                    if (spec.Kind == kind)
+                        config.CooldownPicks[spec.Key] = !all;
+                config.Save();
+            }
+            Kit.Gap(10);
+            Kit.BeginPanel(KindIds[(int)kind].Panel, 0, 0, 0);
+            var j = 0;
+            for (var k = 0; k < CooldownCatalog.All.Count; k++)
+            {
+                var spec = CooldownCatalog.All[k];
+                if (spec.Kind != kind) continue;
+                var picked = CooldownCatalog.IsOn(spec, config.CooldownPicks);
+                if (SwitchRow(j++, SpecWords[k].Id, spec.Key, SpecWords[k].Jobs, picked, null, pad: 8))
+                {
+                    config.CooldownPicks[spec.Key] = !picked;
+                    config.Save();
+                }
+            }
+            Kit.EndPanel();
+        }
+        Kit.Gap(12);
+        Txt.Note("The others' times are worked out from when they used each one, by its recast (learned from their own uses when two come closer than the game's base). Yours are the game's own. A new zone, or the duty starting again after a wipe, sets them all back to ready.");
     }
 
     private void DrawMeterTab()
@@ -294,6 +538,13 @@ public sealed partial class MainWindow
         if (grows != (int)config.MeterGrows)
         {
             config.MeterGrows = (MeterGrows)grows;
+            config.Save();
+        }
+        var gauge = SegmentRow(i++, "##meter-gauge", "Limit break gauge", "Its bars, while a fight is on", GaugeItems, (int)config.MeterGauge,
+            tip: "The party's limit break bars, in the meter's head (after the clock, as room allows) or its foot (before what it says on the right), while a fight is on. Off, nowhere.");
+        if (gauge != (int)config.MeterGauge)
+        {
+            config.MeterGauge = (GaugePlace)gauge;
             config.Save();
         }
         if (SwitchRow(i++, "##meter-compact", "Compact", "Smaller rows, the tabs in a menu by the lock", config.MeterCompact,

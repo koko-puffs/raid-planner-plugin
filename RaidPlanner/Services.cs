@@ -21,4 +21,7 @@ internal sealed class Services
     [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+
+    /// <summary>The game's icons (the cooldown tracker's actions).</summary>
+    [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
 }

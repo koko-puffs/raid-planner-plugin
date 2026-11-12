@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Network;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Network;
+using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
 using SubKind = Dalamud.Game.ClientState.Objects.Enums.BattleNpcSubKind;
 
@@ -27,6 +28,14 @@ namespace RaidPlanner.Game;
 /// per message), and most messages stop at the first question (the party's? landing on the party?).
 /// HP is read only where it's wanted: a party member's (hits and heals on them), anyone the party
 /// heals, a lifesteal's caster.
+///
+/// Since 0.4.0 also: a party member's item (the message's action type 2: a potion) for the parser only;
+/// the header's global sequence and, for a ground-placed action, where it was put; a party target's
+/// barrier and place read with their HP; and the actor-control message that says a cast was stopped
+/// (category 15: cancelled, or interrupted). Every detour calls the game's function first and never
+/// lets anything it does throw back into the game (and says what went wrong once in a while, not on every
+/// message). With Settings → Recording → Diagnostics on, the raw values of what's read here that hasn't been
+/// checked in the game are written to the diagnostics file (<see cref="DiagnosticsLog"/>): off, that's one bool asked.
 /// </summary>
 public sealed unsafe class GameHooks : IDisposable
 {
@@ -41,6 +50,12 @@ public sealed unsafe class GameHooks : IDisposable
 
     private const uint TickHeal = 4;
 
+    /// <summary>The actor-control category that says a cast stopped (BossMod's CancelCast; its second argument the action type, third the action, fourth 1 if interrupted).</summary>
+    private const uint CancelCast = 15;
+
+    /// <summary>An item (the effect's action type): a party member's potion.</summary>
+    private const byte ActionTypeItem = 2;
+
     /// <summary>An action, not an item or a mount (the effect's action type).</summary>
     private const byte ActionTypeAction = 1;
 
@@ -48,6 +63,8 @@ public sealed unsafe class GameHooks : IDisposable
     private const uint InvalidId = 0xE0000000;
 
     private readonly FightRecorder recorder;
+    private readonly DiagnosticsLog diag;
+    private DateTime failedAt;
     private readonly Hook<ActionEffectHandler.Delegates.Receive>? effects;
     private readonly Hook<PacketDispatcher.Delegates.HandleActorControlPacket>? control;
     private readonly Hook<PacketDispatcher.Delegates.HandleMapEffectPacket>? mapEffects;
@@ -82,6 +99,7 @@ public sealed unsafe class GameHooks : IDisposable
     public GameHooks(FightRecorder recorder)
     {
         this.recorder = recorder;
+        diag = recorder.Diagnostics;
         var missing = new List<string>();
         try
         {
@@ -177,16 +195,28 @@ public sealed unsafe class GameHooks : IDisposable
         effects!.Original(casterEntityId, casterPtr, targetPos, header, targetEffects, targetEntityIds);
         try
         {
-            if (header == null || header->ActionType != ActionTypeAction || header->ActionId == 0) return;
+            if (header == null || header->ActionId == 0) return;
+            var type = header->ActionType;
+            if (diag.On && type != ActionTypeAction) DiagnoseType(casterEntityId, casterPtr, header);
+            if (type != ActionTypeAction && type != ActionTypeItem) return;
             var count = targetEntityIds == null ? 0 : Math.Min((int)header->NumTargets, EffectBatch.MaxTargets);
             for (var i = 0; i < count; i++) targetIds[i] = (uint)targetEntityIds[i].ObjectId;
             var recording = recorder.Listening;
             var parser = recorder.Combat;
             var owner = OwnerOf(casterEntityId, casterPtr);
             var concerns = parser.Concerns(casterEntityId, owner, targetIds.AsSpan(0, count));
+            // An item is only read as a party member's use (never an enemy's hit).
+            if (type == ActionTypeItem && (!concerns || parser.MemberOf(casterEntityId, owner) == 0)) return;
             if (!concerns && !recording) return;
 
-            batch.Begin(recorder.Now, casterEntityId, owner, header->ActionId, header->ActionType);
+            batch.Begin(recorder.Now, casterEntityId, owner, header->ActionId, type);
+            batch.Sequence = header->GlobalSequence;
+            if (targetPos != null && float.IsFinite(targetPos->X) && float.IsFinite(targetPos->Z))
+            {
+                batch.HasGround = true;
+                batch.GroundX = targetPos->X;
+                batch.GroundZ = targetPos->Z;
+            }
             var wantsCaster = false;
             for (var i = 0; i < count; i++)
             {
@@ -214,9 +244,10 @@ public sealed unsafe class GameHooks : IDisposable
                     batch.CasterMaxHp = ((Character*)me)->CharacterData.MaxHealth;
                 }
             }
+            if (diag.On && concerns) DiagnoseEffects(targetPos);
             if (concerns) parser.Action(batch);
 
-            if (!recording) return;
+            if (!recording || type != ActionTypeAction) return;
             var at = targetPos != null ? *targetPos : Vector3.Zero;
             // The action's own direction, as the server sent it (0 to 65535 for -pi to pi, BossMod's
             // reading): not the caster's facing by the time the message is handled (a boss can turn
@@ -226,7 +257,63 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't read an action effect");
+            Failed(ex, "Raid Planner couldn't read an action effect");
+        }
+    }
+
+    /// <summary>What went wrong in a detour, logged once in a while (a message that can't be read is likely to come again and again).</summary>
+    private void Failed(Exception ex, string what)
+    {
+        if (DateTime.UtcNow - failedAt < TimeSpan.FromSeconds(10)) return;
+        failedAt = DateTime.UtcNow;
+        Services.Log.Error(ex, what);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Diagnostics (Settings → Recording → Diagnostics): the raw values, only while it's on.
+
+    /// <summary>A party member's message that isn't an action (an item, [verify] type 2 and +1,000,000 for high quality): its type and id as sent.</summary>
+    private void DiagnoseType(uint caster, Character* casterPtr, ActionEffectHandler.Header* header)
+    {
+        var parser = recorder.Combat;
+        var owner = OwnerOf(caster, casterPtr);
+        var member = parser.MemberOf(caster, owner);
+        if (member == 0) return;
+        diag.Write("action-type", $"caster {caster:X8} member {member:X8} type {header->ActionType} id {header->ActionId} seq {header->GlobalSequence} targets {header->NumTargets}");
+    }
+
+    /// <summary>
+    /// The message just read into the buffer: a party member's ground action's place as sent ([verify]), and each of their damage
+    /// effects' bonus % (Param2) with its flags and Param4 (autos left out); or an enemy's hit on the party: every effect on each
+    /// member as sent (knockbacks, Param4 &amp; 4 "partly absorbed" [verify]) with the barrier read.
+    /// </summary>
+    private void DiagnoseEffects(Vector3* targetPos)
+    {
+        var parser = recorder.Combat;
+        var member = parser.MemberOf(batch.Caster, batch.CasterOwner);
+        if (member != 0)
+        {
+            if (batch.ActionType != ActionTypeAction) return;
+            if (parser.IsArea(batch.Action))
+            {
+                if (targetPos != null) diag.Write("ground", $"caster {batch.Caster:X8} action {batch.Action} at {targetPos->X:0.00} {targetPos->Y:0.00} {targetPos->Z:0.00}");
+                else diag.Write("ground", $"caster {batch.Caster:X8} action {batch.Action} at none");
+            }
+            if (CombatLists.IsAutoAttack(parser.Category(batch.Action))) return;
+            for (var i = 0; i < batch.Count; i++)
+                foreach (var e in batch.EffectsOf(i))
+                    if (e.Type is Effects.Damage or Effects.BlockedDamage or Effects.ParriedDamage)
+                        diag.Write("party-hit", $"caster {batch.Caster:X8} action {batch.Action} target {batch.Targets[i]:X8} type {e.Type} p0 {e.Param0:X2} p1 {e.Param1:X2} bonus {unchecked((sbyte)e.Param2)} p3 {e.Param3:X2} p4 {e.Param4:X2} value {e.Value}");
+            return;
+        }
+        for (var i = 0; i < batch.Count; i++)
+        {
+            if (!parser.IsParty(batch.Targets[i])) continue;
+            var text = new System.Text.StringBuilder();
+            foreach (var e in batch.EffectsOf(i))
+                if (e.Type != 0)
+                    text.Append(System.FormattableString.Invariant($" [{e.Type} {e.Param0:X2} {e.Param1:X2} {e.Param2:X2} {e.Param3:X2} {e.Param4:X2} {e.Value}]"));
+            diag.Write("enemy-hit", $"source {batch.Caster:X8} action {batch.Action} target {batch.Targets[i]:X8} hp {batch.Hp[i]} shield {batch.Shield[i]} effects{text}");
         }
     }
 
@@ -249,7 +336,7 @@ public sealed unsafe class GameHooks : IDisposable
     /// <summary>
     /// A target's HP, max HP and whether it's an enemy (a combatant battle NPC no one owns that the game
     /// calls hostile: a FATE's escort or a quest's ally is a combatant too, and the party may heal it), into
-    /// the buffer.
+    /// the buffer; since 0.4.0 its barrier (% of max HP) and where it stands.
     /// </summary>
     private void ReadTarget(int k, uint entityId)
     {
@@ -258,6 +345,9 @@ public sealed unsafe class GameHooks : IDisposable
         var c = (Character*)bc;
         batch.Hp[k] = c->CharacterData.Health;
         batch.MaxHp[k] = c->CharacterData.MaxHealth;
+        batch.Shield[k] = c->CharacterData.ShieldValue;
+        batch.X[k] = c->GameObject.Position.X;
+        batch.Z[k] = c->GameObject.Position.Z;
         batch.Hostile[k] = c->GameObject.ObjectKind == ObjectKind.BattleNpc
             && (SubKind)c->GameObject.SubKind is SubKind.Combatant or SubKind.BNpcPart
             && c->GameObject.OwnerId is 0 or InvalidId
@@ -270,12 +360,17 @@ public sealed unsafe class GameHooks : IDisposable
         control!.Original(entityId, category, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, targetId, isRecorded);
         try
         {
+            // A cast stopped, as sent ([verify] arg2 the action type, arg3 the action, arg4 1 when interrupted).
+            if (category == CancelCast && diag.On)
+                diag.Write("cancel-cast", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
             if (category == HeadMarker) recorder.OnMarker(entityId, arg1);
             else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4, arg5);
+            // A cast stopped: only an action's ([verify] that arg4 == 1 is "interrupted").
+            else if (category == CancelCast && arg2 == ActionTypeAction && arg3 != 0) recorder.OnCancel(entityId, arg3, arg4 == 1);
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't read an actor control message");
+            Failed(ex, "Raid Planner couldn't read an actor control message");
         }
     }
 
@@ -318,7 +413,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't read a map effect");
+            Failed(ex, "Raid Planner couldn't read a map effect");
         }
     }
 
@@ -340,7 +435,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't read batched map effects");
+            Failed(ex, "Raid Planner couldn't read batched map effects");
         }
     }
 

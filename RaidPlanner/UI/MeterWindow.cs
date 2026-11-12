@@ -45,11 +45,14 @@ public sealed class MeterWindow : Window
     /// <summary>Folded or empty it's as tall as what it shows (a line, or the Boss and its words).</summary>
     private static readonly WindowSizeConstraints FitSizes = new() { MinimumSize = new Vector2(260, 0), MaximumSize = new Vector2(720, 1400) };
 
-    private static readonly TabSpec[] TabSpecs = { new("Damage"), new("Healing"), new("Taken"), new("Deaths") };
+    private static readonly TabSpec[] TabSpecs = { new("Damage"), new("Healing"), new("Taken"), new("Deaths"), new("Events") };
 
-    private static readonly string[] TabIds = { "##mtab0", "##mtab1", "##mtab2", "##mtab3" };
+    private static readonly string[] TabIds = { "##mtab0", "##mtab1", "##mtab2", "##mtab3", "##mtab4" };
 
-    private static readonly Icon[] TabIcons = { Icon.Sword, Icon.Heart, Icon.Shield, Icon.Skull };
+    private static readonly Icon[] TabIcons = { Icon.Sword, Icon.Heart, Icon.Shield, Icon.Skull, Icon.List };
+
+    /// <summary>How long the foot says the parse was copied.</summary>
+    private static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(2.5);
 
     private static readonly string[] PaceItems = { "Best", "Last", "Off" };
 
@@ -157,6 +160,16 @@ public sealed class MeterWindow : Window
 
     /// <summary>Why it stopped, in the empty meter's words, made again only for another reason.</summary>
     private (string? Of, string Text) stoppedWords = (null, string.Empty);
+
+    /// <summary>When the shown fight was copied as text (the foot says so for a moment).</summary>
+    private DateTime copiedAt;
+
+    /// <summary>The Events tab's feed (newest first, each time in words, the foot's counts), made again only for a new list from the source.</summary>
+    private (IReadOnlyList<MeterEvent>? Of, int Count, bool Compact, List<MeterEvent> Newest, List<string> Times, string Foot) feed =
+        (null, -1, false, new List<MeterEvent>(), new List<string>(), string.Empty);
+
+    /// <summary>The limit break gauge's bars, worked out again only when the gauge changes.</summary>
+    private (LimitBreakGauge? Of, float[] Bars) gaugeBars = (null, Array.Empty<float>());
 
     /// <summary>Column heads in capitals.</summary>
     private static readonly Dictionary<string, string> CapsOf = new();
@@ -507,10 +520,15 @@ public sealed class MeterWindow : Window
         Header(dl, top.X, ref stack, w, said.Clock, e.Live, MeterView.OutcomeWord(e.Ended), e.Ended == Core.Outcome.Clear ? TagKind.Clear : TagKind.Wipe,
             said.Pick, m, null, true);
         if (!z.IsCompact) TabsRow(dl, top.X, ref stack, w);
-        var tab = config.MeterTab;
+        var tab = MeterLayout.Known(config.MeterTab);
         if (tab == MeterTab.Deaths)
         {
             DrawDeaths(dl, top.X, w, stack, e, m.InEncounter && !ended);
+            return;
+        }
+        if (tab == MeterTab.Events)
+        {
+            DrawEvents(dl, top.X, w, stack, e, m);
             return;
         }
         if (tab == MeterTab.Damage && config.MeterPace != PaceAgainst.Off && m.Pace(e.Id, config.MeterPace) is { } pace)
@@ -607,6 +625,17 @@ public sealed class MeterWindow : Window
                 x += tw + S(8);
             }
         }
+        // The limit break gauge, when it's wanted in the head, as far as it fits before the buttons.
+        if (config.MeterGauge == GaugePlace.Head && beating && Bars(m) is { Length: > 0 } bars)
+        {
+            var gw = GaugeWidth(bars.Length);
+            if (x + gw <= room)
+            {
+                DrawGauge(dl, new Vector2(x, cy), gw, bars, z.IsCompact ? 4 : 5);
+                if (Kit.Pointed(new Vector2(x, y), new Vector2(x + gw, y + h)) && m?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
+                x += gw + S(8);
+            }
+        }
         // "Waiting for the first hit", as much as fits before the buttons.
         var px2 = z.IsCompact ? 12 : 13;
         if (waitingLine != null && room - x > S(20))
@@ -660,7 +689,20 @@ public sealed class MeterWindow : Window
     {
         var h = S(Z.Tabs);
         var y = stack.Near(h);
-        var t = (MeterTab)Kit.Tabs("##meter-tab", new Vector2(left + S(6), y), TabSpecs, (int)config.MeterTab, TabSize.Meter);
+        var current = MeterLayout.Known(config.MeterTab);
+        // The five tabs where they fit; a narrower meter has compact's menu in their place.
+        if (Kit.TabsWidth(TabSpecs, TabSize.Meter) + S(12) > w)
+        {
+            var word = MeterLayout.TabWord(current);
+            var tx = left + S(Z.Pad);
+            if (DropButton("##meter-tabs-row", new Vector2(tx, y + (h - S(24)) / 2), DropWidth(word), word)) ImGui.OpenPopup(TabMenu);
+            headTop = y;
+            headBottom = y + h;
+            DrawTabMenu(tx, shown != null);
+            Kit.Rule(dl, left, left + w, stack.Away(y, h));
+            return;
+        }
+        var t = (MeterTab)Kit.Tabs("##meter-tab", new Vector2(left + S(6), y), TabSpecs, (int)current, TabSize.Meter);
         Kit.Rule(dl, left, left + w, stack.Away(y, h));
         if (t == config.MeterTab) return;
         config.MeterTab = t;
@@ -845,14 +887,16 @@ public sealed class MeterWindow : Window
         var x = left + S(z.Pad);
         x += Txt.Line(dl, new Vector2(x, y), "Party · ", Face.Mono, z.FootPx, Palette.Muted, z.Foot);
         x += Txt.Line(dl, new Vector2(x, y), value, Face.MonoSemibold, z.FootPx, Palette.White, z.Foot);
-        if (unit != null) Txt.Line(dl, new Vector2(x + Txt.Width(" ", Face.Mono, z.FootPx), y), unit, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+        // The unit after the number ("HPS"), and the gauge only after it.
+        if (unit != null) x += Txt.Width(" ", Face.Mono, z.FootPx) + Txt.Line(dl, new Vector2(x + Txt.Width(" ", Face.Mono, z.FootPx), y), unit, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
         var rx = left + w - S(z.Pad);
         if (previewInFoot)
         {
             PreviewTag(dl, new Vector2(rx - Kit.TagWidth("Preview", TagKind.Plain), y + (h - S(18)) / 2));
             return;
         }
-        var right = config.MeterLocked && config.MeterClickThrough ? "click-through"
+        var right = DateTime.UtcNow - copiedAt < CopiedFor ? "copied to the clipboard"
+            : config.MeterLocked && config.MeterClickThrough ? "click-through"
             : ended ? said.KeptAs
             : tab switch
             {
@@ -860,7 +904,62 @@ public sealed class MeterWindow : Window
                 MeterTab.Taken => "incl. bleeds",
                 _ => said.Where ?? (config.MeterRank == MeterRank.Dps ? "DPS" : "ENCDPS"),
             };
-        Txt.LineRight(dl, rx, y, right, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+        var rw = Txt.LineRight(dl, rx, y, right, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+        FootGauge(dl, x + S(12), rx - rw - S(10), y, h, !ended);
+    }
+
+    /// <summary>The limit break gauge in the foot (when it's wanted there and the fight is live), right-aligned before what the foot says on the right, when there's room.</summary>
+    private void FootGauge(ImDrawListPtr dl, float from, float to, float y, float h, bool live)
+    {
+        if (config.MeterGauge != GaugePlace.Foot || !live || Bars(Meter) is not { Length: > 0 } bars) return;
+        var gw = GaugeWidth(bars.Length);
+        if (to - gw < from) return;
+        var gx = to - gw;
+        DrawGauge(dl, new Vector2(gx, y + h / 2), gw, bars, Z.IsCompact ? 4 : 5);
+        if (Kit.Pointed(new Vector2(gx, y), new Vector2(to, y + h)) && Meter?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
+    }
+
+    /// <summary>The gauge's bars now (none outside a party that fills one), worked out again only when it changes.</summary>
+    private float[]? Bars(IMeterSource? m)
+    {
+        var g = m?.LimitBreak;
+        if (g == null) return null;
+        if (!Equals(gaugeBars.Of, g)) gaugeBars = (g, MeterText.Bars(g));
+        return gaugeBars.Bars;
+    }
+
+    /// <summary>The gauge's width: "LB" in mono and a 16px bar each, 3 apart.</summary>
+    private static float GaugeWidth(int bars) => Txt.Width("LB", Face.Mono, 9) + S(5) + bars * S(16) + Math.Max(0, bars - 1) * S(3);
+
+    /// <summary>
+    /// The limit break gauge (`.cast-bar`s side by side): "LB" in faint mono, then a bar each the party
+    /// has, a full one the ember gradient, the one filling to its share, the rest a track; on its line's
+    /// middle at <paramref name="leftMid"/>, at most <paramref name="width"/> wide. Shared with the cooldown tracker.
+    /// </summary>
+    public static void DrawGauge(ImDrawListPtr dl, Vector2 leftMid, float width, float[] bars, float height)
+    {
+        if (bars.Length == 0) return;
+        var label = Txt.Width("LB", Face.Mono, 9);
+        var gap = S(3);
+        var bw = MathF.Min(S(16), (width - label - S(5) - gap * (bars.Length - 1)) / bars.Length);
+        if (bw < S(5)) return;
+        Txt.Draw(dl, new Vector2(leftMid.X, leftMid.Y - Txt.Natural(Face.Mono, 9) / 2), "LB", Face.Mono, 9, Palette.Faint);
+        var x = leftMid.X + label + S(5);
+        var h = S(height);
+        var top = leftMid.Y - h / 2;
+        foreach (var f in bars)
+        {
+            var a = new Vector2(x, top);
+            var b = new Vector2(x + bw, top + h);
+            dl.AddRectFilled(a, b, Palette.U32(Palette.Track), S(1.5f));
+            if (f >= 1)
+            {
+                Kit.CastGradient(dl, a, b);
+                dl.AddRect(a - new Vector2(1), b + new Vector2(1), Palette.U32(Palette.WithAlpha(Palette.EmberHi, 0.25f)), S(2), ImDrawFlags.None, 1f);
+            }
+            else if (f > 0) dl.AddRectFilled(a, new Vector2(x + bw * f, b.Y), Palette.U32(Palette.EmberDeep));
+            x += bw + gap;
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -979,6 +1078,160 @@ public sealed class MeterWindow : Window
         }
         x += S(8);
         if (room - x > S(24)) Txt.Line(dl, new Vector2(x, y), Txt.Fit(said.DeathLines[i], Face.Sans, 11, room - x), Face.Sans, 11, Palette.Muted, z.DeathRow);
+    }
+
+    /// <summary>
+    /// The Events tab (0.4.0): the fight's events as a feed, the newest nearest the head: the time in
+    /// mono, the kind's mark in its colour (a death red, a raise or an interrupt green, the limit break
+    /// and potions ember), the member's spot and what happened, cut to fit. Pressed, the meter opens up
+    /// on Events (a death, on its recap). Past the room the oldest are cut; the foot counts them by kind.
+    /// </summary>
+    private void DrawEvents(ImDrawListPtr dl, float left, float w, MeterStack stack, MeterEncounter e, IMeterSource m)
+    {
+        var z = Z;
+        var f = Feed(m.Events(e.Id));
+        var fh = S(z.Foot);
+        var footY = stack.Far(fh);
+        var rowH = S(z.IsCompact ? 20 : 23);
+        var n = Math.Min(f.Newest.Count, stack.Fits(rowH));
+        var a = MathF.Min(stack.NearEdge, stack.FarEdge);
+        var b = MathF.Max(stack.NearEdge, stack.FarEdge);
+        dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, MathF.Max(a, b)), true);
+        try
+        {
+            for (var i = 0; i < n; i++) EventRow(dl, f.Newest[i], f.Times[i], left, stack.Row(i, rowH), w, rowH, e, i);
+            if (f.Newest.Count == 0)
+            {
+                const string none = "Deaths, raises, interrupts, potions and limit breaks show here.";
+                var px = z.IsCompact ? 11 : 12;
+                var ty = stack.Up ? stack.NearEdge - S(14) - Txt.Natural(Face.Sans, px) : stack.NearEdge + S(14);
+                var t = Txt.Fit(none, Face.Sans, px, w - S(24));
+                Txt.Draw(dl, new Vector2(left + (w - Txt.Width(t, Face.Sans, px)) / 2, ty), t, Face.Sans, px, Palette.Muted);
+            }
+        }
+        finally
+        {
+            dl.PopClipRect();
+        }
+        Kit.Rule(dl, left, left + w, stack.Toward(footY, fh));
+        var lw = Txt.Line(dl, new Vector2(left + S(z.Pad), footY), Txt.Fit(f.Foot, Face.Mono, z.FootPx, w * 0.62f), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+        var rx = left + w - S(z.Pad);
+        if (previewInFoot) PreviewTag(dl, new Vector2(rx - Kit.TagWidth("Preview", TagKind.Plain), footY + (fh - S(18)) / 2));
+        else
+        {
+            var rw = Txt.LineRight(dl, rx, footY, DateTime.UtcNow - copiedAt < CopiedFor ? "copied" : said.PullWord, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+            FootGauge(dl, left + S(z.Pad) + lw + S(12), rx - rw - S(10), footY, fh, e.Live);
+        }
+    }
+
+    /// <summary>An event's row: its time, its mark, the member's spot, what happened. Pressed, the meter opens up on it.</summary>
+    private void EventRow(ImDrawListPtr dl, MeterEvent ev, string time, float left, float y, float w, float h, MeterEncounter e, int i)
+    {
+        var z = Z;
+        var min = new Vector2(left, y);
+        var max = new Vector2(left + w, y + h);
+        var (clicked, hovered, _) = Kit.Hit(EventIds[i % EventIds.Length], min, max - min);
+        if (hovered)
+        {
+            dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
+            Kit.Tooltip($"{MeterText.KindWord(ev.Kind)} at {time}: {ev.Text}");
+        }
+        if (clicked)
+        {
+            var death = ev.Kind == MeterEventKind.Death ? DeathAt(e, ev) : -1;
+            if (death >= 0) OpenDetail?.Invoke(MeterTab.Deaths, e.Id, ev.PartyId, death);
+            else OpenDetail?.Invoke(MeterTab.Events, e.Id, ev.PartyId > 0 ? ev.PartyId : null, null);
+        }
+        var lineCss = h / S(1);
+        var x = left + S(z.Pad);
+        var tpx = z.IsCompact ? 10 : 11;
+        Txt.LineRight(dl, x + S(30), y, time, Face.Mono, tpx, Palette.Faint, lineCss);
+        x += S(30) + S(8);
+        var mark = S(z.IsCompact ? 12 : 13);
+        Icons.Draw(dl, EventIcon(ev.Kind), new Vector2(x, y + (h - mark) / 2), mark, ToneColor(MeterText.Tone(ev.Kind)));
+        x += mark + S(7);
+        if (ev.Slot.Length > 0)
+        {
+            var spot = z.Spot - 2;
+            Kit.Spot(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, ev.Slot, Palette.SpotColor(ev.Slot), 1.5f);
+            x += S(spot) + S(6);
+        }
+        var px = z.IsCompact ? 11 : 12;
+        var room = left + w - S(z.Pad) - x;
+        if (room > S(16)) Txt.Line(dl, new Vector2(x, y), Txt.Fit(ev.Text, Face.Sans, px, room), Face.Sans, px, ev.Kind == MeterEventKind.Death ? Palette.DangerName : Palette.Text, lineCss);
+    }
+
+    private static readonly string[] EventIds = MakeIds("##mev", 64);
+
+    private static string[] MakeIds(string prefix, int n)
+    {
+        var ids = new string[n];
+        for (var i = 0; i < n; i++) ids[i] = prefix + i.ToString(CultureInfo.InvariantCulture);
+        return ids;
+    }
+
+    /// <summary>An event's mark (Lucide): a skull, a heart, a stop, a warning, a bolt, a shield, a flask, sparkles, two arrows.</summary>
+    public static Icon EventIcon(MeterEventKind kind) => kind switch
+    {
+        MeterEventKind.Death => Icon.Skull,
+        MeterEventKind.Raise => Icon.Heart,
+        MeterEventKind.Interrupt => Icon.CircleX,
+        MeterEventKind.CastWentOff => Icon.AlertTriangle,
+        MeterEventKind.Stun => Icon.Zap,
+        MeterEventKind.Resisted => Icon.Shield,
+        MeterEventKind.Potion => Icon.Flask,
+        MeterEventKind.LimitBreak => Icon.Sparkles,
+        MeterEventKind.TankSwap => Icon.ArrowLeftRight,
+        MeterEventKind.AggroLost => Icon.Alert,
+        _ => Icon.Info,
+    };
+
+    /// <summary>An event's mark's colour: red, green, ember or muted.</summary>
+    public static Vector4 ToneColor(EventTone tone) => tone switch
+    {
+        EventTone.Bad => Palette.Danger,
+        EventTone.Good => Palette.Ready,
+        EventTone.Ember => Palette.Ember,
+        _ => Palette.Muted,
+    };
+
+    /// <summary>The death an event is about (its index in the fight's list), or −1.</summary>
+    private static int DeathAt(MeterEncounter e, MeterEvent ev)
+    {
+        for (var i = 0; i < e.Deaths.Count; i++)
+            if (e.Deaths[i].PartyId == ev.PartyId && Math.Abs(e.Deaths[i].At - ev.At) < 1)
+                return i;
+        return -1;
+    }
+
+    /// <summary>The feed for a list of events: made again only when the source gives a new list (or it grew).</summary>
+    private (List<MeterEvent> Newest, List<string> Times, string Foot) Feed(IReadOnlyList<MeterEvent> events)
+    {
+        var compact = Z.IsCompact;
+        if (!ReferenceEquals(feed.Of, events) || feed.Count != events.Count || feed.Compact != compact)
+        {
+            var newest = MeterText.Newest(events, EventIds.Length);
+            var times = new List<string>(newest.Count);
+            foreach (var ev in newest) times.Add(Format.Clock(ev.At));
+            var foot = events.Count == 0 ? "No events yet" : MeterText.Counts(events, compact ? 2 : 3);
+            feed = (events, events.Count, compact, newest, times, foot);
+        }
+        return (feed.Newest, feed.Times, feed.Foot);
+    }
+
+    /// <summary>The Events tab's count in compact's menu (the shown fight's), or null.</summary>
+    private string? EventCount()
+    {
+        if (shown == null || Meter is not { } m) return null;
+        var n = m.Events(shown.Id).Count;
+        return n > 0 ? n.ToString(CultureInfo.InvariantCulture) : null;
+    }
+
+    /// <summary>Copy as text: the fight shown, as a mini-parse (<see cref="MeterText.Parse"/>), to the clipboard; the foot says so for a moment.</summary>
+    private void CopyParse(MeterEncounter e)
+    {
+        ImGui.SetClipboardText(MeterText.Parse(e, config.MeterJobsOnly));
+        copiedAt = DateTime.UtcNow;
     }
 
     private string StoppedLine(string problem)
@@ -1156,7 +1409,7 @@ public sealed class MeterWindow : Window
     {
         var mw = S(TabMenuWidth);
         ImGui.SetNextWindowSizeConstraints(new Vector2(mw, 0), new Vector2(mw, S(400)));
-        PlaceMenu(buttonLeft, mw, tabMenuH > 0 ? tabMenuH : S(4 * 34 + 11.2f));
+        PlaceMenu(buttonLeft, mw, tabMenuH > 0 ? tabMenuH : S(MeterLayout.TabOrder.Length * 34 + 11.2f));
         if (!Kit.BeginMenu(TabMenu)) return;
         try
         {
@@ -1165,7 +1418,7 @@ public sealed class MeterWindow : Window
             foreach (var t in MeterLayout.TabOrder)
             {
                 var on = t == config.MeterTab;
-                var count = t == MeterTab.Deaths && hasFight ? said.DeathCount : null;
+                var count = !hasFight ? null : t == MeterTab.Deaths ? said.DeathCount : t == MeterTab.Events ? EventCount() : null;
                 var reserve = on ? S(16) + S(8) : count != null ? Txt.Width(count, Face.Mono, 11) + S(8) : 0;
                 var (clicked, _, min, max) = Kit.MenuRow(TabIds[(int)t], w, MeterLayout.TabWord(t), null, true, 16, reserve);
                 var (slot, right) = Kit.MenuRowParts(min, max, true, 16);
@@ -1228,6 +1481,19 @@ public sealed class MeterWindow : Window
                 foreach (var r in others) PickRow(dl, r, w, r.Fight.Duty);
             }
             Kit.MenuRule(w);
+            // Copy as text: a mini-parse of the fight shown, for chat (as ACT's).
+            if (current != null)
+            {
+                var (copy, _, cmin, cmax) = Kit.MenuRow("##pick-copy", w, "Copy as text", $"Pull {current.Pull}: each player's ENCDPS, share and deaths", true, 16);
+                var (cslot, _) = Kit.MenuRowParts(cmin, cmax, true, 16);
+                Icons.Draw(dl, Icon.Copy, cslot + new Vector2((S(16) - S(15)) / 2), S(15), Palette.Muted);
+                if (copy)
+                {
+                    CopyParse(current);
+                    ImGui.CloseCurrentPopup();
+                }
+                Kit.MenuRule(w);
+            }
             var pos = ImGui.GetCursorScreenPos();
             var lineH = S(28);
             var gap = S(4);
@@ -1345,7 +1611,7 @@ public sealed class MeterWindow : Window
                 var d = Deaths[i];
                 var id = d.PartyId.ToString(CultureInfo.InvariantCulture) + "-" + i.ToString(CultureInfo.InvariantCulture);
                 DeathTimes.Add(Format.Clock(d.At));
-                DeathLines.Add(d.KilledBy + " · " + Format.Thousands(d.Amount));
+                DeathLines.Add(MeterText.DeathLine(d));
                 DeathIds.Add("##md" + id);
                 DeathRets.Add("##md-ret" + id);
             }

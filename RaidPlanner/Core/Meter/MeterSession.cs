@@ -6,7 +6,8 @@ namespace RaidPlanner.Core.Meter;
 
 /// <summary>A party member as the game shows them this frame (the meter's names stay in the plugin).</summary>
 /// <param name="Role">The game's ClassJob role: 1 tank, 2 melee, 3 ranged, 4 healer.</param>
-public readonly record struct PartyState(uint Id, string Name, string Job, byte Role, long Hp, long MaxHp, bool InCombat, bool You)
+/// <param name="Weakness">Since 0.4.0: Weakness (1) or Brink of Death (2) on them now, 0 neither.</param>
+public readonly record struct PartyState(uint Id, string Name, string Job, byte Role, long Hp, long MaxHp, bool InCombat, bool You, byte Weakness = 0)
 {
     public bool Dead => MaxHp > 0 && Hp <= 0;
 }
@@ -25,6 +26,16 @@ public readonly record struct PartyState(uint Id, string Name, string Job, byte 
 /// between the party and an enemy, ticks included (ACT's convention): the one rule the summary's
 /// <c>stats.len</c> and the site's numbers follow too (<see cref="PullStats.Length"/>). Phases are the
 /// recording's rule (<see cref="PhaseClock"/>), from the enemies' targetability the game side reports.
+///
+/// Since 0.4.0 also what the party used (<see cref="Use"/>: GCDs, items, limit breaks, interrupts, a status
+/// resisted; the potions in the <see cref="PrePull.Keep"/> seconds before an encounter are its own, as the
+/// summary's <c>pots</c> count them), raises (a dead member's HP above 0 again: credited as the recording
+/// credits them, to the Raise status a party member put on them while down, else the healers' limit break 3,
+/// else the last raise used on them while down), the enemies' casts (<see cref="EnemyCast"/>) and their being stopped
+/// (<see cref="Cancelled"/>, credited as the recording credits them: <see cref="CastWatch"/>), the bosses'
+/// targets (<see cref="Aggro"/>: tank swaps, a non-tank holding a boss), stuns and the like landing (a control
+/// status a party member's action put on someone outside the party, its message's own status effect, with damage or
+/// not: <see cref="StatusOn"/>), and the limit break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
 /// </summary>
 public sealed class MeterSession : IMeterSource, ICombatSink
 {
@@ -48,8 +59,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     private static readonly string[] SlotOrder = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
 
+    /// <summary>The most events kept for an encounter (the newest so many: a long pull's feed goes on to its end).</summary>
+    public const int MostEvents = 200;
+
     private readonly Func<uint, string> actionName;
     private readonly Func<uint, string> statusName;
+    private readonly Func<uint, string> itemName;
+    private readonly CombatKinds kinds;
 
     /// <summary>Newest first; the live one (if any) is first.</summary>
     private readonly List<Fight> fights = new();
@@ -57,6 +73,14 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private readonly Dictionary<uint, bool> down = new();
     private readonly List<PartyState> party = new();
     private readonly PartyEffect[] early = new PartyEffect[64];
+    private readonly PartyUse[] earlyUses = new PartyUse[32];
+
+    // Items used out of an encounter (the last few): those in the PrePull.Keep seconds before one begins are its own.
+    private readonly PartyUse[] earlyItems = new PartyUse[16];
+    private int earlyItemCount;
+    private int earlyItemNext;
+    private int earlyUseCount;
+    private int earlyUseNext;
     private int earlyCount;
     private int earlyNext;
     private Fight? live;
@@ -79,10 +103,36 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     /// <param name="actionName">An action's name (the game's Action sheet).</param>
     /// <param name="statusName">A status's name (the game's Status sheet).</param>
-    public MeterSession(Func<uint, string>? actionName = null, Func<uint, string>? statusName = null)
+    /// <param name="itemName">An item's name by the id the game sent (a high-quality one's +1,000,000).</param>
+    /// <param name="kinds">Which actions and statuses are GCDs, interrupts, raises, control (<see cref="CombatKinds"/>).</param>
+    public MeterSession(Func<uint, string>? actionName = null, Func<uint, string>? statusName = null, Func<uint, string>? itemName = null,
+        CombatKinds? kinds = null)
     {
         this.actionName = actionName ?? (id => $"Action {id}");
         this.statusName = statusName ?? (id => $"Status {id}");
+        this.itemName = itemName ?? (id => $"Item {id}");
+        this.kinds = kinds ?? CombatKinds.None;
+    }
+
+    /// <summary>The limit break gauge now (<see cref="Gauge"/>), or null outside a party that fills one.</summary>
+    public LimitBreakGauge? LimitBreak { get; private set; }
+
+    /// <summary>
+    /// The limit break gauge as the game has it: the units in it, the bars the party has, the units a bar (Settings' gauge,
+    /// the Events tab's limit breaks). No bars: no gauge.
+    /// </summary>
+    public void Gauge(int units, int bars, int barUnits)
+    {
+        if (bars <= 0 || barUnits <= 0)
+        {
+            LimitBreak = null;
+            return;
+        }
+        units = Math.Clamp(units, 0, bars * barUnits);
+        var full = Math.Min(bars, units / barUnits);
+        var into = full >= bars ? 0 : units - full * barUnits;
+        if (LimitBreak is { } g && g.Bars == full && g.MaxBars == bars && g.Units == into && g.BarUnits == barUnits) return;
+        LimitBreak = new LimitBreakGauge(full, bars, into, barUnits);
     }
 
     /// <summary>How many encounters are kept (Settings).</summary>
@@ -108,6 +158,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         {
             if (live != null) End(Outcome.Ended);
             ownPull = 0;
+            // A potion drunk in another zone is no pull's here.
+            earlyItemCount = 0;
         }
         territory = territoryId;
         content = contentId;
@@ -151,8 +203,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var m = live.Join(p);
             m.Dead = dead;
             if (p.MaxHp > 0) m.MaxHp = p.MaxHp;
+            if (!dead) m.Weakness = p.Weakness;
             if (known && !was && dead) live.Died(m, t, this);
+            else if (known && was && !dead) live.Raised(m, t);
         }
+        live?.Watch(t, this);
         anyAlive = !allDown;
         if (live == null) return;
         if (allDown)
@@ -234,6 +289,19 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             if (t - e.T <= Before) f.Effect(e with { T = Math.Max(t, e.T) }, this);
         }
         earlyCount = 0;
+        for (var i = 0; i < earlyUseCount; i++)
+        {
+            var u = earlyUses[(earlyUseNext - earlyUseCount + i + earlyUses.Length) % earlyUses.Length];
+            if (t - u.T <= Before) f.Use(u with { T = Math.Max(t, u.T) }, this);
+        }
+        earlyUseCount = 0;
+        // The potions drunk before it (the pre-pull tincture): its own, at their own (negative) times.
+        for (var i = 0; i < earlyItemCount; i++)
+        {
+            var u = earlyItems[(earlyItemNext - earlyItemCount + i + earlyItems.Length) % earlyItems.Length];
+            if (t - u.T <= PrePull.Keep && u.T <= t) f.Use(u, this);
+        }
+        earlyItemCount = 0;
         kept = null;
     }
 
@@ -243,6 +311,63 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     public void Used(double t, uint member, uint caster, uint action)
     {
     }
+
+    /// <summary>A party member's action or item (since 0.4.0): counted in the encounter going on, and its events.</summary>
+    public void Use(in PartyUse u)
+    {
+        if (Problem != null) return;
+        if (live == null)
+        {
+            // An item kept longer (the pre-pull tincture is the pull's); anything else a moment, as the effects are: a use in
+            // the second before the first hit is the encounter's.
+            if ((u.Flags & UseFlags.Item) != 0)
+            {
+                earlyItems[earlyItemNext] = u;
+                earlyItemNext = (earlyItemNext + 1) % earlyItems.Length;
+                earlyItemCount = Math.Min(earlyItemCount + 1, earlyItems.Length);
+                return;
+            }
+            earlyUses[earlyUseNext] = u;
+            earlyUseNext = (earlyUseNext + 1) % earlyUses.Length;
+            earlyUseCount = Math.Min(earlyUseCount + 1, earlyUses.Length);
+            return;
+        }
+        live.Use(u, this);
+    }
+
+    /// <summary>
+    /// An enemy's cast as it began (the game side reads the cast bars): kept until its end, so a cast stopped can be told
+    /// (<see cref="Cancelled"/>), and an interruptible one that went off is an event.
+    /// </summary>
+    public void EnemyCast(double t, uint enemy, uint action, float duration, bool interruptible)
+    {
+        if (Problem != null || live == null || enemy == 0 || action == 0 || !double.IsFinite(t)) return;
+        live.EnemyCast(t, enemy, action, float.IsFinite(duration) ? duration : 0, interruptible);
+    }
+
+    /// <summary>
+    /// The game said an enemy's cast stopped (actor control 15; <paramref name="interrupted"/>, else cancelled): one the
+    /// meter holds, before its end less a quarter second, is an Interrupt event, credited to <paramref name="byMember"/>
+    /// (an entity id) or, with 0, as the recording credits it (<see cref="CastWatch"/>).
+    /// </summary>
+    public void Cancelled(double t, uint enemy, uint action, bool interrupted, uint byMember = 0)
+    {
+        if (Problem != null || live == null) return;
+        live.Cancelled(t, enemy, action, interrupted, byMember, this);
+    }
+
+    /// <summary>
+    /// A boss's target now (an entity id, 0 none), reported while it's targetable; <paramref name="castTarget"/> when it's
+    /// casting at that one (a tankbuster's target, not aggro). Tank swaps and aggro on a non-tank are told from it.
+    /// </summary>
+    public void Aggro(double t, uint enemy, uint target, bool castTarget = false)
+    {
+        if (Problem != null || live == null || enemy == 0) return;
+        live.Aggro(t, enemy, target, castTarget, this);
+    }
+
+    /// <summary>An encounter's events (the Events tab), oldest first, the newest <see cref="MostEvents"/>.</summary>
+    public IReadOnlyList<MeterEvent> Events(int encounterId) => Find(encounterId)?.EventList(this) ?? (IReadOnlyList<MeterEvent>)Array.Empty<MeterEvent>();
 
     public void Effect(in PartyEffect e)
     {
@@ -262,6 +387,18 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             }
         }
         live!.Effect(e, this);
+    }
+
+    /// <summary>
+    /// A status a party member put on (with damage or not: Shield Bash's stun too): a stun (sleep, bind…) on someone outside the
+    /// party is one landed (the game side reads whether a target is hostile only when it needs its HP, so not for an enemy the
+    /// party only puts a status on), and the Raise status on a member who's down is what their getting up is credited to.
+    /// </summary>
+    public void StatusOn(in PartyEffect e)
+    {
+        if (Problem != null || live == null || e.Kind != FxKind.Status) return;
+        if (!e.RecipientParty && kinds.Control(e.Status)) live.Control(e, this);
+        else if (e.RecipientParty && kinds.RaiseStatus(e.Status)) live.RaiseStatus(e, this);
     }
 
     public void Taken(in TakenHit e)
@@ -379,6 +516,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         kept = null;
     }
 
+    /// <summary>A member's name for the events (their job when the party list gave none).</summary>
+    private static string Who(Member? m) => m == null ? "Someone" : m.Name.Length > 0 ? m.Name : m.Job.Length > 0 ? m.Job : m.Slot;
+
     private string Name(AbilityKey key) => key.Id == 0 ? (key.Tick ? "Damage over time" : "Unknown") : key.IsStatus ? statusName(key.Id) : actionName(key.Id);
 
     private static int SlotRank(string slot)
@@ -405,6 +545,20 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public long MaxHp;
 
         public double LastDied = double.NaN;
+
+        // Since 0.4.0: GCDs, items, raises given and taken, interrupts; Weakness or Brink on them now; the last raise on them while down.
+        public int Casts;
+        public int Potions;
+        public int RaisesGiven;
+        public int Raised;
+        public int Interrupts;
+        public byte Weakness;
+        public (double T, Member By, bool Lb)? RaisedWith;
+
+        /// <summary>The Raise status a party member put on them while down (when, by whom): what their getting up is credited to first.</summary>
+        public (double T, Member By)? RaiseStatus;
+        public Death? LastDeath;
+
         public readonly Recap[] Recent = new Recap[RecapLength];
         public int RecentCount;
         public int RecentNext;
@@ -437,7 +591,15 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public long MaxHp;
 
         public bool PartOfWipe;
+
+        // Since 0.4.0: when they were alive again (encounter time), by whom; Weakness or Brink on them as they died.
+        public double? RaisedAt;
+        public Member? RaisedBy;
+        public bool HadWeakness;
     }
+
+    /// <summary>An event as it's kept (the text is made when it's read: a member's name may come later).</summary>
+    private readonly record struct Happening(double T, MeterEventKind Kind, Member? Who, Member? Other, uint Action, uint Status, Death? Death, double Seconds = 0);
 
     private sealed class Fight
     {
@@ -460,6 +622,19 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public readonly Tally Tally = new();
         public readonly PhaseClock Phases = new();
         public readonly List<Death> Deaths = new();
+
+        // Since 0.4.0: the events; the enemies' casts going on; who interrupted; each boss's target as a span, and the tank holding it.
+        // The events in a ring (the newest MostEvents, nothing made per event), and how many there have been (what a list is made again by).
+        private readonly Happening[] happenings = new Happening[MostEvents];
+        private int happeningNext;
+        private int happeningCount;
+        private long happened;
+        private readonly Dictionary<uint, (double T, uint Action, double End, bool Interruptible)> casts = new();
+        private readonly CastWatch interrupts = new();
+        private readonly Dictionary<uint, (uint On, double Since, bool CastTarget, bool Judged, Member? Held)> aggro = new();
+        private readonly List<uint> judging = new();
+        private IReadOnlyList<MeterEvent>? eventList;
+        private long eventCount = -1;
 
         /// <summary>The party's damage in each second of the encounter (the limit break's too), for pace.</summary>
         private readonly List<long> perSecond = new();
@@ -532,7 +707,189 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         {
             m.LastDied = t - Start;
             LastDeath = Math.Max(LastDeath, t);
-            Deaths.Add(new Death { Who = m, T = t - Start, Recent = m.RecentInOrder(), MaxHp = m.MaxHp });
+            var d = new Death { Who = m, T = t - Start, Recent = m.RecentInOrder(), MaxHp = m.MaxHp, HadWeakness = m.Weakness != 0 };
+            Deaths.Add(d);
+            m.LastDeath = d;
+            m.RaisedWith = null;
+            m.RaiseStatus = null;
+            Happen(new Happening(t - Start, MeterEventKind.Death, m, null, 0, 0, d));
+        }
+
+        // -----------------------------------------------------------------------------------------
+        // Since 0.4.0.
+
+        private void Happen(in Happening h)
+        {
+            // The oldest let go of once there are MostEvents: the live feed shows the newest.
+            happenings[happeningNext] = h;
+            happeningNext = (happeningNext + 1) % happenings.Length;
+            happeningCount = Math.Min(happeningCount + 1, happenings.Length);
+            happened++;
+        }
+
+        /// <summary>
+        /// A dead member alive again, credited as the recording credits it (<c>RecordingBuilder.Raised</c>): to the Raise status a
+        /// party member put on them while down, else to the last raise used on them while down (or the healers' limit break 3).
+        /// </summary>
+        public void Raised(Member m, double t)
+        {
+            var use = m.RaisedWith;
+            var by = m.RaiseStatus?.By ?? use?.By;
+            m.RaisedWith = null;
+            m.RaiseStatus = null;
+            m.Raised++;
+            if (by != null) by.RaisesGiven++;
+            if (m.LastDeath is { RaisedAt: null } d)
+            {
+                d.RaisedAt = t - Start;
+                d.RaisedBy = by;
+            }
+            Happen(new Happening(t - Start, MeterEventKind.Raise, m, by, 0, 0, null, use is { Lb: true } ? 1 : 0));
+        }
+
+        /// <summary>The Raise status put on a member who's down, by a party member [verify: the game names the raiser as its source].</summary>
+        public void RaiseStatus(in PartyEffect e, MeterSession s)
+        {
+            if (Of(e.Recipient) is { Dead: true } on && Of(e.Member, s) is { } by) on.RaiseStatus = (e.T, by);
+        }
+
+        public void Use(in PartyUse u, MeterSession s)
+        {
+            if (Of(u.Member, s) is not { } m) return;
+            var t = u.T - Start;
+            if ((u.Flags & UseFlags.Item) != 0)
+            {
+                // One before the encounter (the pre-pull tincture) at its own time, before 0.
+                m.Potions++;
+                Happen(new Happening(t, MeterEventKind.Potion, m, null, u.Action, 0, null));
+                return;
+            }
+            if ((u.Flags & UseFlags.Pet) == 0 && s.kinds.Gcd(u.Action)) m.Casts++;
+            if ((u.Flags & UseFlags.LimitBreak) != 0) Happen(new Happening(t, MeterEventKind.LimitBreak, m, null, u.Action, 0, null));
+            if ((u.Flags & UseFlags.StatusResisted) != 0) Happen(new Happening(t, MeterEventKind.Resisted, m, null, u.Action, 0, null));
+            interrupts.Used(u.T, u.Target, u.Member, u.Action, (u.Flags & UseFlags.Interrupted) != 0, s.kinds.Interrupt(u.Action));
+            // A raise on one down, or the healers' limit break 3 on all who are: what their getting up is credited to.
+            if ((u.Flags & UseFlags.Revive) != 0)
+            {
+                foreach (var x in Members)
+                    if (x.Dead) x.RaisedWith = (u.T, m, true);
+            }
+            else if (s.kinds.RaiseAction(u.Action) && Of(u.Target) is { Dead: true } on)
+            {
+                on.RaisedWith = (u.T, m, false);
+            }
+        }
+
+        /// <summary>A stun (or sleep, bind…) a member put on an enemy.</summary>
+        public void Control(in PartyEffect e, MeterSession s)
+        {
+            if (Of(e.Member, s) is { } m) Happen(new Happening(e.T - Start, MeterEventKind.Stun, m, null, e.Action, e.Status, null));
+        }
+
+        public void EnemyCast(double t, uint enemy, uint action, float duration, bool interruptible)
+        {
+            if (casts.TryGetValue(enemy, out var had) && had.Action == action && Math.Abs(had.T - t) < 0.3) return;
+            casts[enemy] = (t, action, t + Math.Max(0, duration), interruptible);
+        }
+
+        public void Cancelled(double t, uint enemy, uint action, bool interrupted, uint byMember, MeterSession s)
+        {
+            if (!casts.TryGetValue(enemy, out var c) || c.Action != action || t >= c.End - RecordingBuilder.CancelBeforeEnd) return;
+            casts.Remove(enemy);
+            if (!interrupted) return;
+            var by = byMember != 0 ? byMember : interrupts.Credit(t, enemy)?.Member ?? 0;
+            var m = by == 0 ? null : Of(by, s);
+            if (m != null) m.Interrupts++;
+            Happen(new Happening(t - Start, MeterEventKind.Interrupt, m, null, action, 0, null));
+        }
+
+        public void Aggro(double t, uint enemy, uint target, bool castTarget, MeterSession s)
+        {
+            if (aggro.TryGetValue(enemy, out var a) && a.On == target)
+            {
+                // Still on them: a span that began as a cast's target and goes on after it is theirs.
+                if (a.CastTarget && !castTarget) aggro[enemy] = a with { CastTarget = false, Since = t };
+                return;
+            }
+            if (aggro.TryGetValue(enemy, out var was)) Judge(enemy, was, t, true);
+            var held = aggro.TryGetValue(enemy, out var prev) ? prev.Held : null;
+            aggro[enemy] = (target, t, castTarget, false, held);
+        }
+
+        /// <summary>
+        /// A boss's span on someone, once it's held <see cref="PullStats.AggroSpan"/> (or it ends): a tank's after another
+        /// tank's is a tank swap; a non-tank's (not a cast's target) is aggro lost, said when it ends with how long.
+        /// </summary>
+        private void Judge(uint enemy, (uint On, double Since, bool CastTarget, bool Judged, Member? Held) a, double t, bool ending)
+        {
+            if (a.CastTarget || t - a.Since < PullStats.AggroSpan || a.On == 0) return;
+            var m = Of(a.On);
+            if (m == null) return;
+            if (m.Role == "tank")
+            {
+                if (a.Judged) return;
+                if (a.Held != null && a.Held != m) Happen(new Happening(a.Since - Start, MeterEventKind.TankSwap, m, a.Held, 0, 0, null));
+                aggro[enemy] = a with { Judged = true, Held = m };
+                return;
+            }
+            if (ending) Happen(new Happening(a.Since - Start, MeterEventKind.AggroLost, m, null, 0, 0, null, t - a.Since));
+        }
+
+        /// <summary>Each frame: the bosses' spans held long enough, and the interruptible casts that went off.</summary>
+        public void Watch(double t, MeterSession s)
+        {
+            // The keys copied first (Judge writes back), into a list kept for it: nothing made each frame.
+            judging.Clear();
+            foreach (var (enemy, a) in aggro)
+                if (!a.Judged && !a.CastTarget && t - a.Since >= PullStats.AggroSpan)
+                    judging.Add(enemy);
+            foreach (var enemy in judging) Judge(enemy, aggro[enemy], t, false);
+            if (casts.Count == 0) return;
+            List<uint>? done = null;
+            foreach (var (enemy, c) in casts)
+            {
+                if (t < c.End + RecordingBuilder.CancelBeforeEnd) continue;
+                (done ??= new()).Add(enemy);
+                if (c.Interruptible) Happen(new Happening(c.End - Start, MeterEventKind.CastWentOff, null, null, c.Action, 0, null));
+            }
+            if (done != null)
+                foreach (var enemy in done) casts.Remove(enemy);
+        }
+
+        /// <summary>The events as the window reads them (made again when there are more, or a death became the wipe's).</summary>
+        public IReadOnlyList<MeterEvent> EventList(MeterSession s)
+        {
+            var stamp = happened * 2 + (IsLive ? 0 : 1);
+            if (eventList != null && eventCount == stamp && !IsLive) return eventList;
+            if (eventList != null && eventCount == stamp && IsLive && s.now - snapshotAt < RefreshEvery) return eventList;
+            eventCount = stamp;
+            var kept = new List<Happening>(happeningCount);
+            for (var i = 0; i < happeningCount; i++) kept.Add(happenings[(happeningNext - happeningCount + i + happenings.Length) % happenings.Length]);
+            eventList = kept.OrderBy(h => h.T).Select(h => Line(h, s)).ToList();
+            return eventList;
+        }
+
+        private MeterEvent Line(in Happening h, MeterSession s)
+        {
+            var who = MeterSession.Who(h.Who);
+            var other = MeterSession.Who(h.Other);
+            var text = h.Kind switch
+            {
+                MeterEventKind.Death when h.Death is { } d => $"{who} died to {DeathOf(d, s).KilledBy}" + (d.PartOfWipe ? " (the wipe)" : d.HadWeakness ? " with Weakness" : string.Empty),
+                MeterEventKind.Death => $"{who} died",
+                MeterEventKind.Raise => h.Other == null ? $"{who} was raised" : h.Seconds > 0 ? $"{who} was raised by {other}'s limit break" : $"{who} was raised by {other}",
+                MeterEventKind.Interrupt => h.Who == null ? $"{s.actionName(h.Action)} was interrupted" : $"{who} interrupted {s.actionName(h.Action)}",
+                MeterEventKind.CastWentOff => $"{s.actionName(h.Action)} went off",
+                MeterEventKind.Stun => $"{who}'s {s.statusName(h.Status)} landed",
+                MeterEventKind.Resisted => $"{who}'s {s.actionName(h.Action)} was resisted",
+                MeterEventKind.Potion => h.T < 0 ? $"{who} used {s.itemName(h.Action)} before the pull" : $"{who} used {s.itemName(h.Action)}",
+                MeterEventKind.LimitBreak => $"{who} used {s.actionName(h.Action)}",
+                MeterEventKind.TankSwap => $"Tank swap: {other} to {who}",
+                MeterEventKind.AggroLost => $"{who} held a boss for {h.Seconds:0.0}s",
+                _ => string.Empty,
+            };
+            return new MeterEvent(h.T, h.Kind, h.Who?.Id ?? 0, h.Who?.Slot ?? string.Empty, text, h.Other?.Id ?? 0, h.Other?.Slot ?? string.Empty,
+                h.Kind is MeterEventKind.Stun ? h.Status : h.Action);
         }
 
         /// <summary>A wiped encounter: the deaths within <see cref="WipeWindow"/> of the last are the wipe.</summary>
@@ -656,9 +1013,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var rows = new List<MeterRow>(Members.Count + 1);
             foreach (var m in Members.OrderBy(x => SlotRank(x.Slot)).ThenBy(x => x.Id))
                 rows.Add(Row(m.Id, m.Slot, m.Name, m.Job, m.Role, m.You, false, Tally.Has(m.Id) ? Tally.Of(m.Id) : new MemberTotals(), clock, s,
-                    Deaths.Count(d => d.Who == m && !d.PartOfWipe), m.Dead, double.IsNaN(m.LastDied) ? null : m.LastDied));
+                    Deaths.Count(d => d.Who == m && !d.PartOfWipe), m.Dead, double.IsNaN(m.LastDied) ? null : m.LastDied, m, duration));
             if (Tally.LimitBreakUsed)
-                rows.Add(Row(-1, "LB", "Limit Break", string.Empty, string.Empty, false, true, Tally.LimitBreak, clock, s, 0, false, null));
+                rows.Add(Row(-1, "LB", "Limit Break", string.Empty, string.Empty, false, true, Tally.LimitBreak, clock, s, 0, false, null, null, duration));
             var party = PartyRow(rows, clock);
             var (phase, phaseAt) = Phases.At(duration);
             var deaths = Deaths.Select(d => DeathOf(d, s)).ToList();
@@ -666,8 +1023,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         }
 
         private MeterRow Row(int id, string slot, string name, string job, string role, bool you, bool lb, MemberTotals t, double clock, MeterSession s,
-            int deaths, bool dead, double? diedAt)
+            int deaths, bool dead, double? diedAt, Member? m, double duration)
         {
+            // Seconds dead: each death not the wipe's, to when they were up again (or the end, or now).
+            var deadFor = m == null ? 0 : Deaths.Where(d => d.Who == m && !d.PartOfWipe).Sum(d => Math.Max(0, Math.Min(d.RaisedAt ?? duration, duration) - d.T));
             var encDps = t.Damage / clock;
             // The limit break has no time of its own: its DPS is its ENCDPS (the window shows a dash).
             var dps = lb ? encDps : t.Damage / Math.Max(1, t.Active);
@@ -678,7 +1037,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 t.Healing, t.Overheal, t.Healing / clock, healed == 0 ? 0 : (double)t.Overheal / healed,
                 Tally.PartyHealing == 0 ? 0 : (double)t.Healing / Tally.PartyHealing, t.HealCritRate, t.MaxHeal,
                 t.Taken, t.Taken / clock, Tally.PartyTaken == 0 ? 0 : (double)t.Taken / Tally.PartyTaken, t.MaxTaken,
-                deaths, dead, diedAt, lb ? 0 : t.Active);
+                deaths, dead, diedAt, lb ? 0 : t.Active,
+                m?.Casts ?? 0, m?.Potions ?? 0, m?.RaisesGiven ?? 0, m?.Raised ?? 0, deadFor, m?.Interrupts ?? 0);
         }
 
         private MeterRow PartyRow(List<MeterRow> rows, double clock)
@@ -704,7 +1064,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 Tally.PartyHealing, Tally.PartyOverheal, Tally.PartyHealing / clock, healed == 0 ? 0 : (double)Tally.PartyOverheal / healed,
                 Tally.PartyHealing == 0 ? 0 : 1, heals == 0 ? 0 : (double)healCrits / heals, rows.Count == 0 ? 0 : rows.Max(r => r.MaxHeal),
                 Tally.PartyTaken, Tally.PartyTaken / clock, Tally.PartyTaken == 0 ? 0 : 1, rows.Count == 0 ? 0 : rows.Max(r => r.MaxTaken),
-                rows.Sum(r => r.Deaths), Members.Count > 0 && Members.All(m => m.Dead), null, Math.Max(0, clock));
+                rows.Sum(r => r.Deaths), Members.Count > 0 && Members.All(m => m.Dead), null, Math.Max(0, clock),
+                rows.Sum(r => r.Casts), rows.Sum(r => r.Potions), rows.Sum(r => r.RaisesGiven), rows.Sum(r => r.Raised), rows.Sum(r => r.DeadSeconds),
+                rows.Sum(r => r.Interrupts));
         }
 
         private DeathEntry DeathOf(Death d, MeterSession s)
@@ -714,7 +1076,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var amount = blow is { } b ? -b.Amount : 0;
             var overkill = blow is { } k && k.HpBefore >= 0 ? Math.Max(0, amount - k.HpBefore) : 0;
             return new DeathEntry(d.Who.Id, d.Who.Slot, d.Who.Name, d.T, blow is { } w ? s.Name(w.What) : "Unknown", amount, overkill, d.PartOfWipe, recap,
-                d.MaxHp);
+                d.MaxHp, d.RaisedAt, d.RaisedBy?.Slot, d.HadWeakness);
         }
 
         /// <summary>

@@ -74,11 +74,15 @@ public static class SiteLink
     }
 
     /// <summary>
-    /// The recording as it's sent: whole when it fits; else frames go first (the places kept less
-    /// often: every second, then every two, then four; then the enemies' places only, at those steps; then
-    /// none), then the combat block's casts, then its ticks (never its effects or statuses), the block
-    /// saying what it lost (<c>combat.thinned</c>). Null when even that's too big (a pull with more
-    /// events than the site takes).
+    /// The recording as it's sent: whole when it fits; else, each step only while it's still too big (0.4.0's
+    /// order, the site's contract §3.5): (1) a file with four frames a second down to two; (2) the combat block's
+    /// enmity list (<c>hate</c>); (3) its MP and barriers (<c>res</c>); (4) the frames kept less often (every
+    /// second, then every two, then four; then the enemies' places only, at those steps; then none); (5) its
+    /// ground placements (<c>area</c>); (6) the party's casts (<c>cast</c>); (7) what the party used (<c>use</c>);
+    /// (8) the ticks (<c>tick</c>). Frames are thinned by time (a frame kept as it crosses each step), never by
+    /// count. Never the effects (<c>fx</c>), statuses, gauge, pre-pull, countdown, items or events. The block
+    /// says what it lost (<c>combat.thinned</c>). Null when even that's too big (a pull with more events than
+    /// the site takes).
     /// </summary>
     public static (string Json, bool Thinned)? Fit(string json)
     {
@@ -92,34 +96,86 @@ public static class SiteLink
         {
             return null;
         }
+        var drops = new System.Collections.Generic.List<string>();
+        string Try(System.Collections.Generic.IEnumerable<Frame> frames, bool positions) =>
+            r.With(frames, positions, r.Combat == null || drops.Count == 0 ? r.Combat : r.Combat.Without(drops.ToArray())).ToJson();
+
         var frames = r.Frames;
-        for (var step = 2; step <= 8; step *= 2)
+        // (1) Smoother replays' four frames a second, down to two.
+        if (frames.Count >= 2 && (frames[^1].T - frames[0].T) / (frames.Count - 1) < 0.4)
         {
-            var thinned = r.WithFrames(frames.Where((_, i) => i % step == 0), r.PartyPositions).ToJson();
+            frames = ByTime(frames, RecordingBuilder.FrameEvery);
+            var two = Try(frames, r.PartyPositions);
+            if (ServerSize(two) <= MaxBytes) return (two, true);
+        }
+        // (2), (3) The enmity list, then MP and barriers.
+        if (r.Combat != null)
+            foreach (var table in new[] { "hate", "res" })
+            {
+                // A table with nothing in it isn't dropped (nor said to be).
+                if (Rows(r.Combat, table) == 0) continue;
+                drops.Add(table);
+                var without = Try(frames, r.PartyPositions);
+                if (ServerSize(without) <= MaxBytes) return (without, true);
+            }
+        // (4) The frames: every 1, 2, 4 seconds; the enemies only, so; none.
+        foreach (var step in new[] { 1.0, 2.0, 4.0 })
+        {
+            var thinned = Try(ByTime(frames, step), r.PartyPositions);
             if (ServerSize(thinned) <= MaxBytes) return (thinned, true);
         }
-        for (var step = 2; step <= 8; step *= 2)
+        foreach (var step in new[] { 1.0, 2.0, 4.0 })
         {
-            var every = step;
-            var enemies = r.WithFrames(
-                frames.Where((_, i) => i % every == 0)
+            var enemies = Try(
+                ByTime(frames, step)
                     .Select(f => f with
                     {
                         At = f.At.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value),
                         Hp = f.Hp?.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value),
                     })
                     .Where(f => f.At.Count > 0),
-                false).ToJson();
+                false);
             if (ServerSize(enemies) <= MaxBytes) return (enemies, true);
         }
-        var none = r.WithFrames(Array.Empty<Frame>(), false).ToJson();
+        var none = Try(Array.Empty<Frame>(), false);
         if (ServerSize(none) <= MaxBytes) return (none, true);
         if (r.Combat == null) return null;
-        // Then the combat block's casts, then its ticks.
-        var noCasts = r.With(Array.Empty<Frame>(), false, r.Combat.Without("cast")).ToJson();
-        if (ServerSize(noCasts) <= MaxBytes) return (noCasts, true);
-        var noTicks = r.With(Array.Empty<Frame>(), false, r.Combat.Without("cast", "tick")).ToJson();
-        return ServerSize(noTicks) <= MaxBytes ? (noTicks, true) : null;
+        // (5)–(8) Then the ground placements, the casts, the uses, the ticks.
+        foreach (var table in new[] { "area", "cast", "use", "tick" })
+        {
+            if (Rows(r.Combat, table) == 0) continue;
+            drops.Add(table);
+            var without = Try(Array.Empty<Frame>(), false);
+            if (ServerSize(without) <= MaxBytes) return (without, true);
+        }
+        return null;
+    }
+
+    private static int Rows(CombatLog c, string table) => table switch
+    {
+        "hate" => c.Hate.Count,
+        "res" => c.Res.Count,
+        "area" => c.Areas.Count,
+        "cast" => c.Casts.Count,
+        "use" => c.Uses.Count,
+        "tick" => c.Ticks.Count,
+        _ => 0,
+    };
+
+    /// <summary>The frames kept as they cross each multiple of <paramref name="step"/> seconds (the first in each step), in order.</summary>
+    public static System.Collections.Generic.List<Frame> ByTime(System.Collections.Generic.IReadOnlyList<Frame> frames, double step)
+    {
+        var kept = new System.Collections.Generic.List<Frame>();
+        var last = long.MinValue;
+        foreach (var f in frames)
+        {
+            // A hundredth's slack: a frame due at 1.0 read at 0.999 is the 1.0's.
+            var bucket = (long)Math.Floor((f.T + 0.01) / step);
+            if (bucket <= last) continue;
+            last = bucket;
+            kept.Add(f);
+        }
+        return kept;
     }
 
     /// <summary>

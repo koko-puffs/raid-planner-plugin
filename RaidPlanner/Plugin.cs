@@ -17,7 +17,8 @@ namespace RaidPlanner;
 /// Raid Planner: records the fights you're in and sends them to Koko's Raid Planner, where they
 /// become plans, and shows your plans in the game. /raidplan opens the window; /raidplan stop ends
 /// the pull being recorded; /raidplan settings opens Settings; /raidplan plan shows the plan
-/// window, /raidplan next and prev move its step; /raidplan send last sends the newest pull.
+/// window, /raidplan next and prev move its step; /raidplan send last sends the newest pull;
+/// /raidplan cooldowns shows the party cooldown tracker, /raidplan callouts the on-screen callouts.
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
@@ -39,6 +40,15 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PlanWindow planWindow;
     private readonly MeterWindow meterWindow;
     private readonly MeterDetailWindow meterDetail;
+
+    /// <summary>The party cooldown tracker's game side and its window (0.4.0).</summary>
+    private readonly PartyCooldowns cooldowns;
+
+    private readonly CooldownWindow cooldownWindow;
+
+    /// <summary>The on-screen callouts (0.4.0).</summary>
+    private readonly CalloutWindow calloutWindow;
+
     private IDtrBarEntry? bar;
 
     /// <summary>The last pull kept, shown in the bar for a moment ("Pull 3 kept").</summary>
@@ -83,10 +93,26 @@ public sealed class Plugin : IDalamudPlugin
             planWindow = new PlanWindow(config, plans, recorder, data, fonts);
             meterWindow = new MeterWindow(config, fonts);
             meterDetail = new MeterDetailWindow(config, fonts);
+            cooldowns = new PartyCooldowns(data, recorder);
+            cooldownWindow = new CooldownWindow(config, fonts, cooldowns);
+            calloutWindow = new CalloutWindow(config, fonts, plans);
             windows.AddWindow(window);
             windows.AddWindow(planWindow);
             windows.AddWindow(meterWindow);
             windows.AddWindow(meterDetail);
+            windows.AddWindow(cooldownWindow);
+            windows.AddWindow(calloutWindow);
+            // The tracker listens to the recorder's parser and keeps its hooks on while it's shown.
+            recorder.HooksWanted = () => cooldowns.WantsHooks;
+            cooldownWindow.InDuty = () => recorder.DutyHere != null;
+            cooldownWindow.Gauge = () => meter.Source.LimitBreak;
+            // Each pull, every step's callout sound can play again.
+            recorder.PullStarted += OnPullStarted;
+            window.CooldownsSampleOn = () => cooldownWindow.Previewing;
+            window.ToggleCooldownsSample = () => cooldownWindow.Previewing = !cooldownWindow.Previewing;
+            window.CalloutsSampleOn = () => calloutWindow.Previewing;
+            window.ToggleCalloutsSample = () => calloutWindow.Previewing = !calloutWindow.Previewing;
+            window.PlaySound = calloutWindow.Play;
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
             planWindow.OpenSettings = window.ShowAccount;
@@ -119,13 +145,15 @@ public sealed class Plugin : IDalamudPlugin
                 else StartSample();
             };
             plans.ShowWindow = open => planWindow.IsOpen = open;
-            // With recording off, a pull is still followed when the plan window shows this duty's plan.
-            recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;
+            // With recording off, a pull is still followed when this duty's plan is shown: in the plan window, or as the
+            // on-screen callouts (they need the plan's clock, which only a followed pull runs).
+            recorder.FollowWanted = () => (planWindow.IsOpen || config.CalloutOverlay.Show) && plans.ForThisDuty;
 
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
                 HelpMessage = "Open Raid Planner. /raidplan plan shows your plan, /raidplan next and /raidplan prev move its step; "
                     + "/raidplan meter shows or hides the meter, /raidplan meter unlock gives it the mouse back, /raidplan meter preview shows a sample fight in it; "
+                    + "/raidplan cooldowns shows or hides the party cooldown tracker, /raidplan callouts the on-screen callouts (each with unlock, preview and settings after it); "
                     + "/raidplan send last sends the newest pull; /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
             });
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
@@ -143,7 +171,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        switch (args.Trim().ToLowerInvariant())
+        // Lower case, one space between words, "cds" as "cooldowns" (CommandWords.Normalize).
+        switch (CommandWords.Normalize(args))
         {
             case "stop":
                 if (recorder.Recording) recorder.Stop();
@@ -192,11 +221,51 @@ public sealed class Plugin : IDalamudPlugin
                 if (meterWindow.Preview != null) meterWindow.Preview = null;
                 else if (!StartSample()) PlanService.Print("The meter's sample waits until this fight is over.");
                 break;
+            case "cooldowns":
+                Toggle(config.Cooldowns, cooldownWindow);
+                break;
+            case "cooldowns unlock":
+                config.Cooldowns.Show = true;
+                cooldownWindow.Unlock();
+                break;
+            case "cooldowns preview":
+            case "cooldowns sample":
+                cooldownWindow.Previewing = !cooldownWindow.Previewing;
+                break;
+            case "cooldowns settings":
+                window.ShowSettingsOn(SettingsTab.Cooldowns);
+                break;
+            case "callouts":
+                Toggle(config.CalloutOverlay, calloutWindow);
+                break;
+            case "callouts unlock":
+                config.CalloutOverlay.Show = true;
+                calloutWindow.Unlock();
+                break;
+            case "callouts preview":
+            case "callouts sample":
+                calloutWindow.Previewing = !calloutWindow.Previewing;
+                break;
+            case "callouts settings":
+                window.ShowSettingsOn(SettingsTab.Plans);
+                break;
             default:
                 window.Toggle();
                 break;
         }
     }
+
+    /// <summary>/raidplan cooldowns, /raidplan callouts: shown or hidden (their setting), said in chat; a sample showing stops.</summary>
+    private void Toggle(OverlaySettings o, OverlayWindow w)
+    {
+        w.Previewing = false;
+        o.Show = !o.Show;
+        config.Save();
+        var what = ReferenceEquals(w, cooldownWindow) ? "The cooldown tracker" : "The callouts";
+        PlanService.Print(o.Show ? $"{what} will show {(ReferenceEquals(w, cooldownWindow) ? (o.Everywhere ? "everywhere" : "in duties") : "while your plan follows a pull")}." : $"{what} won't show.");
+    }
+
+    private void OnPullStarted() => calloutWindow.NewPull();
 
     /// <summary>A real fight is on (or the party is in combat waiting for its first hit): a sample would end at once.</summary>
     private bool RealFightOn => meter.Source.InEncounter || meter.Source.Waiting;
@@ -251,6 +320,19 @@ public sealed class Plugin : IDalamudPlugin
         // The meter's window follows Settings' Show the meter (and /raidplan meter), or a sample.
         var meterWanted = config.ShowMeter || meterWindow.Preview != null;
         if (meterWindow.IsOpen != meterWanted) meterWindow.IsOpen = meterWanted;
+        // The overlays follow their settings (and their samples); the tracker's game side listens while it's shown where it may be.
+        if (cooldownWindow.IsOpen != cooldownWindow.WantedOpen) cooldownWindow.IsOpen = cooldownWindow.WantedOpen;
+        if (calloutWindow.IsOpen != calloutWindow.WantedOpen) calloutWindow.IsOpen = calloutWindow.WantedOpen;
+        try
+        {
+            cooldowns.Wanted = config.Cooldowns.Show && !cooldownWindow.Previewing && (config.Cooldowns.Everywhere || recorder.DutyHere != null);
+        }
+        catch (Exception ex)
+        {
+            cooldowns.Wanted = false;
+            Services.Log.Debug(ex, "Raid Planner couldn't tell where the cooldown tracker may show");
+        }
+        cooldowns.Update();
         try
         {
             if (!config.ShowInBar || barBroken)
@@ -310,6 +392,8 @@ public sealed class Plugin : IDalamudPlugin
         }
         Safely(() => Services.Commands.RemoveHandler(Command));
         if (recorder != null) Safely(() => recorder.Kept -= OnKept);
+        if (recorder != null) Safely(() => recorder.PullStarted -= OnPullStarted);
+        if (recorder != null) Safely(() => recorder.HooksWanted = null);
         Safely(() => window?.Dispose());
         Safely(() => bar?.Remove());
         Safely(windows.RemoveAllWindows);
@@ -317,6 +401,7 @@ public sealed class Plugin : IDalamudPlugin
         Safely(() => uploads?.Dispose());
         // Calls to the site under way stop here; a pull being saved is still waited for below.
         Safely(() => site?.Dispose());
+        Safely(() => cooldowns?.Dispose());
         Safely(() => meter?.Dispose());
         Safely(() => recorder?.Dispose());
         Safely(() => fonts?.Dispose());
