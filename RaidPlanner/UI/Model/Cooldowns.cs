@@ -297,6 +297,9 @@ public static class CooldownView
 
     public static int SpotOrder(string slot) => Array.IndexOf(SpotOrderOf, slot) is var i and >= 0 ? i : 99;
 
+    /// <summary>Each cooldown's place in the catalogue (the tracker's order within a kind).</summary>
+    private static readonly Dictionary<CooldownSpec, int> OrderOf = CooldownCatalog.All.Select((s, i) => (s, i)).ToDictionary(p => p.s, p => p.i);
+
     /// <summary>
     /// The tracker's rows now: each party member's tracked cooldowns (those their job has), by kind,
     /// then as the catalogue lists them, then spot order. Your own are the game's (<paramref name="own"/>),
@@ -307,9 +310,6 @@ public static class CooldownView
         CooldownBook book, Func<string, OwnCooldown?> own, double now, bool you = true, bool hideReady = false)
     {
         var lines = new List<CooldownLine>();
-        var order = 0;
-        var orderOf = new Dictionary<CooldownSpec, int>();
-        foreach (var spec in CooldownCatalog.All) orderOf[spec] = order++;
         foreach (var spec in CooldownCatalog.All)
         {
             if (!CooldownCatalog.IsOn(spec, picks)) continue;
@@ -342,7 +342,7 @@ public static class CooldownView
         {
             var c = ((int)x.Spec.Kind).CompareTo((int)y.Spec.Kind);
             if (c != 0) return c;
-            c = orderOf[x.Spec].CompareTo(orderOf[y.Spec]);
+            c = OrderOf[x.Spec].CompareTo(OrderOf[y.Spec]);
             return c != 0 ? c : SpotOrder(x.Who.Slot).CompareTo(SpotOrder(y.Who.Slot));
         });
         return lines;

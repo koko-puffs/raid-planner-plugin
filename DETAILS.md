@@ -970,7 +970,7 @@ _Yours too_ (on) lists your own.
   Macrocosmos, Earthly Star, Physis II, Philosophia (off); Swiftcast for the raisers (on); Provoke,
   Shirk, Hallowed Ground, Holmgang, Living Dead, Superbolide (off); Interject, Head Graze, Low Blow,
   Leg Sweep (off). Settings → Cooldowns lists them by kind with a switch each (`CooldownPicks`
-  keeps only what you changed) and the kind's "All" or "None".
+  keeps only what you changed) and the kind's head turning them all on or off ("Turn all on", "Turn all off").
 - **How it knows** (`PartyCooldowns`, the game side): the Action sheet read once in English on a
   worker (rows that are the player's and not PvP, by name: each row's id to its cooldown; the first
   row of its first name gives the icon, the base recast and the charges, and whether it's a role

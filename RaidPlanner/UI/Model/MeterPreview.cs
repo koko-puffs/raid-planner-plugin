@@ -151,30 +151,30 @@ public sealed class MeterPreview : IMeterSource
     /// <summary>The live pull's events, oldest first (names as the meter's own: they stay in the game).</summary>
     private static readonly MeterEvent[] Script =
     {
-        Ev(0.6, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
-        Ev(0.9, MeterEventKind.Potion, 3, "M2", "Tamsin used a Grade 2 Gemdraught of Dexterity"),
-        Ev(1.2, MeterEventKind.Potion, 2, "R2", "Ilya used a Grade 2 Gemdraught of Intelligence"),
-        Ev(46.2, MeterEventKind.Stun, 6, "MT", "Koko stunned Ice Sprite with Low Blow"),
-        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance (limit break 2)"),
-        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Ice Sprite's Dark Spike with Interject"),
-        Ev(100.3, MeterEventKind.TankSwap, 5, "OT", "Example Boss turned to Brann from Koko (Provoke)", 6, "MT"),
-        Ev(110.8, MeterEventKind.CastWentOff, 0, "", "Ice Sprite's Dark Spike went off: nobody interrupted it"),
-        Ev(120.4, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
-        Ev(120.9, MeterEventKind.Potion, 4, "R1", "Fenn used a Grade 2 Gemdraught of Dexterity"),
-        Ev(126.1, MeterEventKind.AggroLost, 8, "H2", "Example Boss turned to Odette for 2 s"),
-        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare (104,880)"),
-        Ev(202.0, MeterEventKind.Death, 4, "R1", "Fenn died to Line of Sight (246,300)"),
-        Ev(209.4, MeterEventKind.Death, 6, "MT", "Koko died to Starfall: the wipe"),
+        Ev(0.6, MeterEventKind.Potion, 1, "M1", "Rook used Grade 2 Gemdraught of Strength"),
+        Ev(0.9, MeterEventKind.Potion, 3, "M2", "Tamsin used Grade 2 Gemdraught of Dexterity"),
+        Ev(1.2, MeterEventKind.Potion, 2, "R2", "Ilya used Grade 2 Gemdraught of Intelligence"),
+        Ev(46.2, MeterEventKind.Stun, 6, "MT", "Koko's Stun landed"),
+        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance"),
+        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Dark Spike"),
+        Ev(100.3, MeterEventKind.TankSwap, 5, "OT", "Tank swap: Koko to Brann", 6, "MT"),
+        Ev(110.8, MeterEventKind.CastWentOff, 0, "", "Dark Spike went off"),
+        Ev(120.4, MeterEventKind.Potion, 1, "M1", "Rook used Grade 2 Gemdraught of Strength"),
+        Ev(120.9, MeterEventKind.Potion, 4, "R1", "Fenn used Grade 2 Gemdraught of Dexterity"),
+        Ev(126.1, MeterEventKind.AggroLost, 8, "H2", "Odette held a boss for 2.0s"),
+        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare"),
+        Ev(202.0, MeterEventKind.Death, 4, "R1", "Fenn died to Line of Sight"),
+        Ev(209.4, MeterEventKind.Death, 6, "MT", "Koko died to Starfall (the wipe)"),
     };
 
     /// <summary>An earlier pull's events: Odette raised by Sylvie.</summary>
     private static readonly MeterEvent[] StillScript =
     {
-        Ev(0.8, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
-        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance (limit break 2)"),
-        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Ice Sprite's Dark Spike with Interject"),
-        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare (104,880)"),
-        Ev(180.4, MeterEventKind.Raise, 8, "H2", "Odette was raised by Sylvie (Swiftcast Raise) after 0:09", 7, "H1"),
+        Ev(0.8, MeterEventKind.Potion, 1, "M1", "Rook used Grade 2 Gemdraught of Strength"),
+        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance"),
+        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Dark Spike"),
+        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare"),
+        Ev(180.4, MeterEventKind.Raise, 8, "H2", "Odette was raised by Sylvie", 7, "H1"),
     };
 
     /// <summary>Pull 4: the one that got furthest.</summary>

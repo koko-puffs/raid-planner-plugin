@@ -24,6 +24,9 @@ public sealed class CooldownWindow : OverlayWindow
 {
     private readonly PartyCooldowns? game;
     private List<CooldownLine> lines = new();
+
+    /// <summary>When the rows were worked out last (the tracker's clock).</summary>
+    private double linesAt = double.NegativeInfinity;
     private LimitBreakGauge? gauge;
     private readonly long started = Stopwatch.GetTimestamp();
 
@@ -56,12 +59,19 @@ public sealed class CooldownWindow : OverlayWindow
         {
             var t = (Stopwatch.GetTimestamp() - started) / (double)Stopwatch.Frequency;
             lines = CooldownSample.At(t, Config.CooldownPicks, Config.CooldownsMine, Config.CooldownsHideReady);
+            linesAt = double.NegativeInfinity;
             gauge = Config.CooldownsGauge ? new LimitBreakGauge(2, 3, (int)(t * 220 % 10000), 10000) : null;
             return true;
         }
         // The game side listens while it's wanted (the plugin says so each frame: shown, in a duty or everywhere).
         if (game == null || !game.Wanted || !s.Show || (!s.Everywhere && InDuty?.Invoke() != true)) return false;
-        lines = CooldownView.Lines(game.Party, game.Action, Config.CooldownPicks, game.Book, game.Own, game.Now, Config.CooldownsMine, Config.CooldownsHideReady);
+        // Worked out again 15 times a second, not every frame (the rows' bars move a pixel in half a second or so).
+        var now = game.Now;
+        if (now - linesAt >= 1 / 15.0 || now < linesAt)
+        {
+            linesAt = now;
+            lines = CooldownView.Lines(game.Party, game.Action, Config.CooldownPicks, game.Book, game.Own, now, Config.CooldownsMine, Config.CooldownsHideReady);
+        }
         gauge = Config.CooldownsGauge ? Gauge?.Invoke() : null;
         return lines.Count > 0 || gauge != null;
     }

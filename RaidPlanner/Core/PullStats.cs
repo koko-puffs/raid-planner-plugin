@@ -340,7 +340,8 @@ public static class PullStats
         if (hits.Count > MaxHits) hits.RemoveRange(MaxHits, hits.Count - MaxHits);
         if (debuffs.Count > MaxDebuffs) debuffs.RemoveRange(MaxDebuffs, debuffs.Count - MaxDebuffs);
 
-        var extra = Extras(r, wipe);
+        // Seconds dead run to the fight's end (a wipe's last death, else the last damage), as the meter's do.
+        var extra = Extras(r, wipe, length is { } fightLength ? CastEvent.Round(fought.First, 2) + fightLength : null);
         var slotsJson = new JsonArray();
         foreach (var p in slots)
         {
@@ -450,11 +451,12 @@ public static class PullStats
     /// <summary>
     /// What 0.4.0 adds to the summary: each member's GCDs used (actions in the GCD's cooldown group, their pets' not), items
     /// (pre-pull ones too), raises given and taken, seconds dead (from each death not in the wipe to their raise, or the
-    /// end), interrupts credited; and <c>x</c>: enemy casts interrupted of those that could be (<c>int</c>), tank swaps on
+    /// fight's end), interrupts credited; and <c>x</c>: enemy casts interrupted of those that could be (<c>int</c>), tank swaps on
     /// the bosses (<c>swaps</c>, <see cref="TankSwaps"/>), the limit breaks used (<c>lbUses</c>, the first 10) and the
     /// countdown's end (<c>cd</c>).
     /// </summary>
-    public static PullExtras Extras(Recording r, HashSet<DeathEvent>? wipe = null)
+    /// <param name="fightEnd">When the fight ended (the meter's: <see cref="Length"/>'s end), what an unraised death's time runs to; by default the recording's end.</param>
+    public static PullExtras Extras(Recording r, HashSet<DeathEvent>? wipe = null, double? fightEnd = null)
     {
         wipe ??= WipeDeaths(r);
         var ex = new PullExtras();
@@ -480,7 +482,7 @@ public static class PullStats
             foreach (var d in r.Events.OfType<DeathEvent>().Where(d => d.Who == p.Id && !wipe.Contains(d)))
             {
                 var back = raises.FirstOrDefault(x => x.Who == p.Id && x.T >= d.T);
-                dead += Math.Max(0, (back?.T ?? r.Duration) - d.T);
+                dead += Math.Max(0, (back?.T ?? Math.Max(d.T, fightEnd ?? r.Duration)) - d.T);
             }
             ex.Members[p.Id] = new SlotExtras(gcds.TryGetValue(p.Id, out var g) ? g : 0, pots.TryGetValue(p.Id, out var pt) ? pt : 0,
                 raises.Count(x => x.By == p.Id), raises.Count(x => x.Who == p.Id), dead, cancels.Count(x => x.Interrupted && x.By == p.Id));

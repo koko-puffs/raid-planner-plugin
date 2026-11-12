@@ -14,7 +14,11 @@ namespace RaidPlanner.Tests;
 /// (<c>kokos-tools/src/features/raid-planner/model/__fixtures__/align.raidrec.json</c>,
 /// <c>align.summary.json</c> and <c>align.meter.json</c>; with <c>RP_ALIGN_OUT</c> set to that folder,
 /// this writes them), and the site's <c>alignment.spec.ts</c> checks that its numbers for the recording
-/// (Review) and for the summary (Progress) are the meter's.
+/// (Review) and for the summary (Progress) are the meter's. Since 0.4.0 the pull also carries every new table, event
+/// and column (uses before and during it, an interrupt credited and an interruptible cast that went off, a stun resisted
+/// and one that landed, a provoke and a tank swap, a non-tank holding the boss, the BRD raised and dying again with
+/// Weakness, potions, the countdown, the gauge, the enmity list, MP and barriers, signs, knockbacks, an absorbed buster,
+/// bonus %, a party cast the game said was cancelled), and the meter's counts and events are checked against the summary's.
 /// </summary>
 public class AlignmentTests
 {
@@ -40,29 +44,50 @@ public class AlignmentTests
         [800] = new ActionInfo("Spark", 1, 0, 0, "", 0),
         [1000] = new ActionInfo("Doom's End", 1, 0, 0, "", 0),
         [1100] = new ActionInfo("Ultimate End", 2, 60, 0, "", 8),
-        // The party's (category, base recast).
-        [9] = new ActionInfo("Fast Blade", 1, 3, 0, "", 0, 3, 2.5f),
-        [31] = new ActionInfo("Heavy Swing", 1, 3, 0, "", 0, 3, 2.5f),
-        [75] = new ActionInfo("True Thrust", 1, 3, 0, "", 0, 3, 2.5f),
-        [2240] = new ActionInfo("Spinning Edge", 1, 3, 0, "", 0, 3, 2.5f),
+        // Since 0.4.0: the add's interruptible casts.
+        [1200] = new ActionInfo("Stone Chant", 1, 0, 0, "", 4),
+        [1201] = new ActionInfo("Quake Chant", 1, 0, 0, "", 3),
+        // The party's (category, base recast; since 0.4.0 the cooldown group: 58 the GCD's).
+        [9] = new ActionInfo("Fast Blade", 1, 3, 0, "", 0, 3, 2.5f, 58),
+        [31] = new ActionInfo("Heavy Swing", 1, 3, 0, "", 0, 3, 2.5f, 58),
+        [75] = new ActionInfo("True Thrust", 1, 3, 0, "", 0, 3, 2.5f, 58),
+        [2240] = new ActionInfo("Spinning Edge", 1, 3, 0, "", 0, 3, 2.5f, 58),
         [25774] = new ActionInfo("Phantom Kamaitachi", 2, 3, 0, "", 0, 3, 0),
-        [16495] = new ActionInfo("Burst Shot", 1, 25, 0, "", 0, 3, 2.5f),
-        [7406] = new ActionInfo("Caustic Bite", 1, 25, 0, "", 0, 3, 2.5f),
-        [7407] = new ActionInfo("Stormbite", 1, 25, 0, "", 0, 3, 2.5f),
-        [25865] = new ActionInfo("Broil IV", 1, 25, 0, "", 1.5f, 2, 2.5f),
-        [16540] = new ActionInfo("Biolysis", 1, 25, 0, "", 0, 2, 2.5f),
-        [185] = new ActionInfo("Adloquium", 1, 30, 0, "", 2, 2, 2.5f),
-        [190] = new ActionInfo("Physick", 1, 30, 0, "", 1.5f, 2, 2.5f),
-        [25859] = new ActionInfo("Glare III", 1, 25, 0, "", 1.5f, 2, 2.5f),
-        [16532] = new ActionInfo("Dia", 1, 25, 0, "", 0, 2, 2.5f),
-        [135] = new ActionInfo("Cure II", 1, 30, 0, "", 2, 2, 2.5f),
-        [137] = new ActionInfo("Regen", 1, 30, 0, "", 0, 2, 2.5f),
-        [3576] = new ActionInfo("Blizzard IV", 2, 25, 5, "", 2.5f, 2, 2.5f),
-        [3577] = new ActionInfo("Fire IV", 2, 25, 5, "", 2.8f, 2, 2.5f),
-        [36986] = new ActionInfo("High Thunder", 2, 25, 5, "", 0, 2, 2.5f),
-        [3557] = new ActionInfo("Battle Litany", 2, 0, 30, "", 0, 4, 120),
+        [16495] = new ActionInfo("Burst Shot", 1, 25, 0, "", 0, 3, 2.5f, 58),
+        [7406] = new ActionInfo("Caustic Bite", 1, 25, 0, "", 0, 3, 2.5f, 58),
+        [7407] = new ActionInfo("Stormbite", 1, 25, 0, "", 0, 3, 2.5f, 58),
+        [25865] = new ActionInfo("Broil IV", 1, 25, 0, "", 1.5f, 2, 2.5f, 58),
+        [16540] = new ActionInfo("Biolysis", 1, 25, 0, "", 0, 2, 2.5f, 58),
+        [185] = new ActionInfo("Adloquium", 1, 30, 0, "", 2, 2, 2.5f, 58),
+        [190] = new ActionInfo("Physick", 1, 30, 0, "", 1.5f, 2, 2.5f, 58),
+        [25859] = new ActionInfo("Glare III", 1, 25, 0, "", 1.5f, 2, 2.5f, 58),
+        [16532] = new ActionInfo("Dia", 1, 25, 0, "", 0, 2, 2.5f, 58),
+        [135] = new ActionInfo("Cure II", 1, 30, 0, "", 2, 2, 2.5f, 58),
+        [137] = new ActionInfo("Regen", 1, 30, 0, "", 0, 2, 2.5f, 58),
+        [3576] = new ActionInfo("Blizzard IV", 2, 25, 5, "", 2.5f, 2, 2.5f, 58),
+        [3577] = new ActionInfo("Fire IV", 2, 25, 5, "", 2.8f, 2, 2.5f, 58),
+        [36986] = new ActionInfo("High Thunder", 2, 25, 5, "", 0, 2, 2.5f, 58),
+        [3557] = new ActionInfo("Battle Litany", 2, 0, 30, "", 0, 4, 120, 19),
         [205] = new ActionInfo("Meteor", 2, 25, 8, "", 4.5f, 9, 0),
+        // Since 0.4.0: the roles' and the raise's.
+        [7538] = new ActionInfo("Interject", 1, 3, 0, "", 0, 4, 30, 44),
+        [7540] = new ActionInfo("Low Blow", 1, 3, 0, "", 0, 4, 25, 42),
+        [7863] = new ActionInfo("Leg Sweep", 1, 3, 0, "", 0, 4, 40, 41),
+        [7533] = new ActionInfo("Provoke", 1, 25, 0, "", 0, 4, 30, 43),
+        [7548] = new ActionInfo("Arm's Length", 1, 0, 0, "", 0, 4, 120, 46),
+        [7561] = new ActionInfo("Swiftcast", 1, 0, 0, "", 0, 4, 60, 44),
+        [173] = new ActionInfo("Resurrection", 1, 30, 0, "", 8, 2, 2.5f, 58),
+        [188] = new ActionInfo("Sacred Soil", 7, 30, 10, "", 0, 4, 30, 5, 0, 0, 0, true),
     };
+
+    /// <summary>The items used (by the Item sheet's row): the BLM's in the pull (high quality), the PLD's before it.</summary>
+    private static readonly Dictionary<uint, ItemInfo> Items = new()
+    {
+        [39727] = new ItemInfo("Grade 2 Gemdraught of Intelligence", 22457, false),
+        [39726] = new ItemInfo("Grade 2 Gemdraught of Strength", 22456, false),
+    };
+
+    private static ItemInfo? Item(uint id) => Items.TryGetValue(id > 1_000_000 ? id - 1_000_000 : id, out var i) ? i : null;
 
     /// <summary>The statuses, by the Status sheet's ids and English names (the site's lists go by these ids).</summary>
     private static readonly Dictionary<uint, StatusInfo> Statuses = new()
@@ -79,7 +104,17 @@ public class AlignmentTests
         [786] = new StatusInfo("Battle Litany", 212578),
         [158] = new StatusInfo("Regen", 212626),
         [297] = new StatusInfo("Galvanize", 212801),
+        // Since 0.4.0.
+        [148] = new StatusInfo("Raise", 210402, 1),
+        [43] = new StatusInfo("Weakness", 215009, 2, true),
+        [49] = new StatusInfo("Medicated", 216202, 1),
+        [2] = new StatusInfo("Stun", 215004, 2),
+        [1209] = new StatusInfo("Arm's Length", 210813, 1),
     };
+
+    /// <summary>What's what (interrupts, raises, control, the GCDs), as the game side finds them by their English names.</summary>
+    public static readonly CombatKinds Kinds = CombatKinds.FromNames(id => Actions.TryGetValue(id, out var a) ? a.Name : null,
+        id => Statuses.TryGetValue(id, out var s) ? s.Name : null, id => Actions.TryGetValue(id, out var a) && CombatLists.IsGcd(a.CooldownGroup, a.CooldownGroup2));
 
     /// <summary>A status of the jobs' DoTs, as the game side finds them (by their English names: <see cref="CombatLists.DotNames"/>).</summary>
     public static bool IsDot(uint id) => Statuses.TryGetValue(id, out var s) && CombatLists.DotNames.Contains(s.Name);
@@ -88,11 +123,22 @@ public class AlignmentTests
 
     private static readonly long[] MaxHp = { 0, 78_000, 80_000, 100_000, 85_000, 80_500, 79_000, 102_000, 84_000 };
 
-    /// <summary>When each died (none survived the enrage): BRD to a bleed, WHM to an instant death, NIN to an exaflare in the wipe, the rest to the enrage.</summary>
+    /// <summary>
+    /// When each first died (none survived the enrage): BRD to a bleed (raised by the SCH at 60, then to the enrage with
+    /// Weakness at 84.5, with the SCH), WHM to an instant death, NIN to an exaflare in the wipe, the rest to the enrage.
+    /// </summary>
     private static readonly Dictionary<int, double> DiedAt = new()
     {
         [Brd] = 51.2, [Whm] = 60.2, [Nin] = 80.2, [Blm] = 84.2, [Pld] = 84.3, [Drg] = 84.4, [Sch] = 84.5, [War] = 84.6,
     };
+
+    /// <summary>The BRD's raise (accepted) and second death.</summary>
+    private const double BrdUp = 60.0, BrdDiesAgain = 84.5;
+
+    private static bool Dead(int who, double t) => who == Brd ? (t >= DiedAt[Brd] && t < BrdUp) || t >= BrdDiesAgain : t >= DiedAt[who];
+
+    /// <summary>The pull's start on the game's clock, and the countdown's zero (the pull began a quarter second before it).</summary>
+    private const double Clock = 100, CountdownZero = Clock + 0.25;
 
     /// <summary>A status on someone for a while, declared every frame it's on (its stacks may change: a refresh).</summary>
     private sealed record On(int Who, uint Id, ulong From, StatusFrom Kind, int Source, double Start, double End, uint Action = 0, int Stacks = 0,
@@ -101,9 +147,16 @@ public class AlignmentTests
     /// <summary>The pull as the game plays it: its recording, and the meter's session after it (its encounter, the meter's numbers after the fight).</summary>
     public sealed record Played(Recording Recording, MeterSession Session, MeterEncounter Meter);
 
-    // Effects as the game's messages carry them (an amount over 65,535 in Param3, flagged in Param4).
-    private static RawEffect Damage(long amount, bool crit = false, bool dh = false) =>
-        new(Effects.Damage, (byte)((crit ? 0x20 : 0) | (dh ? 0x40 : 0)), 0, 0, (byte)(amount >> 16), (byte)(amount > 0xFFFF ? 0x40 : 0), (ushort)(amount & 0xFFFF));
+    // Effects as the game's messages carry them (an amount over 65,535 in Param3, flagged in Param4; since 0.4.0 a bonus % in
+    // Param2 and partly absorbed in Param4).
+    private static RawEffect Damage(long amount, bool crit = false, bool dh = false, sbyte bonus = 0, bool absorbed = false) =>
+        new(Effects.Damage, (byte)((crit ? 0x20 : 0) | (dh ? 0x40 : 0)), 0, unchecked((byte)bonus), (byte)(amount >> 16),
+            (byte)((amount > 0xFFFF ? 0x40 : 0) | (absorbed ? 0x04 : 0)), (ushort)(amount & 0xFFFF));
+
+    private static readonly RawEffect Knockback = new(Effects.Knockback, 0, 0, 0, 0, 0, 5);
+    private static readonly RawEffect Interrupted = new(Effects.Interrupt, 0, 0, 0, 0, 0, 0);
+    private static readonly RawEffect Provoked = new(Effects.ThreatPosition, 0, 0, 0, 0, 0, 1);
+    private static readonly RawEffect StunResisted = new(Effects.FullResistStatus, 0, 0, 0, 0, 0, 2);
 
     private static RawEffect Heal(long amount, bool crit = false) =>
         new(Effects.Heal, 0, (byte)(crit ? 0x20 : 0), 0, (byte)(amount >> 16), (byte)(amount > 0xFFFF ? 0x40 : 0), (ushort)(amount & 0xFFFF));
@@ -135,14 +188,12 @@ public class AlignmentTests
     public static Played Play()
     {
         var b = new RecordingBuilder(new DutyInfo("Alignment Arena (Savage)", 1, 99998), 12, new DateTimeOffset(2026, 11, 10, 21, 0, 0, TimeSpan.Zero), true,
-            "0.3.0", id => Actions.TryGetValue(id, out var a) ? a : null, id => Statuses.TryGetValue(id, out var s) ? s : null);
-        var parser = new CombatParser(id => Actions.TryGetValue(id, out var a) ? a.Category : 0, IsShield, IsDot);
+            "0.4.0", id => Actions.TryGetValue(id, out var a) ? a : null, id => Statuses.TryGetValue(id, out var s) ? s : null, Kinds, Item);
+        var parser = new CombatParser(id => Actions.TryGetValue(id, out var a) ? a.Category : 0, IsShield, IsDot, id => Actions.TryGetValue(id, out var a) && a.Area);
         var session = new MeterSession(id => Actions.TryGetValue(id, out var a) ? a.Name : $"Action {id}",
-            id => Statuses.TryGetValue(id, out var s) ? s.Name : $"Status {id}");
-        // The game's clock for the parser and the meter is the session's; the pull began 100 s into it.
-        const double Clock = 100;
+            id => Statuses.TryGetValue(id, out var s) ? s.Name : $"Status {id}", id => Item(id)?.Name ?? $"Item {id}", Kinds);
+        // The game's clock for the parser and the meter is the session's; the pull began 100 s into it (Clock).
         parser.Add(session);
-        parser.Add(new RecordingSink(() => b, () => Clock));
         var party = new[]
         {
             new Partier(Entity(Blm), "BLM", 3, MaxHp[Blm]), new Partier(Entity(Whm), "WHM", 4, MaxHp[Whm]), new Partier(Entity(Pld), "PLD", 1, MaxHp[Pld]),
@@ -150,8 +201,31 @@ public class AlignmentTests
             new Partier(Entity(War), "WAR", 1, MaxHp[War]), new Partier(Entity(Nin), "NIN", 2, MaxHp[Nin]),
         };
         b.SetParty(party);
+        // The BLM recorded it.
+        b.SetSelf(Entity(Blm));
         parser.SetParty(party.Select(p => (uint)p.Key).ToArray());
         session.Place(1, 99998, "Alignment Arena (Savage)");
+
+        // Before the pull (since 0.4.0), as the recorder keeps it out of combat: the countdown (10 s) and the party's uses
+        // (the SCH's Sacred Soil at −3, the PLD's potion at −2.1), then the pull's start copies them in.
+        var before = new PrePull();
+        var countdown = new CountdownWatch();
+        parser.Add(before);
+        for (var t = CountdownZero - 9.98; t < Clock; t += 0.1) countdown.Frame(t, true, (float)(CountdownZero - t));
+        var soil = new EffectBatch();
+        soil.Begin(Clock - 3, Entity(Sch), 0, 188, 1);
+        soil.HasGround = true;
+        soil.GroundX = 104;
+        soil.GroundZ = 110;
+        parser.Action(soil);
+        var tincture = new EffectBatch();
+        tincture.Begin(Clock - 2.1, Entity(Pld), 0, 39726, 2);
+        tincture.EffectsOf(tincture.Add(Entity(Pld)))[0] = StatusOn(49);
+        parser.Action(tincture);
+        parser.Remove(before);
+        b.PrePull(before.Before(Clock).Select(u => (u.T, b.PartyId(u.Member) ?? 0, u.Action, u.Target == 0 ? 0 : b.Who(u.Target), (int)u.Flags)),
+            countdown.At(Clock));
+        parser.Add(new RecordingSink(() => b, () => Clock));
         session.RecordedPull(12);
         var boss = b.Actor(BossId, "The Twinning", 5, 2001);
         var add = b.Actor(AddId, "Iron Add", 2, 2002);
@@ -163,11 +237,11 @@ public class AlignmentTests
         uint EntityOf(int id) => id == boss ? BossId : id == add ? AddId : id == helper ? HelperId : Entity(id);
 
         // The party's HP as the game reads it: full, but for the PLD (healed and hit), the WAR (hit, then
-        // healed), the BRD (bled) and the dead.
+        // healed), the BRD (bled; raised with little) and the dead.
         long Hp(int who, double t)
         {
-            if (DiedAt.TryGetValue(who, out var died) && t >= died) return 0;
-            if (who == Brd) return t < 45 ? 79_000 : t < 48 ? 49_000 : t < 51 ? 19_000 : 1;
+            if (Dead(who, t)) return 0;
+            if (who == Brd) return t < 45 ? 79_000 : t < 48 ? 49_000 : t < 51 ? 19_000 : t < BrdUp ? 1 : 15_800;
             if (who == War) return t < 8 ? 102_000 : t < 9 ? 72_000 : 80_000;
             if (who != Pld) return MaxHp[who];
             return t < 8 ? 100_000 : t < 15 ? 70_000 : t < 18 ? 52_000 : t < 27.2 ? 100_000 : t < 28 ? 10_000 : t < 33 ? 5_000 : 60_000;
@@ -186,19 +260,28 @@ public class AlignmentTests
             var damage = new List<long>();
             var fx = new List<int>();
             var hp = new List<long>();
+            var shield = new List<int>();
+            var px = new List<float>();
+            var pz = new List<float>();
             foreach (var (who, effects) in on)
             {
                 var k = batch.Add(Entity(who));
                 effects.CopyTo(batch.EffectsOf(k));
                 batch.Hp[k] = Hp(who, t - 0.01);
                 batch.MaxHp[k] = MaxHp[who];
+                // Read with the HP (since 0.4.0): the barrier and where they stand.
+                batch.Shield[k] = Barrier(who, t - 0.01);
+                (batch.X[k], batch.Z[k]) = At(who);
                 var (dmg, flags) = Effects.Taken(batch.EffectsOf(k));
                 targets.Add(who);
                 damage.Add(dmg);
                 fx.Add(flags);
                 hp.Add(batch.Hp[k]);
+                shield.Add(batch.Shield[k]);
+                px.Add(batch.X[k]);
+                pz.Add(batch.Z[k]);
             }
-            b.Hit(t, source, action, x, z, 0, hitX, hitZ, targets, damage, fx, hp);
+            b.Hit(t, source, action, x, z, 0, hitX, hitZ, targets, damage, fx, hp, shield, px, pz);
             parser.Action(batch);
         });
 
@@ -225,16 +308,19 @@ public class AlignmentTests
             parser.Tick(Clock + t, target, status, heal, amount, source, 0, heal || onParty ? Hp(who, t - 0.01) : -1, heal || onParty ? MaxHp[who] : -1);
         });
 
-        // The enemies' mechanics.
+        // The PLD's barrier (the SCH's Galvanize, 26.1 until the buster takes it).
+        int Barrier(int who, double t) => who == Pld && t >= 26.1 && t < 27.2 ? 15 : 0;
+
+        // The enemies' mechanics. The raidwide knocks back everyone but the DRG (Arm's Length).
         When(3, () => b.Cast(3, boss, 100, 5, 100, 100, 0, 0, null, null));
-        EnemyHit(8, boss, 100, 100, 100, 100, 100, everyone.Select(i => (i, new[] { Damage(30_000) })).ToArray());
+        EnemyHit(8, boss, 100, 100, 100, 100, 100, everyone.Select(i => (i, i == Drg ? new[] { Damage(30_000) } : new[] { Damage(30_000), Knockback })).ToArray());
         var stack = new[] { Blm, Whm, Pld, Drg, Sch, Brd, War };
         EnemyHit(15, helper, 300, 90, 90, 104, 112, stack.Select(i => (i, new[] { Damage(18_000) })).ToArray());
         EnemyHit(20, helper, 700, 95, 112, 95, 112, (Blm, new[] { Damage(50_000) }), (Pld, new[] { Dodged }), (War, new[] { Invulnerable }));
         EnemyHit(21.1, helper, 700, 99, 112, 99, 112, (Blm, new[] { Damage(50_000) }));
         When(22, () => b.Cast(22, boss, 600, 5, 100, 100, 0, Pld, null, null));
-        // The buster lands between two frames (27.0 read the MT full; 27.5 reads them low).
-        EnemyHit(27.2, boss, 600, 100, 100, 109, 112, (Pld, new[] { Damage(90_000, crit: true) }));
+        // The buster lands between two frames (27.0 read the MT full; 27.5 reads them low), partly into their barrier.
+        EnemyHit(27.2, boss, 600, 100, 100, 109, 112, (Pld, new[] { Damage(90_000, crit: true, absorbed: true) }));
         EnemyHit(28, boss, 500, 100, 100, 109, 112, (Pld, new[] { Damage(5_000) }));
         EnemyHit(29, add, 501, 110, 100, 121, 112, (War, new[] { Damage(2_000) }));
         EnemyHit(32, helper, 800, 90, 90, 106, 112, (Whm, new[] { Damage(10_000) }));
@@ -250,7 +336,52 @@ public class AlignmentTests
         EnemyHit(60, helper, 1000, 90, 90, 106, 112, (Whm, new[] { InstantDeath }));
         EnemyHit(80, helper, 700, 124, 112, 124, 112, (Nin, new[] { Damage(120_000) }));
         When(76, () => b.Cast(76, boss, 1100, 8, 100, 100, 0, 0, null, null));
-        EnemyHit(84, boss, 1100, 100, 100, 100, 100, new[] { Blm, Pld, Drg, Sch, War }.Select(i => (i, new[] { Damage(999_999) })).ToArray());
+        EnemyHit(84, boss, 1100, 100, 100, 100, 100, new[] { Blm, Pld, Drg, Sch, War, Brd }.Select(i => (i, new[] { Damage(999_999) })).ToArray());
+
+        // Since 0.4.0. The add's interruptible casts: the WAR interrupts the first (Interject, carrying the interrupt
+        // effect), the second goes off; the game's word goes to the recording and the meter alike.
+        When(12, () =>
+        {
+            b.Cast(12, add, 1200, 4, 110, 100, 0, 0, null, null, true);
+            session.EnemyCast(Clock + 12, AddId, 1200, 4, true);
+        });
+        PartyAction(13.9, Entity(War), 7538, AddId, Interrupted);
+        When(14, () =>
+        {
+            b.Cancel(14, add, 1200, true);
+            session.Cancelled(Clock + 14, AddId, 1200, true);
+        });
+        When(22, () =>
+        {
+            b.Cast(22, add, 1201, 3, 110, 100, 0, 0, null, null, true);
+            session.EnemyCast(Clock + 22, AddId, 1201, 3, true);
+        });
+        // The WAR's Low Blow on the boss (immune to its stun); the DRG's Leg Sweep stuns the add; the DRG's Arm's Length.
+        PartyAction(16, Entity(War), 7540, BossId, StunResisted);
+        PartyAction(25, Entity(Drg), 7863, AddId, StatusOn(2));
+        PartyAction(6.9, Entity(Drg), 7548, Entity(Drg), StatusOn(1209, onCaster: true));
+        // The WAR's Provoke before taking the boss (27.5).
+        PartyAction(27.4, Entity(War), 7533, BossId, Provoked);
+        // The BLM's potion (high quality); the SCH's Sacred Soil on the ground.
+        When(20, () =>
+        {
+            var pot = new EffectBatch();
+            pot.Begin(Clock + 20, Entity(Blm), 0, 1_039_727, 2);
+            pot.EffectsOf(pot.Add(Entity(Blm)))[0] = StatusOn(49);
+            parser.Action(pot);
+        });
+        When(34, () =>
+        {
+            var area = new EffectBatch();
+            area.Begin(Clock + 34, Entity(Sch), 0, 188, 1);
+            area.HasGround = true;
+            area.GroundX = 104.5f;
+            area.GroundZ = 110.25f;
+            parser.Action(area);
+        });
+        // The SCH raises the BRD: Swiftcast, Resurrection (its Raise status on them from 58.1), accepted at 60.
+        PartyAction(57.5, Entity(Sch), 7561, Entity(Sch));
+        PartyAction(58, Entity(Sch), 173, Entity(Brd), StatusOn(148));
 
         // The party's own fight.
         bool BossUp(double t) => t < 40 || t >= 52;
@@ -260,7 +391,8 @@ public class AlignmentTests
             if (!BossUp(t) || t >= 84) continue;
             if (t < DiedAt[Pld]) PartyAction(t, Entity(Pld), 9, BossId, Damage(12_000 + k * 100, crit: k % 4 == 3, dh: k % 5 == 4));
             if (t < DiedAt[War]) PartyAction(t + 0.2, Entity(War), 31, t >= 11 && t < 30 ? AddId : BossId, Damage(10_000, crit: k % 3 == 2));
-            if (t < DiedAt[Drg]) PartyAction(t + 0.4, Entity(Drg), 75, BossId, Damage(14_000, dh: k % 2 == 1));
+            // The DRG's with their bonus % (a positional's or a combo's, as the battle log shows it).
+            if (t < DiedAt[Drg]) PartyAction(t + 0.4, Entity(Drg), 75, BossId, Damage(14_000, dh: k % 2 == 1, bonus: (sbyte)(k % 3 == 0 ? 22 : 0)));
             if (t < DiedAt[Nin]) PartyAction(t + 0.6, Entity(Nin), 2240, BossId, Damage(13_000));
             if (t < DiedAt[Brd]) PartyAction(t + 0.8, Entity(Brd), 16495, BossId, Damage(11_000, crit: k % 6 == 0, dh: k % 6 == 0));
             if (t < DiedAt[Sch]) PartyAction(t + 1.0, Entity(Sch), 25865, BossId, Damage(9_000));
@@ -302,6 +434,8 @@ public class AlignmentTests
         When(29, () => b.PartyCast(29, Blm, 3576, 2.5f));
         When(30.1, () => b.PartyCast(30.1, Blm, 3577, 2.8f));
         When(33.5, () => b.PartyCast(33.5, Blm, 205, 4.5f));
+        // The game says the Blizzard IV was cancelled (since 0.4.0: its why).
+        When(30.05, () => b.Cancel(30.05, Blm, 3576, false));
         PartyAction(38, Entity(Blm), 205, BossId, Damage(2_400_000));
 
         // Statuses: the enemies' on the party (status events) and the party's on anyone (combat rows).
@@ -321,10 +455,23 @@ public class AlignmentTests
             new(Pld, 297, Entity(Sch), StatusFrom.Party, Sch, 26.1, 56.1, 185),
         };
         foreach (var who in everyone) statuses.Add(new On(who, 786, Entity(Drg), StatusFrom.Party, Drg, 12.1, 32.1, 3557));
+        // Since 0.4.0: the Raise on the BRD (the SCH's), their Weakness from no one once up, the BLM's Medicated, the DRG's Arm's Length.
+        statuses.Add(new On(Brd, 148, Entity(Sch), StatusFrom.Party, Sch, 58.1, BrdUp, 173));
+        statuses.Add(new On(Brd, 43, 0, StatusFrom.Enemy, 0, BrdUp, BrdDiesAgain));
+        statuses.Add(new On(Blm, 49, Entity(Blm), StatusFrom.Party, Blm, 20.1, 50.1));
+        statuses.Add(new On(Drg, 1209, Entity(Drg), StatusFrom.Party, Drg, 7.0, 17.0, 7548));
+
+        // The boss's target (the PLD, the WAR from their Provoke, the WHM for 1.5 s), the add's (the WAR).
+        int BossOn(double t) => t < 27.5 ? Pld : t >= 33 && t < 34.5 ? Whm : War;
+        // The BLM's view of the boss's enmity list (its target), MP, the gauge.
+        (int, int)[] HateOn(double t) => t < 27.5 ? new[] { (Pld, 100), (War, 60), (Blm, 35) } : new[] { (War, 100), (Pld, 92), (Blm, 40) };
+        int Mp(int who, double t) => who == Whm ? Math.Max(2_000, 10_000 - 300 * (int)(t / 3)) : who == Blm ? Math.Max(0, 10_000 - 160 * (int)t) : 10_000;
+        int Gauge(double t) => t < 38 ? (int)Math.Min(30_000, 1_000 + t * 700) : (int)Math.Min(30_000, (t - 38) * 500);
 
         for (var step = 0; step <= 950; step++)
         {
             var t = step / 10.0;
+            var aSecond = step % 10 == 0;
             game.Add((t, 1, game.Count, () =>
             {
                 // Everyone's place and HP (the builder keeps them twice a second).
@@ -360,17 +507,30 @@ public class AlignmentTests
                 }
                 b.EndStatuses(t);
                 parser.EndStatuses(Clock + t);
-                foreach (var who in everyone) b.Alive(t, who, DiedAt[who] <= t);
+                foreach (var who in everyone) b.Alive(t, who, Dead(who, t));
                 b.Targetable(t, boss, BossUp(t));
                 if (t >= 10) b.Targetable(t, add, t < 30);
                 b.EndTargets(t);
-                // The meter's frame: the party as the party list has it, and the enemies' targetability.
+                // Since 0.4.0, every frame: the enemies' targets, MP and barriers, the gauge; once a second the enmity list and the signs.
+                if (BossUp(t)) b.Aggro(t, boss, BossOn(t));
+                if (t >= 10 && t < 30) b.Aggro(t, add, War);
+                foreach (var who in everyone) b.Resources(t, who, Mp(who, t), Barrier(who, t));
+                b.LimitGauge(t, Gauge(t), 30_000);
+                if (aSecond)
+                {
+                    if (BossUp(t)) b.Hate(t, boss, HateOn(t));
+                    b.Signs(t, t >= 30 && t < 40 ? new Dictionary<int, int> { [0] = boss, [5] = Brd } : new Dictionary<int, int> { [0] = boss });
+                }
+                // The meter's frame: the party as the party list has it (Weakness on the BRD once raised), the enemies' targetability,
+                // the gauge, and the boss's target.
                 var states = everyone.Select(who => new PartyState(Entity(who), $"Player {who}", party[who - 1].Job, party[who - 1].Role, Hp(who, t),
-                    MaxHp[who], Hp(who, t) > 0, who == Blm)).ToArray();
+                    MaxHp[who], Hp(who, t) > 0, who == Blm, (byte)(who == Brd && t >= BrdUp && t < BrdDiesAgain ? 1 : 0))).ToArray();
+                session.Gauge(Gauge(t), 3, 10_000);
                 session.Frame(Clock + t, states, true);
                 session.Targetable(BossId, BossUp(t));
                 if (t >= 10) session.Targetable(AddId, t < 30);
                 session.EndTargets();
+                if (BossUp(t)) session.Aggro(Clock + t, BossId, Entity(BossOn(t)));
             }));
         }
 
@@ -389,7 +549,8 @@ public class AlignmentTests
         Assert.Equal(new[] { "R1", "H1", "MT", "M1", "H2", "R2", "OT", "M2" }, r.Party.Select(p => p.Slot));
         Assert.Equal(new[] { 0.0, 52.0 }, PullStats.PhaseStarts(r));
         // The BRD to the bleed (a status), the WHM to the instant death, the rest to hits.
-        var deaths = r.Events.OfType<DeathEvent>().ToDictionary(d => d.Who);
+        // (The BRD's first; since 0.4.0 they die again in the wipe.)
+        var deaths = r.Events.OfType<DeathEvent>().GroupBy(d => d.Who).ToDictionary(g => g.Key, g => g.First());
         Assert.True(deaths[Brd].ByStatus);
         Assert.Equal(2088u, deaths[Brd].By);
         Assert.Equal(1000u, deaths[Whm].By);
@@ -398,6 +559,42 @@ public class AlignmentTests
         var dia = r.Combat!.Statuses.Where(s => s.Status == 1871).ToList();
         Assert.Equal(new[] { true, true, false }, dia.Select(s => s.Gain));
         Assert.Contains(r.Events.OfType<StatusEvent>(), s => s.Id == 2912 && s.Refresh && s.Stacks == 2);
+        // Since 0.4.0. The BRD died twice: the bleed, then (raised, with Weakness) the enrage.
+        Assert.Equal(new[] { 51.2, 84.5 }, r.Events.OfType<DeathEvent>().Where(d => d.Who == Brd).Select(d => d.T));
+        var raise = r.Events.OfType<RaiseEvent>().Single();
+        Assert.Equal((60.0, Brd, Sch, (double?)58.1, false), (raise.T, raise.Who, raise.By, raise.At, raise.Lb));
+        // The add's first chant interrupted by the WAR's Interject; the second went off.
+        var cancel = r.Events.OfType<CancelEvent>().Single();
+        Assert.Equal((1200u, true, War, 7538u), (cancel.Action, cancel.Interrupted, cancel.By, cancel.With));
+        Assert.Equal(2, r.Events.OfType<CastEvent>().Count(c => c.Interruptible));
+        // The boss's target on change: the PLD, the WAR (Provoke), the WHM a moment, the WAR.
+        Assert.Equal(new[] { Pld, War, Whm, War }, r.Events.OfType<AggroEvent>().Where(a => a.Actor == 101).Select(a => a.On));
+        var c = r.Combat!;
+        var uses = c.Uses;
+        Assert.Contains(uses, u => u.Action == 7538 && u.Source == War && ((UseFlags)u.Flags & UseFlags.Interrupted) != 0);
+        Assert.Contains(uses, u => u.Action == 7540 && ((UseFlags)u.Flags & UseFlags.StatusResisted) != 0);
+        Assert.Contains(uses, u => u.Action == 7533 && ((UseFlags)u.Flags & UseFlags.Threat) != 0);
+        Assert.Contains(uses, u => u.Action == 1_039_727 && u.Source == Blm && ((UseFlags)u.Flags & UseFlags.Item) != 0);
+        Assert.Contains(uses, u => u.Action == 205 && ((UseFlags)u.Flags & UseFlags.LimitBreak) != 0);
+        Assert.Contains(uses, u => u.Action == 25774 && u.Source == Nin && ((UseFlags)u.Flags & UseFlags.Pet) != 0);
+        Assert.Equal(new AreaRow(34, Sch, 188, 104.5f, 110.25f), c.Areas.Single());
+        // Before the pull: Sacred Soil at −3, the PLD's potion at −2.1; the countdown's zero a quarter second after the start.
+        Assert.Equal(new[] { (-3.0, Sch, 188u), (-2.1, Pld, 39726u) }, c.Pre.Select(p => (Math.Round(p.T, 2), p.Source, p.Action)));
+        Assert.Equal((10.0, -0.25), c.Countdown);
+        Assert.Equal(1, c.Casts.Single(x => x.Action == 3576).Why);
+        // The raidwide knocked back all but the DRG; the buster partly absorbed by the PLD's barrier (15 %).
+        var raidwide = r.Events.OfType<HitEvent>().First(h => h.Action == 100);
+        Assert.Equal(Effects.FxKnockback, raidwide.Fx![0]);
+        Assert.Equal(0, raidwide.Fx[raidwide.Targets.ToList().IndexOf(Drg)]);
+        var buster = r.Events.OfType<HitEvent>().Single(h => h.Action == 600);
+        Assert.Equal(Effects.FxCrit | Effects.FxAbsorbed, buster.Fx![0]);
+        Assert.Equal(15, buster.Shield![0]);
+        Assert.Equal((109f, 112f), (buster.Px![0], buster.Pz![0]));
+        Assert.Contains(c.Fx, f => f.Origin == Drg && f.Bonus == 22);
+        Assert.NotEmpty(c.Hate);
+        Assert.NotEmpty(c.Res);
+        Assert.Equal(30_000, c.Gauge.Max(g => g.Value));
+        Assert.True(r.Party.Single(p => p.Id == Blm).Self);
     }
 
     [Fact]
@@ -438,6 +635,26 @@ public class AlignmentTests
         Assert.Equal(7_000 + 2 * 2_500, slot(Whm)["over"]!.GetValue<long>());
         // The fight's length: from the PLD's first hit (1.0) to the wipe's last death (84.6).
         Assert.Equal(83.6, stats["len"]!.GetValue<double>());
+        // Since 0.4.0. The SCH raised the BRD (dead 51.2–60); the WHM dead from 60.2 to the fight's end (84.6); the BRD's
+        // second death and the rest are the wipe's. The WAR's interrupt; potions in the pull and before it.
+        Assert.Equal(1, slot(Sch)["raises"]!.GetValue<int>());
+        Assert.Equal(1, slot(Brd)["raised"]!.GetValue<int>());
+        Assert.Equal(8.8, slot(Brd)["dead"]!.GetValue<double>());
+        Assert.Equal(24.4, slot(Whm)["dead"]!.GetValue<double>());
+        Assert.False(slot(Pld).ContainsKey("dead"));
+        Assert.Equal(1, slot(War)["ints"]!.GetValue<int>());
+        Assert.Equal(1, slot(Blm)["pots"]!.GetValue<int>());
+        Assert.Equal(1, slot(Pld)["pots"]!.GetValue<int>());
+        Assert.True(slot(Blm)["self"]!.GetValue<bool>());
+        Assert.True(slot(Pld)["gcds"]!.GetValue<int>() > 20);
+        var ph = stats["ph"]!.AsArray().Select(x => x!.AsArray().Select(v => v!.GetValue<long>()).ToArray()).ToList();
+        Assert.Equal(new long[] { 0, 52 }, ph.Select(x => x[0]));
+        for (var i = 0; i < slots.Count; i++) Assert.Equal(slots[i]["dmg"]!.GetValue<long>(), ph.Sum(x => x[i + 1]));
+        var extra = stats["x"]!.AsObject();
+        Assert.Equal(new[] { 1, 2 }, extra["int"]!.AsArray().Select(v => v!.GetValue<int>()));
+        Assert.Equal(1, extra["swaps"]!.GetValue<int>());
+        Assert.Equal(new long[] { 380, 205 }, extra["lbUses"]!.AsArray().Single()!.AsArray().Select(v => v!.GetValue<long>()));
+        Assert.Equal(-0.25, extra["cd"]!.GetValue<double>());
     }
 
     [Fact]
@@ -488,21 +705,47 @@ public class AlignmentTests
             Assert.Equal(row.Damage / len, row.EncDps, 6);
             Assert.Equal(row.Healing / len, row.Hps, 6);
             Assert.Equal(row.Damage / Math.Max(1, row.ActiveSeconds), row.Dps, 6);
+            // Since 0.4.0: the same counts (the potions before the pull aren't the meter's: not in an encounter).
+            int Count(string key) => s[key]?.GetValue<int>() ?? 0;
+            var member = played.Recording.Party.Single(p => p.Slot == row.Slot).Id;
+            var prePots = played.Recording.Combat!.Pre.Count(p => p.Source == member && ((UseFlags)p.Flags & UseFlags.Item) != 0);
+            Assert.Equal(Count("gcds"), row.Casts);
+            Assert.Equal(Count("pots"), row.Potions + prePots);
+            Assert.Equal(Count("raises"), row.RaisesGiven);
+            Assert.Equal(Count("raised"), row.Raised);
+            Assert.Equal(Count("ints"), row.Interrupts);
+            Assert.Equal(s["dead"]?.GetValue<double>() ?? 0, Math.Round(row.DeadSeconds, 1), 6);
         }
         var lb = m.Rows.Single(r => r.IsLimitBreak);
         Assert.Equal(stats["lb"]!.GetValue<long>(), lb.Damage);
         Assert.Equal(slots.Sum(x => x["dmg"]!.GetValue<long>()) + lb.Damage, m.Party.Damage);
         // The deaths: the BRD's and the WHM's counted, the rest the wipe's; killed by what the recording says.
         Assert.Equal(new[] { ("R2", false, "Bleeding"), ("H1", false, "Doom's End"), ("M2", true, "Exaflare"), ("R1", true, "Ultimate End"),
-            ("MT", true, "Ultimate End"), ("M1", true, "Ultimate End"), ("H2", true, "Ultimate End"), ("OT", true, "Ultimate End") },
+            ("MT", true, "Ultimate End"), ("M1", true, "Ultimate End"), ("H2", true, "Ultimate End"), ("R2", true, "Ultimate End"), ("OT", true, "Ultimate End") },
             m.Deaths.Select(d => (d.Slot, d.PartOfWipe, d.KilledBy)));
+        // The BRD's first death: raised by the SCH (H2) 8.8 s later; the second with Weakness.
+        Assert.Equal((59.0, "H2"), (m.Deaths[0].RaisedAt!.Value, m.Deaths[0].RaisedBy!));
+        Assert.True(m.Deaths[7].HadWeakness);
+        Assert.False(m.Deaths[0].HadWeakness);
+        // The events: the interrupt (the WAR's), the chant that went off, the Low Blow resisted, the Leg Sweep's stun, the
+        // potion, the tank swap (MT to OT), the WHM holding the boss, the limit break, the raise.
+        var events = played.Session.Events(m.Id);
+        Assert.Equal(new[]
+        {
+            MeterEventKind.Interrupt, MeterEventKind.Resisted, MeterEventKind.Potion, MeterEventKind.CastWentOff, MeterEventKind.Stun,
+            MeterEventKind.TankSwap, MeterEventKind.AggroLost, MeterEventKind.LimitBreak, MeterEventKind.Death, MeterEventKind.Raise,
+            MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death,
+            MeterEventKind.Death, MeterEventKind.Death,
+        }, events.Select(e => e.Kind));
+        Assert.Equal(("OT", "MT"), (events[5].Slot, events[5].OtherSlot));
+        Assert.Equal(("R2", "H2"), (events[9].Slot, events[9].OtherSlot));
     }
 
     /// <summary>
     /// The meter's numbers for an encounter as the site's alignment test reads them (<c>align.meter.json</c>):
     /// its length, and each spot's row (and the limit break's, and the party's) as the meter shows them after the fight.
     /// </summary>
-    public static JsonObject MeterNumbers(MeterEncounter m)
+    public static JsonObject MeterNumbers(MeterEncounter m, IReadOnlyList<MeterEvent>? events = null)
     {
         JsonObject Row(MeterRow r) => new()
         {
@@ -521,6 +764,13 @@ public class AlignmentTests
             ["taken"] = r.Taken,
             ["takenPerSecond"] = r.TakenPerSecond,
             ["deaths"] = r.Deaths,
+            // Since 0.4.0.
+            ["casts"] = r.Casts,
+            ["potions"] = r.Potions,
+            ["raisesGiven"] = r.RaisesGiven,
+            ["raised"] = r.Raised,
+            ["deadSeconds"] = Math.Round(r.DeadSeconds, 2),
+            ["interrupts"] = r.Interrupts,
         };
         var lb = m.Rows.FirstOrDefault(r => r.IsLimitBreak);
         return new JsonObject
@@ -534,6 +784,12 @@ public class AlignmentTests
             ["deaths"] = new JsonArray(m.Deaths.Select(d => (JsonNode)new JsonObject
             {
                 ["slot"] = d.Slot, ["at"] = d.At, ["by"] = d.KilledBy, ["wipe"] = d.PartOfWipe,
+                ["raisedAt"] = d.RaisedAt, ["raisedBy"] = d.RaisedBy, ["weakness"] = d.HadWeakness,
+            }).ToArray()),
+            // Since 0.4.0: the events as the meter lists them (encounter time; no names).
+            ["events"] = new JsonArray((events ?? Array.Empty<MeterEvent>()).Select(e => (JsonNode)new JsonObject
+            {
+                ["at"] = Math.Round(e.At, 2), ["kind"] = e.Kind.ToString(), ["slot"] = e.Slot, ["other"] = e.OtherSlot, ["action"] = e.Action,
             }).ToArray()),
         };
     }
@@ -546,7 +802,7 @@ public class AlignmentTests
         var json = r.ToJson();
         Assert.Equal(json, Recording.Parse(json).ToJson());
         var summary = Summary(r).ToJsonString();
-        var meter = MeterNumbers(played.Meter).ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var meter = MeterNumbers(played.Meter, played.Session.Events(played.Meter.Id)).ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         var dir = Environment.GetEnvironmentVariable("RP_ALIGN_OUT");
         if (string.IsNullOrWhiteSpace(dir)) return;
         File.WriteAllText(Path.Combine(dir, "align.raidrec.json"), json);

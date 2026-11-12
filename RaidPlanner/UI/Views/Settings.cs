@@ -433,7 +433,7 @@ public sealed partial class MainWindow
             Kit.Gap(18);
             var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
             var all = on == of;
-            if (Kit.Section("##cd-kind" + (int)kind, CooldownCatalog.KindWord(kind), $"{on} of {of}", all ? "None" : "All"))
+            if (Kit.Section("##cd-kind" + (int)kind, CooldownCatalog.KindWord(kind), $"{on} of {of}", all ? "Turn all off" : "Turn all on"))
             {
                 foreach (var spec in CooldownCatalog.All)
                     if (spec.Kind == kind)
