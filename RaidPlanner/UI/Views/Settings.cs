@@ -127,7 +127,7 @@ public sealed partial class MainWindow
             config.Save();
         }
         if (config.AutoRecord && SwitchRow(i++, "##everywhere", "In every duty", "Dungeons and field operations too", config.RecordAllDuties,
-                "Off, only fights are recorded (trials, raids, ultimates, criterion dungeons), so a run of trash packs never pushes out the pulls you want. On, every duty's pulls are.",
+                "Off, only fights are recorded (trials, raids, ultimates, criterion dungeons), so a run of trash packs never pushes out the pulls you want. On, every duty's pulls are, but never the Occult Crescent's.",
                 sub: true))
         {
             config.RecordAllDuties = !config.RecordAllDuties;

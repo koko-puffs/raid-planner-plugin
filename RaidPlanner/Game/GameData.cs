@@ -23,10 +23,13 @@ public sealed class GameData
 
     /// <summary>
     /// Duty kinds (the ContentType sheet's rows) that aren't one fight to plan: dungeons, guildhests,
-    /// PvP, quest battles, treasure hunts, deep dungeons, Eureka and Bozja. A trash pack there would
-    /// otherwise be kept as a pull, and push out the ones you meant to keep.
+    /// PvP, quest battles, treasure hunts, deep dungeons, Eureka, Bozja and the Occult Crescent (38).
+    /// A trash pack there would otherwise be kept as a pull, and push out the ones you meant to keep.
     /// </summary>
-    private static readonly HashSet<uint> NotFights = new() { 2, 3, 6, 7, 9, 21, 26, 29 };
+    private static readonly HashSet<uint> NotFights = new() { 2, 3, 6, 7, 9, 21, 26, 29, 38 };
+
+    /// <summary>The Occult Crescent's open zones (South and North Horn: territory intended use 61), never recorded.</summary>
+    private const uint OccultUse = 61;
 
     /// <summary>
     /// An action's name, cast type (its shape), reach, width, floor marker and cast, as the game's
@@ -175,6 +178,15 @@ public sealed class GameData
         fields[territory] = field;
         return field;
     }
+
+    /// <summary>
+    /// Is the zone the Occult Crescent (South or North Horn, the Forked Tower and the critical
+    /// engagements included, by the territory's intended use)? Nothing there is ever recorded, even with
+    /// <i>In every duty</i> on: its fights are a field's, not a planned duty's. The meter still works there.
+    /// </summary>
+    public bool IsOccultCrescent(uint territory) =>
+        Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t)
+        && t.TerritoryIntendedUse.RowId == OccultUse;
 
     /// <summary>A zone's own name, for a fight recorded outside a duty.</summary>
     public string PlaceName(uint territory) =>

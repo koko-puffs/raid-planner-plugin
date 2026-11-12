@@ -59,7 +59,8 @@ there; its list button picks any of your plans.
 
 - **Record fights by themselves**: on. Off, nothing is recorded (an open plan window still follows
   the pull, without keeping it).
-- **In every duty**: off. On, dungeons and field operations are recorded too.
+- **In every duty**: off. On, dungeons and field operations are recorded too (never the Occult
+  Crescent).
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
   working out your own strats.
 - **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.

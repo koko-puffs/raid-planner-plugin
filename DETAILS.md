@@ -16,8 +16,12 @@ below), and says how far each pull got for the site's progress tracker.
 
 A pull starts when you go into combat in a fight (bound by duty, any of the game's three flags,
 in a Duty Finder duty that isn't a dungeon, guildhest, PvP, quest battle, treasure hunt, deep
-dungeon, Eureka or Bozja: `GameData.IsFight`, by the ContentType sheet's rows 2, 3, 6, 7, 9, 21,
-26, 29; _In every duty_ in Settings records those too) with _Record fights by themselves_ on.
+dungeon, Eureka, Bozja or the Occult Crescent: `GameData.IsFight`, by the ContentType sheet's rows
+2, 3, 6, 7, 9, 21, 26, 29, 38; _In every duty_ in Settings records those too, except the Occult
+Crescent) with _Record fights by themselves_ on. **The Occult Crescent is never recorded** (since
+0.3.0): South and North Horn, their critical engagements and FATEs and the Forked Tower, by the
+territory's intended use (61, `GameData.IsOccultCrescent`), even with _In every duty_ on; the meter
+still works there, and an open plan window still follows the pull without keeping it.
 It goes on while you or anyone in your party is in combat (you can be down while they fight on:
 still the same pull), and ends when that's been over for 2 seconds, at once when the duty is wiped
 or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the whole party down it
@@ -871,6 +875,9 @@ preview` shows a made-up fight in it (again to stop).
 
 ### 0.3.0
 
+- **The Occult Crescent isn't recorded.** South and North Horn, their critical engagements and
+  FATEs and the Forked Tower are left out, even with _In every duty_ on (until now its fights were
+  recorded by themselves, trash packs included). The meter still works there.
 - **The planner's own look, in every window.** Ready Check, as the site has it: basalt and white
   hairlines, 40px buttons with 10px corners, one ember telegraph a screen (Send to Raid Planner, or
   Link your account until you've linked), switches on in ember, the site's tabs with the ember bar,

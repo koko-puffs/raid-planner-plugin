@@ -298,7 +298,15 @@ public sealed unsafe class FightRecorder : IDisposable
     }
 
     /// <summary>Does this zone get its pulls recorded by itself?</summary>
-    private bool RecordsHere() => InDuty && (config.RecordAllDuties || data.IsFight(Services.ClientState.TerritoryType));
+    /// <summary>
+    /// Whether a pull here is recorded: in a duty, never in the Occult Crescent (even with <i>In every
+    /// duty</i> on), and a fight (<see cref="GameData.IsFight"/>) unless every duty is recorded.
+    /// </summary>
+    private bool RecordsHere()
+    {
+        var territory = Services.ClientState.TerritoryType;
+        return InDuty && !data.IsOccultCrescent(territory) && (config.RecordAllDuties || data.IsFight(territory));
+    }
 
     private void OnUpdate(IFramework framework)
     {
