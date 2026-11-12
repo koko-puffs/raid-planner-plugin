@@ -160,6 +160,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             ownPull = 0;
             // A potion drunk in another zone is no pull's here.
             earlyItemCount = 0;
+            // Who's down is read afresh (a member out of sight isn't kept dead from the last zone).
+            down.Clear();
         }
         territory = territoryId;
         content = contentId;
@@ -184,20 +186,30 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     /// <summary>
     /// This frame: the time (seconds, the clock every event is timed by), the party, and whether any of
-    /// them is in combat. Deaths (HP reaching 0) are seen here, and the encounter ends here.
+    /// them is in combat. Deaths (HP reaching 0) are seen here, and the encounter ends here. A member whose HP isn't
+    /// known (<see cref="PartyState.MaxHp"/> 0) is taken to be as they were last seen (alive when never seen), and
+    /// isn't counted in "everyone's down" (the recorder's rule: those whose HP is known, at least one).
     /// </summary>
     public void Frame(double t, ReadOnlySpan<PartyState> partyNow, bool anyInCombat)
     {
         now = t;
         inCombat = anyInCombat;
         party.Clear();
-        var allDown = partyNow.Length > 0;
+        // Everyone down: every member whose HP is known this frame (at least one), as the recorder's pull tells a wipe.
+        var allDown = true;
+        var anyKnown = false;
         foreach (var p in partyNow)
         {
             party.Add(p);
-            var dead = p.Dead;
-            if (!dead) allDown = false;
             var known = down.TryGetValue(p.Id, out var was);
+            // HP not known this frame (MaxHp 0: since 0.5.0 a cross-world member who isn't near): as they were last seen, so a
+            // member out of sight is neither raised nor killed again when they're seen once more.
+            var dead = p.MaxHp <= 0 && known ? was : p.Dead;
+            if (p.MaxHp > 0)
+            {
+                anyKnown = true;
+                if (!dead) allDown = false;
+            }
             down[p.Id] = dead;
             if (live == null) continue;
             var m = live.Join(p);
@@ -207,6 +219,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             if (known && !was && dead) live.Died(m, t, this);
             else if (known && was && !dead) live.Raised(m, t);
         }
+        allDown &= anyKnown;
         live?.Watch(t, this);
         anyAlive = !allDown;
         if (live == null) return;
@@ -276,7 +289,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         foreach (var (who, slot) in Roles.Assign(party.Select(p => new Partier(p.Id, p.Job, p.Role)).ToList()))
             f.Add(party.First(p => p.Id == (uint)who.Key), slot);
         foreach (var p in party)
-            if (f.ByEntity.TryGetValue(p.Id, out var m)) m.Dead = p.Dead;
+            if (f.ByEntity.TryGetValue(p.Id, out var m)) m.Dead = down.TryGetValue(p.Id, out var was) ? was : p.Dead;
         live = f;
         outOfCombatSince = double.NaN;
         fights.Insert(0, f);

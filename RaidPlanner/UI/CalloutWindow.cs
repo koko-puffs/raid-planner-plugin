@@ -161,6 +161,9 @@ public sealed class CalloutWindow : OverlayWindow
     /// <summary>"You: …" is SansSemibold 13 (the plan's own words: a face built with every language's glyphs).</summary>
     private const int YouPx = 13;
 
+    private string? youOf;
+    private string youRest = string.Empty;
+
     /// <summary>"You: Reprisal": the "You:" in ember, the rest in white, cut to the width.</summary>
     private void YouLine(ImDrawListPtr dl, Vector2 at, string text, float width)
     {
@@ -172,7 +175,13 @@ public sealed class CalloutWindow : OverlayWindow
             return;
         }
         var lw = Txt.Line(dl, at, Lead, Face.SansSemibold, px, Palette.Ember, px * 1.3f);
-        var rest = text[Lead.Length..];
+        // The rest cut off once a line, not each frame.
+        if (!ReferenceEquals(youOf, text))
+        {
+            youOf = text;
+            youRest = text[Lead.Length..];
+        }
+        var rest = youRest;
         Txt.Line(dl, at + new Vector2(lw, 0), Txt.Fit(rest, Face.SansSemibold, px, MathF.Max(0, width - lw)), Face.SansSemibold, px, Palette.White, px * 1.3f);
     }
 

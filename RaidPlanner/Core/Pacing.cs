@@ -121,3 +121,29 @@ public sealed class LiveShare
         backoff.Succeeded();
     }
 }
+
+/// <summary>
+/// Something worked out again at most once every <c>every</c> milliseconds (by <c>Environment.TickCount64</c>): due the first time,
+/// then once the time has passed, and again at once if the clock goes back. Since 0.5.0 (the party's spot for you, read once a
+/// second: a start of <c>long.MinValue</c> overflowed the subtraction, so it was never read again).
+/// </summary>
+public sealed class Every
+{
+    private readonly long every;
+    private long at;
+    private bool has;
+
+    public Every(long everyMs) => every = Math.Max(0, everyMs);
+
+    /// <summary>Whether it's due now; when it is, the time starts again from <paramref name="tick"/>.</summary>
+    public bool Due(long tick)
+    {
+        if (has && tick >= at && tick - at < every) return false;
+        has = true;
+        at = tick;
+        return true;
+    }
+
+    /// <summary>Due again at the next ask.</summary>
+    public void Reset() => has = false;
+}

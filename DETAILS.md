@@ -37,7 +37,9 @@ tank isn't), isn't kept (the window says so). Pulls are numbered from 1 each tim
 with fakes): one place reads it, and the recorder (its party, the parser's "is this the party's",
 whether the fight goes on, whether everyone's down), the meter, the cooldown tracker, the plan window,
 Home and the roster all ask it. The game's party list (Dalamud's `IPartyList`) when it has anyone: a
-normal party, and any party in a duty (cross-world ones included). Else, outside a duty, **the
+normal party, and any party in a duty (cross-world ones included); a member in another zone (the game
+gives them no entity id) keeps their place by content id, for the spots, Home's count and the roster,
+but nothing can be credited to them. Else, outside a duty, **the
 cross-world party's group you're in**: the game keeps a cross-world party only in
 `InfoProxyCrossRealm` there, and the party list is empty (before 0.5.0 only you were counted, so a
 friend's damage on a target dummy was dropped). In a cross-world alliance only your own group counts
@@ -48,7 +50,11 @@ entity id for is looked for near you by their content id (the object table's cha
 by name and job only (no damage can be credited to them until they're found). Else just you. The
 members are read at most four times a second; their HP (the party list's at any distance; a
 cross-world member's from their character, when near), whether they're near and in combat, once a
-frame however many ask. The cross-world read [verify: the groups, your group's index, the members'
+frame however many ask. A member whose HP isn't known (a cross-world member who isn't near) is left out
+of "everyone's down", the recorder's and the meter's alike (only those whose HP is known count), and the
+meter keeps them as they were last seen (alive when never seen; a new zone forgets), so walking away from a dead friend and back isn't
+a raise and a second death. Your spot (the plan window's reticle, the callouts' "You:" line) is worked
+out from the same party once a second. The cross-world read [verify: the groups, your group's index, the members'
 entity ids as the object table has them] is guarded: a read that throws stops it for a minute (logged
 once), and with Diagnostics on each change of who the party is goes to the file (`party-read`).
 
@@ -603,11 +609,11 @@ them (`PlanJson.Phases`: "P2 · …" or "Phase 2: …" starts one; the steps bef
 model/mitigation.ts): who uses which mitigation, shield or big heal in a step, and when. Each entry is
 `{ id, spot, action, name, at?, note? }`: the spot (MT, OT, H1, H2, M1, M2, R1, R2, or P1 to P24 in an
 alliance's plan), the Action row (0 not known), its English name, `at` seconds after the step's own time
-(−60 to 600; negative is before it) and a short note. Read as the site normalizes them (`PlanStep.Cooldowns`):
-an entry needs a spot it knows and a name; one whose `action` or `at` is there but isn't a finite number
-is skipped (missing, 0); the action a whole number (0 when not above 0), `at` to a tenth within −60 …
-600, name and note one line (80 and 60 at most); at most 24 a step; in the order they go (by `at`, then
-the spots' order). An older plan, or a step without the key, has none. `rp_plugin_plan` sends them (and
+(−60 to 600; negative is before it) and a short note. Read as the site normalizes them (`PlanStep.Cooldowns`,
+field by field as model/cooldowns.ts `normalizeCooldowns`): an entry needs a spot it knows and a name; the
+action a whole number (0 when it isn't a number above 0), `at` to a tenth within −60 … 600 (0 when it isn't
+a number), both rounded as the site's `Math.round` (halves up), name and note one line (80 and 60 at most);
+at most 24 a step; in the order they go (by `at`, then the spots' order). An older plan, or a step without the key, has none. `rp_plugin_plan` sends them (and
 each step's `callout`, which it never sent before: the site's migration
 `20261112105739_rp_plugin_plan_cooldowns.sql`, applied on 12 November 2026). Placed on the plan's clock (`UI/Model/PlannedUses.cs`): a step's time is its earliest cue's (as
 the callouts time a step), plus `at`; a step with no cue has no time, so its cooldowns are only listed in
@@ -674,9 +680,10 @@ pull's clock and "next in 16 s", filling to the next step by the plan's own cloc
 step's planned cooldowns, a row each (20 tall): the spot in its role's colour (the board's spot, 16),
 the action (SansSemibold 13), its note muted after it and its time off the step's in mono on the right
 ("−3 s", "+4 s"; none at the step's own time), yours (your spot now) washed in ember and in white;
-four rows at most (past that the fourth says "+3 more"), each row's tooltip all of it ("MT · Reprisal −3
-s · for Akh Morn"), the "more" row's every one; at its smallest one line instead, yours ("You:
-Reprisal −3 s") or how many ("4 cooldowns planned"); then the board, a square as big as leaves three lines for the notes (110 at the least); the notes (13px,
+four rows at most (past that the fourth says "+3 more"), fewer when the window is short (as many as
+leave the board its 110 above the footer, the last "+N more"), each row's tooltip all of it ("MT ·
+Reprisal −3 s · for Akh Morn"), the "more" row's every one; at its smallest, or with room for under two
+rows, one line instead, yours ("You: Reprisal −3 s") or how many ("4 cooldowns planned"); then the board, a square as big as leaves three lines for the notes (110 at the least); the notes (13px,
 "- " lines as "• ", wrapped once per width, only the lines in view drawn), fading at the foot when
 there's more, with the scrollbar; and at the foot 32px square previous and next round the count in
 mono. Another plan on its way runs a slim cast bar under the header and keeps the old step until
@@ -1440,7 +1447,8 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   dummy didn't show. Now one place reads the party (`Game/PartyMembers.cs`): the party list, else the
   cross-world party's group you're in (in an alliance, your own group), else just you, and everything
   uses it, the recorder's "is this the party's" test too. The cross-world read is guarded and, with
-  Diagnostics on, logged (`party-read`).
+  Diagnostics on, logged (`party-read`). A member out of sight (whose HP the game doesn't give) is kept
+  as they were last seen, so they're never taken for dead, nor raised and killed again.
 - **Your gear in the recording.** A recorded pull keeps your job, average item level, each equipped item
   (its row, HQ and name) and your attributes as it began (`gear`), for the site's "Your gear" card and
   the item level beside your personal bests. The pull's summary carries the average item level too
@@ -1451,7 +1459,8 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   - the on-screen callouts say yours under the coming step ("You: Reprisal −3 s");
   - the cooldown tracker outlines a cooldown the plan has its member use in the next 15 seconds in ember,
     with "planned in 8 s" (shown even with _Hide those ready_ on).
-  They need the site's update to `rp_plugin_plan` (it now sends each step's `cooldowns`, and its
+  They're read as the site reads them (an entry with a value that isn't a number keeps it as 0, as the
+  site shows it). They need the site's update to `rp_plugin_plan` (it now sends each step's `cooldowns`, and its
   `callout`, which it never sent before, so the plan window's big words and the chat line now use a
   step's callout rather than its name).
 - The cooldown tracker's and the callouts' samples show a planned cooldown.

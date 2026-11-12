@@ -1,4 +1,5 @@
 using RaidPlanner.Core;
+using RaidPlanner.Core.Meter;
 using RaidPlanner.UI.Model;
 using Xunit;
 
@@ -39,6 +40,22 @@ public class PartyPickTests
         var list = new[] { Seat(0, 0, ""), Seat(PartyPick.InvalidId, 0, "") };
         var cross = new CrossWorldRead(true, false, 0, 1, new[] { Seat(0x10000001, 1001, "Me Myself"), Seat(0x10000002, 1002, "Friend", index: 1) });
         Assert.Equal(PartyFrom.CrossWorld, PartyPick.Choose(list, cross, Me).From);
+    }
+
+    [Fact]
+    public void A_party_list_member_in_another_zone_keeps_their_place()
+    {
+        // The game gives a member in another zone no entity id (InvalidId): before 0.5.0 the roster, the plan window's spot and Home
+        // still had them. Kept by content id with entity id 0 (so the parser never takes them), in the list's order.
+        var list = new[] { Seat(0x10000001, 1001, "Me Myself", 19), Seat(PartyPick.InvalidId, 1002, "Away", 24, index: 1), Seat(0x10000003, 1003, "Here", 33, index: 2) };
+        var c = PartyPick.Choose(list, null, Me);
+        Assert.Equal(PartyFrom.List, c.From);
+        Assert.Equal(new[] { "Me Myself", "Away", "Here" }, c.Members.Select(m => m.Name));
+        Assert.Equal(0u, c.Members[1].EntityId);
+        Assert.Equal(1002ul, c.Members[1].ContentId);
+        Assert.Equal(new uint[] { 0x10000001, 0x10000003 }, c.Ids);
+        // Two seats for the same content id: once.
+        Assert.Equal(3, PartyPick.Choose(list.Append(Seat(PartyPick.InvalidId, 1002, "Away")).ToArray(), null, Me).Members.Count);
     }
 
     [Fact]
@@ -229,8 +246,11 @@ public class PlanCooldownTests
     {
         var plan = PlanJson.Read(Json)!;
         var c = plan.Steps[0].Cooldowns;
-        // A known spot and a name each; a value there but not a number skips the entry; the rest clamped as the site does.
-        Assert.Equal(new[] { "b", "c", "a", "i" }, c.Select(x => x.Id));
+        // A known spot and a name each; a value that isn't a number is 0 (as the site's normalizeCooldowns keeps it); the rest
+        // clamped as the site does.
+        Assert.Equal(new[] { "b", "c", "g", "h", "a", "i" }, c.Select(x => x.Id));
+        Assert.Equal(0u, c[2].Action);
+        Assert.Equal(0, c[3].At);
         var reprisal = c[0];
         Assert.Equal("MT", reprisal.Spot);
         Assert.Equal(7535u, reprisal.Action);
@@ -239,13 +259,40 @@ public class PlanCooldownTests
         Assert.Equal("−3 s", reprisal.AtWords);
         Assert.Equal(string.Empty, c[1].AtWords);
         Assert.Null(c[1].Note);
-        var alliance = c[3];
+        var alliance = c[5];
         Assert.Equal(0u, alliance.Action);
         Assert.Equal(PlanJson.AtMax, alliance.At);
         Assert.Empty(plan.Steps[1].Cooldowns);
         Assert.Empty(plan.Steps[2].Cooldowns);
         Assert.Equal(new[] { "Reprisal" }, plan.Steps[0].CooldownsFor("MT").Select(x => x.Name));
         Assert.Empty(plan.Steps[0].CooldownsFor(null));
+    }
+
+    [Fact]
+    public void Numbers_round_as_the_sites_do()
+    {
+        // model/cooldowns.ts rounds with Math.round (halves up, −22.5 to −22) and keeps an entry whose numbers aren't numbers, at 0.
+        var plan = PlanJson.Read("""
+            { "id": "p", "phases": [ { "name": "S", "cooldowns": [
+                { "id": "a", "spot": "MT", "action": 7530.5, "name": "Half", "at": -2.25 },
+                { "id": "b", "spot": "  ot ", "action": null, "name": "Null action", "at": -0.04 },
+                { "id": "c", "spot": "H1", "action": true, "name": "Bool action", "at": [] },
+                { "id": "d", "spot": "H2", "action": 0.4, "name": "  Spaced   out  ", "at": 2.25 }
+            ] } ] }
+            """)!;
+        var c = plan.Steps[0].Cooldowns;
+        Assert.Equal(new[] { "a", "b", "c", "d" }, c.Select(x => x.Id));
+        Assert.Equal(7531u, c[0].Action);
+        Assert.Equal(-2.2, c[0].At, 9);
+        Assert.Equal("OT", c[1].Spot);
+        Assert.Equal(0u, c[1].Action);
+        // −0.04 to a tenth is 0 (not −0: no "−0 s").
+        Assert.Equal(string.Empty, c[1].AtWords);
+        Assert.Equal(0u, c[2].Action);
+        Assert.Equal(0, c[2].At);
+        Assert.Equal(0u, c[3].Action);
+        Assert.Equal(2.3, c[3].At, 9);
+        Assert.Equal("Spaced out", c[3].Name);
     }
 
     [Fact]
@@ -280,8 +327,9 @@ public class PlanCooldownTests
     {
         var plan = PlanJson.Read(Json)!;
         var uses = new PlannedUses(plan);
-        // The step's time is its first cue's (10): Reprisal at 7, Temperance at 10, Rampart at 14; the second step has none.
-        Assert.Equal(new[] { 7.0, 10, 14, 610 }, uses.All.Select(u => u.At));
+        // The step's time is its first cue's (10): Reprisal at 7, Temperance (and the two with bad numbers) at 10, Rampart at 14;
+        // the second step has none.
+        Assert.Equal(new[] { 7.0, 10, 10, 10, 14, 610 }, uses.All.Select(u => u.At));
         // The MT's Reprisal from 2 s after to 15 s before.
         bool Any(PlanCooldown _) => true;
         Assert.Equal("b", uses.Next("MT", Any, 0)?.Cooldown.Id);
@@ -302,7 +350,8 @@ public class PlanCooldownTests
         var plan = PlanJson.Read(Json)!;
         Assert.Equal("You: Reprisal −3 s", PlannedUses.YouLine(plan.Steps[0], "MT"));
         Assert.Equal("You: Temperance", PlannedUses.YouLine(plan.Steps[0], "H1"));
-        Assert.Null(PlannedUses.YouLine(plan.Steps[0], "R2"));
+        Assert.Equal("You: Bad at", PlannedUses.YouLine(plan.Steps[0], "R2"));
+        Assert.Null(PlannedUses.YouLine(plan.Steps[0], "M2"));
         Assert.Null(PlannedUses.YouLine(plan.Steps[1], "MT"));
         // The callouts' first line carries it; the next ones don't.
         var cp = new CalloutPlan(plan);
@@ -371,5 +420,88 @@ public class GearSummaryTests
         Assert.False(PullSummary.Build(r, phase, isDot: id => id == 1871)["stats"]!["x"]!.AsObject().ContainsKey("ilvl"));
         r.Gear = RecordingTests.SampleGear with { ItemLevel = 0 };
         Assert.False(PullSummary.Build(r, phase, isDot: id => id == 1871)["stats"]!["x"]!.AsObject().ContainsKey("ilvl"));
+    }
+}
+
+/// <summary>0.5.0's review: what the round-six review found and fixed.</summary>
+public class ReviewSixTests
+{
+    private const uint Tank = 1, Healer = 2, Dps = 3, Boss = 900;
+
+    private static PartyState P(uint id, string job, byte role, long hp, long max = 100_000, bool you = false) => new(id, $"Name{id}", job, role, hp, max, true, you);
+
+    private static PartyState[] Party(long healer = 100_000, long healerMax = 100_000, long tank = 100_000, long dps = 100_000) => new[]
+    {
+        P(Tank, "PLD", 1, tank), P(Healer, "WHM", 4, healer, healerMax), P(Dps, "BLM", 3, dps, you: true),
+    };
+
+    private static void Taken(CombatParser p, double t, uint on, long amount, long hp) =>
+        p.Action(CombatParserTests.Batch(t, Boss, 600, 0, (on, new[] { CombatParserTests.E(3, value: (ushort)(amount & 0xFFFF), p3: (byte)(amount >> 16), p4: (byte)(amount > 0xFFFF ? 0x40 : 0)) }, hp, 100_000, false)));
+
+    private static MeterSession New(out CombatParser parser)
+    {
+        var s = new MeterSession(a => $"A{a}", st => $"S{st}") { EndAfter = 4 };
+        parser = CombatParserTests.Parser(out _);
+        parser.Add(s);
+        s.Place(1, 77, "Test Arena");
+        return s;
+    }
+
+    [Fact]
+    public void A_member_whose_HP_isnt_known_stays_as_last_seen()
+    {
+        // A cross-world member out of sight (since 0.5.0) has no HP (max 0): dead, then out of sight, then seen dead again is one death,
+        // not a raise and a second death.
+        var s = New(out var p);
+        s.Frame(0, Party(), true);
+        Taken(p, 0.5, Tank, 30_000, 100_000);
+        s.Frame(1, Party(healer: 0), true);
+        s.Frame(2, Party(healer: 0, healerMax: 0), true);
+        s.Frame(3, Party(healer: 0, healerMax: 0), true);
+        s.Frame(4, Party(healer: 0), true);
+        var e = s.Current!;
+        Assert.Single(e.Deaths);
+        Assert.True(e.Rows.Single(r => r.Slot == "H1").Dead);
+        // Out of sight and dead counts as down: the rest dying is a wipe.
+        s.Frame(5, Party(healer: 0, healerMax: 0, tank: 0, dps: 0), true);
+        Assert.Equal(Outcome.Wipe, s.Current!.Ended);
+        // A new zone forgets who was down: out of sight there, they're taken to be alive.
+        s.Place(2, 78, "Elsewhere");
+        s.Frame(10, Party(healer: 0, healerMax: 0), true);
+        Taken(p, 10.5, Tank, 30_000, 100_000);
+        s.Frame(11, Party(healer: 0, healerMax: 0), true);
+        Assert.False(s.Current!.Rows.Single(r => r.Slot == "H1").Dead);
+        // Never seen: alive, never a death; and, as the recorder tells a wipe, only those whose HP is known count in "everyone's down".
+        var fresh = New(out var q);
+        fresh.Frame(0, Party(healer: 0, healerMax: 0), true);
+        Taken(q, 0.5, Tank, 30_000, 100_000);
+        fresh.Frame(1, Party(healer: 0, healerMax: 0, tank: 0, dps: 0), true);
+        Assert.DoesNotContain(fresh.Current!.Deaths, d => d.Slot == "H1");
+        Assert.False(fresh.Current!.Rows.Single(r => r.Slot == "H1").Dead);
+        Assert.Equal(Outcome.Wipe, fresh.Current!.Ended);
+        // Nobody's HP known: not a wipe.
+        var none = New(out var n);
+        none.Frame(0, Party(), true);
+        Taken(n, 0.5, Tank, 30_000, 100_000);
+        none.Frame(1, new[] { P(Tank, "PLD", 1, 0, 0), P(Dps, "BLM", 3, 0, 0, you: true) }, true);
+        Assert.Null(none.Current!.Ended);
+    }
+
+    [Fact]
+    public void Every_is_due_first_then_once_the_time_has_passed()
+    {
+        // A start of long.MinValue overflowed "now − then" (unchecked): your spot was never read again after the first frame.
+        var every = new Every(1000);
+        var tick = 5_000_000_000L;
+        Assert.True(every.Due(tick));
+        Assert.False(every.Due(tick + 1));
+        Assert.False(every.Due(tick + 999));
+        Assert.True(every.Due(tick + 1000));
+        Assert.False(every.Due(tick + 1500));
+        // The clock going back: due at once.
+        Assert.True(every.Due(tick - 10));
+        every.Reset();
+        Assert.True(every.Due(tick - 5));
+        Assert.True(new Every(1000).Due(0));
     }
 }

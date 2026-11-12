@@ -42,7 +42,8 @@ public sealed record PartyChoice(PartyFrom From, IReadOnlyList<PartySeat> Member
 /// The one rule for who the party is (since 0.5.0), used by everything that reads it (the meter, the recorder and its
 /// parser, the cooldown tracker, the plan window, Home and the roster). Game-free, so it's tested with fakes:
 /// <list type="number">
-/// <item>The game's party list when it has anyone (a normal party; any party in a duty, cross-world or not).</item>
+/// <item>The game's party list when it has anyone (a normal party; any party in a duty, cross-world or not); a member in another
+/// zone (no entity id) keeps their place, known by content id or name.</item>
 /// <item>Else the cross-world party's group you're in (outside a duty the game keeps a cross-world party only there, and the party
 /// list is empty): in an alliance only your own group (the light party, as the party list has it in a duty), in the order the game
 /// lists them. Someone whose entity id the game didn't give is looked for (<c>resolve</c>: the object table, by content id),
@@ -63,14 +64,18 @@ public static class PartyPick
 
     public static bool Valid(uint entityId) => entityId is not (0 or InvalidId);
 
-    /// <param name="list">The party list's members (any with an id that isn't valid are skipped).</param>
+    /// <param name="list">
+    /// The party list's members. One whose entity id isn't valid (a member in another zone: the game gives <see cref="InvalidId"/>) keeps
+    /// their place by content id or name, with entity id 0, as a cross-world member who isn't near does; the list is used when
+    /// anyone in it has a valid id.
+    /// </param>
     /// <param name="cross">The cross-world party as read, or null when it wasn't (or couldn't be) read.</param>
     /// <param name="me">You (null at the title screen).</param>
     /// <param name="resolve">Finds a member the cross-world party gave no entity id for (0 when they aren't near).</param>
     public static PartyChoice Choose(IReadOnlyList<PartySeat> list, CrossWorldRead? cross, PartySeat? me, Func<PartySeat, uint>? resolve = null)
     {
-        var listed = Distinct(list.Where(m => Valid(m.EntityId)));
-        if (listed.Count > 0) return new PartyChoice(PartyFrom.List, listed);
+        if (list.Any(m => Valid(m.EntityId)))
+            return new PartyChoice(PartyFrom.List, Distinct(list.Select(m => Valid(m.EntityId) ? m : m with { EntityId = 0 })));
         var alone = me == null ? Array.Empty<PartySeat>() : new[] { me };
         if (cross == null) return new PartyChoice(PartyFrom.Alone, alone);
         var (group, why) = CrossGroup(cross, me, resolve);

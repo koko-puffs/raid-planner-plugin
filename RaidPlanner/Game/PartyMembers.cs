@@ -98,13 +98,13 @@ public static unsafe class PartyMembers
         return list;
     }
 
-    private static (long At, string? Spot) yourSpot = (long.MinValue, null);
+    private static readonly Every yourSpotEvery = new(1000);
+    private static string? yourSpot;
 
     /// <summary>Your spot now (MT, H1…; the party's spots by <see cref="Roles"/>), read at most once a second; null at the title screen.</summary>
     public static string? YourSpot(GameData data)
     {
-        var tick = Environment.TickCount64;
-        if (tick - yourSpot.At < 1000) return yourSpot.Spot;
+        if (!yourSpotEvery.Due(Environment.TickCount64)) return yourSpot;
         string? spot = null;
         if (Services.Objects.LocalPlayer is { } me)
         {
@@ -118,7 +118,7 @@ public static unsafe class PartyMembers
                 if (who.Key == me.EntityId)
                     spot = slot;
         }
-        yourSpot = (tick, spot);
+        yourSpot = spot;
         return spot;
     }
 
@@ -127,15 +127,19 @@ public static unsafe class PartyMembers
     {
         listBuffer.Clear();
         var i = 0;
+        var listed = false;
         foreach (var m in Services.Party)
         {
-            if (PartyPick.Valid(m.EntityId))
-                listBuffer.Add(new PartySeat(m.EntityId, m.ContentId, m.Name.TextValue, m.ClassJob.RowId, m.Level, (ushort)m.World.RowId, 0, i));
+            // A member in another zone has no entity id (the game's InvalidId): kept by content id and name (their place, their
+            // spot, the roster), as before 0.5.0 everything but the meter and the tracker kept them.
+            if (PartyPick.Valid(m.EntityId) || m.ContentId != 0)
+                listBuffer.Add(new PartySeat(m.EntityId, (ulong)m.ContentId, m.Name.TextValue, m.ClassJob.RowId, m.Level, (ushort)m.World.RowId, 0, i));
+            listed |= PartyPick.Valid(m.EntityId);
             i++;
         }
         var self = new PartySeat(me.EntityId, ContentIdOf(me.Address), me.Name.TextValue, me.ClassJob.RowId, me.Level);
-        // The cross-world party only when the party list is empty (it's the list's otherwise, even in a duty).
-        var cross = listBuffer.Count == 0 ? ReadCrossWorld() : null;
+        // The cross-world party only when the party list has nobody (it's the list's otherwise, even in a duty).
+        var cross = listed ? null : ReadCrossWorld();
         choice = PartyPick.Choose(listBuffer, cross, self, Resolve);
         members.Clear();
         foreach (var s in choice.Members)
@@ -242,7 +246,8 @@ public static unsafe class PartyMembers
         frame = default;
         nextSeats = 0;
         Diagnostics = null;
-        yourSpot = (long.MinValue, null);
+        yourSpot = null;
+        yourSpotEvery.Reset();
         lastLogged = string.Empty;
         loggedWhileOn = false;
     }

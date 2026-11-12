@@ -51,6 +51,13 @@ public sealed class PlanWindow : Window
 
         /// <summary>The step's planned cooldowns (since 0.5.0), in the order they go.</summary>
         public required IReadOnlyList<PlanCooldown> Cooldowns;
+
+        /// <summary>The smallest window's one line for a spot (<see cref="SmallFor"/>), and its tooltip; made again when your spot changes.</summary>
+        public string? SmallFor;
+        public string? SmallLine;
+        public string? CooldownsTip;
+        public string? SmallMore;
+        public int SmallMoreCount;
         public string? Hidden;
         public List<string> Lines = new();
         public float LinesWidth = -1;
@@ -258,7 +265,9 @@ public sealed class PlanWindow : Window
         if (v.Cooldowns.Count > 0)
         {
             y += S(small ? 6 : 10);
-            y += Cooldowns(v, left, y, w, small);
+            // As many rows as leave the board its least (110) above the footer: fewer (the last "+3 more"), else the one line.
+            var fit = small ? 0 : (int)MathF.Floor((bottom - S(HSm) - S(8) - S(110) - S(10) - y) / S(20));
+            y += Cooldowns(v, left, y, w, Math.Min(CooldownRows, fit));
         }
 
         // The footer: previous, where you are, next. At its smallest there's none (as the mock-up draws
@@ -315,21 +324,28 @@ public sealed class PlanWindow : Window
     /// <summary>
     /// The step's planned cooldowns (since 0.5.0): a row each (20 tall), the spot in its role's colour, the action, its time off the
     /// step's ("−3 s") in mono, its note muted; yours washed in ember. Four at most (the fourth "+3 more" past that, every one in its
-    /// tooltip). At its smallest, one line: yours ("You: Reprisal"), else how many. Returns the height used.
+    /// tooltip); fewer when the window is short (<paramref name="rows"/>). At its smallest, or with room for under two rows, one
+    /// line: yours ("You: Reprisal"), else how many. Returns the height used.
     /// </summary>
-    private float Cooldowns(StepView v, float left, float y, float w, bool small)
+    private float Cooldowns(StepView v, float left, float y, float w, int rows)
     {
         var dl = Kit.Dl;
         var you = You();
         var lh = S(20);
-        if (small)
+        if (rows < 2)
         {
-            var line = PlannedUses.YouLine(v.Plan.Steps[v.Step], you) ?? (v.Cooldowns.Count == 1 ? "1 cooldown planned" : $"{v.Cooldowns.Count} cooldowns planned");
+            // Made once a step and spot, not each frame.
+            if (v.SmallLine == null || v.SmallFor != you)
+            {
+                v.SmallFor = you;
+                v.SmallLine = PlannedUses.YouLine(v.Plan.Steps[v.Step], you) ?? (v.Cooldowns.Count == 1 ? "1 cooldown planned" : $"{v.Cooldowns.Count} cooldowns planned");
+            }
+            var line = v.SmallLine;
             Txt.Line(dl, new Vector2(left, y), Txt.Fit(line, Face.Sans, 13, w), Face.Sans, 13, line.StartsWith("You:", StringComparison.Ordinal) ? Palette.White : Palette.Muted, 20);
-            if (Kit.Pointed(new Vector2(left, y), new Vector2(left + w, y + lh))) Kit.Tooltip(CooldownsTip(v.Cooldowns));
+            if (Kit.Pointed(new Vector2(left, y), new Vector2(left + w, y + lh))) Kit.Tooltip(v.CooldownsTip ??= CooldownsTip(v.Cooldowns));
             return lh;
         }
-        var shown = v.Cooldowns.Count <= CooldownRows ? v.Cooldowns.Count : CooldownRows - 1;
+        var shown = v.Cooldowns.Count <= rows ? v.Cooldowns.Count : rows - 1;
         for (var i = 0; i < shown; i++)
         {
             var c = v.Cooldowns[i];
@@ -348,9 +364,15 @@ public sealed class PlanWindow : Window
         if (shown < v.Cooldowns.Count)
         {
             var top = y + lh * shown;
-            var more = $"+{v.Cooldowns.Count - shown} more";
-            Txt.Line(dl, new Vector2(left + S(16 + 8), top), more, Face.Sans, 12, Palette.Muted, 20);
-            if (Kit.Pointed(new Vector2(left, top), new Vector2(left + w, top + lh))) Kit.Tooltip(CooldownsTip(v.Cooldowns));
+            // "+3 more", made again only when the count left over changes (the window made shorter or taller).
+            var more = v.Cooldowns.Count - shown;
+            if (v.SmallMore == null || v.SmallMoreCount != more)
+            {
+                v.SmallMoreCount = more;
+                v.SmallMore = $"+{more} more";
+            }
+            Txt.Line(dl, new Vector2(left + S(16 + 8), top), v.SmallMore, Face.Sans, 12, Palette.Muted, 20);
+            if (Kit.Pointed(new Vector2(left, top), new Vector2(left + w, top + lh))) Kit.Tooltip(v.CooldownsTip ??= CooldownsTip(v.Cooldowns));
             shown++;
         }
         return lh * shown;
