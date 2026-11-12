@@ -14,8 +14,10 @@ Record the fights you're in, then make them into plans on
   clear, or combat simply over): the bosses' casts and where they were aimed, where each attack
   landed and whom it hit (which tells a stack from a spread), head markers, tethers, waymarks, the
   arena changing, and where the bosses and (if you like) your party stood; how much each hit did
-  and everyone's HP, and your party's own hits, heals and buffs, for the site's numbers. Names are
-  never kept, only jobs.
+  and everyone's HP, and your party's own hits, heals and buffs, for the site's numbers; every action
+  and potion your party used (the moments before the pull too), raises, interrupts and stuns, whom the
+  boss was on and its enmity list, MP, barriers and the limit break gauge, for the site's replay,
+  timelines and events. Names are never kept, only jobs.
 - **Sends a pull to the Raid Planner** with one press, once you've linked your account. It waits
   on the planner's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.

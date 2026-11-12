@@ -87,6 +87,8 @@ public sealed class GameData
     /// </summary>
     public unsafe (float Recast, int Charges)? OwnRecast(uint id)
     {
+        // Only with a character in the world (a pull kept at the title screen, as you log out, asks nothing of the game).
+        if (!Services.ClientState.IsLoggedIn || Services.Objects.LocalPlayer == null) return null;
         try
         {
             var ms = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id, true);

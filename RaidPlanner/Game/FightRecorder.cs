@@ -591,7 +591,9 @@ public sealed unsafe class FightRecorder : IDisposable
         current = null;
         followOnly = false;
         Combat.Remove(sink);
-        hooks.Set(MeterWants);
+        hooks.Set(MeterWants || prePullOn || WantedByOthers());
+        // The uses kept before the next pull start from here (none of this one's).
+        prePull.Clear();
         if (b == null) return;
         Tell(PullEnded);
         var t = Elapsed;

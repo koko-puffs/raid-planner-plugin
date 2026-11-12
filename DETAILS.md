@@ -158,9 +158,69 @@ each with the HP before it the hook read (a HoT's target's, a party member's);
 `cast`, the party's casts; `st`, the statuses the party put on anyone (buffs, DoTs, Reprisal on the
 boss). About 15 to 25 KB a minute in an eight-player raid.
 
-At most 20,000 events and 4,800 frames are kept. A typical 20-minute pull is about 1.4 MB, and
-about as much again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned
-(see Sending).
+**Since 0.4.0** (the site's contract, round four; every reading of the game that hasn't been checked
+in game yet is marked [verify] in its code comment and listed under _Not yet_):
+
+- **Every action and item the party uses** (`combat.use`): the parser hands on each party member's
+  (or their pet's) action as it goes off, whatever it did, with its first target, how many targets it
+  had and flags from its effects (1 a pet's, 2 an item, 4 a limit break, 8 it interrupted a target's
+  cast: effect 76, 16 a target resisted a status it carries: effect 55, 32 it missed every target:
+  only effects 1, 2 or 7, 64 no target, 128 a provoke: effect 24, 256 the healers' limit break 3
+  raising: effect 50). Auto-attacks (ActionCategory 1) are left out (they're `fx` already). An item
+  (the effect header's action type 2 [verify for others' items], its id +1,000,000 when high quality
+  [verify]) is a use and nothing else; the items' names and icons are kept (`combat.items`). An action
+  resolved in two messages (the same global sequence) is one use. A ground-placed action (the Action
+  sheet's TargetArea: Sacred Soil, Asylum, Earthly Star, Doton…) is also an `area` row with where the
+  hook says it was put.
+- **Before the pull** (`combat.pre`, `combat.cd`): out of combat in a duty a pull would be recorded in,
+  the hooks stay on and the party's uses of the last 30 seconds are kept (`Core/Meter/CastWatch.cs`'s
+  `PrePull`), with the game's countdown (`AgentCountDownSettingDialog`: `Active`, `TimeRemaining`;
+  `CountdownWatch`). At the pull's start they're copied in: the uses with their times before it
+  (negative), and the countdown that reached (or would reach) zero within 30 seconds of the start, its
+  length and how late the pull began after zero (negative: before). Both are let go of on a new zone.
+  A pull only followed keeps nothing.
+- **Casts stopped** (actor control 15 [verify that its fourth argument 1 is interrupted]): a party
+  member's cast still waiting gets its `why` (1 cancelled, 2 interrupted) and is cancelled; an enemy's
+  cast the recording holds, said stopped before a quarter second from its end (the game says it on
+  some casts that went off), is a `cancel` event, credited when interrupted to the party member whose
+  action carried the interrupt effect on that enemy in the second before, else whose Interject, Head
+  Graze, Low Blow or Leg Sweep hit it then (`CastWatch`; by English name). An enemy's cast says whether
+  it can be interrupted (`CastInfo.Interruptible`: `int`).
+- **Raises**: a dead member's HP above 0 again is a `raise` event, at that frame (when they accepted),
+  credited to the Raise status put on them since they died (its source and time [verify that the
+  raiser is its source]), else the healers' limit break 3 (`lb`), else the last raise (Raise,
+  Resurrection, Ascend, Verraise, Egeiro) used on them while down; else no one. Weakness and Brink of
+  Death are recorded as statuses already (a `status` event from no one, or a party `st` row).
+- **The enemies' targets**: each targetable enemy's target (its `TargetObjectId`) each frame, an
+  `aggro` event when it changed (0 none, or someone not in the recording).
+- **The enmity list**, once a second: the recording player's target's list (`UIState.Hate`, the
+  party members on it, each a % of the top [verify]), a `hate` row for a member whose place changed or
+  whose % moved 5 or more, −1 for one who left it; only for a target in the recording.
+- **MP and barriers** (`res`): each party member's `Mana` and `ShieldValue` (% of max HP), a row the
+  first time, then when MP moved 500 or the barrier changed, at most every half second each.
+- **The limit break gauge** (`lb`): `LimitBreakController`'s units and bars × units a bar [verify], a
+  row on change.
+- **Head signs**, once a second with the waymarks (`MarkingController.Markers`, 17 slots [verify their
+  order]): a `signs` event when any changed.
+- **Each enemy hit's targets**: their barrier before it (`sh`) and where they stood as it arrived
+  (`px`, `pz`), read with their HP; and the hit's flags 256 (knocked back or drawn in: effects 31–36),
+  512 (partly absorbed: a damage effect's `Param4` & 4 [verify]) and 1024 (a status it carries
+  resisted: effect 55). **Fixed**: until 0.4.0 effect 55 was read as "fully resisted" (16), so a hit
+  that did damage and had its stun resisted counted as not landed; it's 1024 now, and 16 is only the
+  game's full resist (effect 2).
+- **A damage effect's bonus %** (`fx.b`: its `Param2`, the battle log's "(+61%)", signed), what the
+  site tells a missed positional by; and each action's cooldown groups, charges and ground placement,
+  each status's category and whether it can be cleansed (from the sheets), and for the recording
+  player's own non-GCD actions their recast as the game works it out (`ActionManager.GetAdjustedRecastTime`
+  and `GetMaxCharges` [verify: milliseconds; traits at the synced level]), asked as the pull is kept.
+- **The recording player's spot** (`party[].self`).
+
+About 13 to 20 KB a minute more in an eight-player raid. The hooks' detours never throw into the game:
+everything they do is caught and logged at most every 10 seconds.
+
+At most 20,000 events and 4,800 frames are kept (9,600 at four a second: Settings → Recording →
+_Smoother replays_, since 0.4.0; off). A typical 20-minute pull is about 1.4 MB, and about as much
+again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
 
 ## The file (`Core/Recording.cs`)
 
@@ -210,9 +270,30 @@ when it has nothing, so older readers read on as before):
   member's; −1 otherwise); `x` 1 for a cast cancelled; `gain` 1 or 0. A table dropped to fit the
   site's limit is left out and named in `thinned`.
 
+Since 0.4.0 (round four, the site's contract §3; still version 1, no new top-level key, every key
+optional; `combat.v` stays 1):
+
+- Events: `{ "k": "cancel", "t", "src": actorId, "action", "int"?: true, "by"?: partyId, "with"?: actionId }`;
+  `{ "k": "raise", "t", "who": partyId, "by": partyId | 0, "at"?: seconds, "lb"?: true }`;
+  `{ "k": "aggro", "t", "actor": actorId, "on": partyId | actorId | 0 }`;
+  `{ "k": "signs", "t", "marks": { "<0–16>": partyId | actorId } }` (all signs as they now are).
+- `cast` (an enemy's): `int: true` when it can be interrupted.
+- `hit`: `sh` (barrier % before, −1 unknown), `px`, `pz` (two decimals; null unknown), each as long
+  as `tgts`; `fx` bits 256, 512, 1024 (above).
+- `party[].self: true` (the recording player's spot); `actions{}`: `cdg`, `cdg2` (cooldown groups; 58
+  the GCD's), `charges` (more than 1), `rc` (the recording player's own recast, seconds), `area: true`;
+  `statuses{}`: `cat` (1 beneficial, 2 detrimental), `dispel: true`.
+- `combat`: `fx.b` (bonus %, 0 default) and `cast.why` (0, 1 cancelled, 2 interrupted), optional
+  columns; new tables `use { t, src, a, tgt, n, f }`, `area { t, src, a, x, z }`, `hate { t, on, who,
+  pct }`, `res { t, id, mp, sh }`, `lb { t, v, max }`, `pre { from: 30, t, src, a, tgt, f }` (its deltas
+  count from `from` seconds before the start: a row's time is the sum / 100 − `from`), `cd { len, end }`
+  and `items { "<id as sent>": { name, icon, hq } }`; `thinned` can name `hate`, `res`, `area`, `cast`,
+  `use`, `tick`. A combat block read from an older file (none of the new tables) is written back
+  without them (`CombatLog.Extended`), so it never seems to say its party used nothing.
+
 `Recording.Parse` reads all of it back leniently: a hit's lists not as long as its targets, or a
-combat table whose columns aren't all arrays of the same length, are left out; a value that isn't a
-number reads as 0; a delta below 0 as 0.
+combat table whose columns aren't all arrays of the same length, are left out; an optional column not
+as long as its table reads as its default; a value that isn't a number reads as 0; a delta below 0 as 0.
 
 ## Kept pulls (`Core/RecordingStore.cs`)
 
@@ -270,10 +351,15 @@ any other message (the database's own) isn't shown, only a word on what happened
 
 The site takes 5 MB since 0.3.0 (3 MB before; its migration raised it for the combat block),
 counted as the database writes the JSON out (`SiteLink.ServerSize`: a space after every colon and
-comma, about a sixth more than the file). A pull bigger than that is sent with its places kept less
-often (every second, then every two, then four), then the enemies' places only, then none; then
-without the combat block's casts, then without its ticks too (never its effects or statuses), the
-block saying what it lost (`combat.thinned`); and the window says it was thinned. The file itself
+comma, about a sixth more than the file). A pull bigger than that is thinned, each step only while
+it's still too big (0.4.0's order): (1) a file with four frames a second down to two; (2) the combat
+block's enmity list (`hate`); (3) its MP and barriers (`res`); (4) the places kept less often (every
+second, then every two, then four), then the enemies' places only at those steps, then none; (5) its
+ground placements (`area`); (6) the party's casts (`cast`); (7) what the party used (`use`); (8) the
+ticks (`tick`). Never the effects (`fx`, with their bonus %), statuses, gauge, pre-pull, countdown,
+items or events. Frames are thinned by time (a frame kept as it crosses each step: `SiteLink.ByTime`),
+not by count; an empty table isn't dropped. The block says what it lost (`combat.thinned`); and the
+window says it was thinned. The file itself
 is left whole, and goes into the request as it's written (checked as it's copied, never read into a
 tree of nodes: a big pull's would be a hundred MB for the game's process to collect). Each
 send carries the pull's own id (`p_client_id`, from its file and when it was recorded), so a send
@@ -326,6 +412,18 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   (`GameData.FailKinds`: every row named exactly "Damage Down" or "Vulnerability Up", as the site's
   `model/debuffs.ts` lists them; "Physical Vulnerability Up" and "Magic Vulnerability Up" aren't
   failures: tankbusters put them on the tanks on purpose).
+- Since 0.4.0 (`PullStats.Extras`), each `slots` entry also, each left out when 0: `self: true` (the
+  recording player's spot), `gcds` (their GCDs used: actions whose cooldown group, or additional one,
+  is the GCD's, 58; their pets' not), `pots` (items used, before the pull too), `raises` (raise events
+  they're credited with), `raised` (raised), `dead` (seconds dead, one decimal: from each death not the
+  wipe's to their raise, or to the fight's end, `len`'s end), `ints` (enemy casts they're credited with
+  interrupting). And two new keys (the site's `…_rp_round_four` migration accepts them): `ph`, the damage
+  by phase, `[[start, d0, d1, …], …]` aligned with `phases` (≤ 50; each `slots` entry's damage in it, pets
+  and DoTs in, the limit break out: each spot's adds up to its `dmg`); `x`, small extras (≤ 2 KB):
+  `int` `[interrupted, interruptible casts]`, `swaps` (tank swaps on the bosses: their targets as spans,
+  those of a second or more on a tank and not inside one of their casts aimed at that tank; one tank's
+  after another's is a swap: `PullStats.TankSwaps`), `lbUses` (`[deciseconds, action]`, the first 10)
+  and `cd` (the countdown's `end`). Over 6 KB: the hits go first, then the debuffs, then `ph`, then `x`.
 
 The site reads these as the meter means them, and works the same numbers out from the pull's
 recording by the same rules (Review); `AlignmentTests` (`RaidPlanner.Tests/AlignmentTests.cs`) plays
@@ -335,7 +433,13 @@ bleed, an instant death and a wipe) through the plugin as the game does (the gam
 the combat parser, the meter's session and the recording's `RecordingSink` listening, the game's
 status lists read each frame for the recording and the parser alike), checks that the meter after
 the fight reads as the summary (every spot's damage, healing, overheal, taken, deaths, crit and
-direct hit rates, active time, ENCDPS, HPS and DPS, the limit break, the length and the deaths) and,
+direct hit rates, active time, ENCDPS, HPS and DPS, the limit break, the length and the deaths; since
+0.4.0 also GCDs, potions (the summary's less those before the pull, which no encounter has), raises
+given and taken, time dead and interrupts; the pull now also has uses before it and the countdown, an
+interrupt credited and an interruptible cast that went off, a stun resisted and one landed, a provoke
+and a tank swap, a non-tank holding the boss, the BRD raised and dying again with Weakness, potions,
+the gauge, the enmity list, MP and barriers, signs, knockbacks, an absorbed buster and bonus %; the
+meter's numbers file has the new counts, the deaths' raises and the Events tab's list) and,
 with `RP_ALIGN_OUT` set to the site's `src/features/raid-planner/model/__fixtures__` folder, writes
 the recording, its summary and the meter's numbers there (`align.raidrec.json`, `align.summary.json`,
 `align.meter.json`) for the site's `alignment.spec.ts`, which checks the meter's, Review's and
@@ -723,6 +827,24 @@ party's row is the sum of the rows, the limit break's included):
   line of their own (named by the action that put it on, else its status; marked estimated when any
   was shared out), with hits, crit and direct hit rates (none for ticks), and the biggest.
 
+**Since 0.4.0** the session also takes what the party used (`ICombatSink.Use`; the parser hands a use
+on after its effects, so an encounter its first hit starts has begun, and the meter folds in uses from
+the second before as it does effects), and the game side tells it more (below). For each member:
+**Casts** (GCDs used: `CombatKinds.Gcd`, the cooldown groups; pets' not), **Potions** (items used in the
+encounter), **Raises given** and **Raised** (a dead member's HP above 0 again, credited to the last raise
+used on them while down, or the healers' limit break 3 on everyone down then), **Time dead** (each death
+not the wipe's to when they were up, or the encounter's end), **Interrupts** (an enemy's cast the game
+said was interrupted, credited as the recording credits it: `CastWatch`). Each death carries when they
+were up again and who raised them, and whether Weakness or Brink of Death was on them. And the
+encounter's **events** (`IMeterSource.Events`, the first 200, oldest first; their text has names, so it
+stays in the game): deaths (the wipe's said so), raises, interrupts, interruptible casts that went off (a
+quarter second past their end with no word of them stopping), stuns, sleeps, binds, heavies and silences
+put on an enemy (a status-only effect: one that came with damage isn't seen), a status resisted, potions,
+limit breaks, tank swaps (a boss's target held a second or more by a tank after another tank, not as its
+cast's target) and a non-tank holding a boss (said when it moves off, with how long). **The limit break
+gauge** (`IMeterSource.LimitBreak`): bars full, the bars there are, the units in the one filling, units a
+bar; none outside a party that fills one.
+
 **Phases**: the recording's rule (`PhaseClock`): four times a second during an encounter the enemies'
 targetability is read (in a duty every enemy, outside or in a field zone only those the party has
 fought), and a new phase begins when every enemy that had been targetable was gone 8 seconds or
@@ -740,8 +862,12 @@ why (`IMeterSource.Problem`): the game has moved something it reads.
 **The game side** (`Game/CombatMeter.cs`): with _Show the meter_ on (in duties, or everywhere), it
 listens to the parser and asks the recorder to keep the hooks on; each frame it tells the session the
 zone, the recorder's pull, the party (names read once each and kept only in the plugin; HP from the
-party list; in combat from the game's own look-up) and whether anyone's in combat. Reading the game
-costs little: no allocation per message on the hot path (a test reads an eight-target action twenty
+party list; in combat from the game's own look-up) and whether anyone's in combat. Since 0.4.0 also
+each frame the limit break gauge (`LimitBreakController`) and, during an encounter, which party members
+carry Weakness or Brink of Death (their status lists); four times a second with the targetability, the
+enemies' casts (and whether they can be interrupted) and the bosses' targets (the enemies with half the
+biggest's max HP or more; whether they're casting at that one); and every cast the game says stopped
+(`FightRecorder.CastStopped`, recorded pull or not). Reading the game costs little: no allocation per message on the hot path (a test reads an eight-target action twenty
 thousand times and allocates nothing), the object table only four times a second during an encounter.
 
 ## The meter's windows (`UI/MeterWindow.cs`, `UI/MeterDetailWindow.cs`)
@@ -1035,7 +1161,9 @@ RaidPlanner/
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
               plans (Plan, CueFollower), pull summaries and their numbers (PullSummary, PullStats)
               and the roster; Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
-              phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel)
+              phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
+              which is which (CombatLists, CombatKinds), who interrupted, the moments before a pull
+              and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
               in the game (PlanService), summaries and the roster (Uploads)
   UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
@@ -1113,6 +1241,21 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`) shows or hides the party cooldown 
   healed is left out, an ally healed is healing), an element-absorbing enemy in Eureka healed by a hit
   (left out, the meter going on), and a death to a big hit with a bleed ticking just after it (the
   hit is the cause, in the recording and the meter's recap).
+- The round-four recording (0.4.0) wants checking in the game (with BossMod's replay or ACT beside it):
+  other members' items arriving as action messages with action type 2, and a high-quality one's id
+  +1,000,000; actor control 15's fourth argument 1 meaning interrupted, and the "sent on completion"
+  case kept out by the quarter second before the bar's end; Interject carrying effect 76 and Low Blow on
+  an immune boss carrying 55 with value 2; the Raise status on the dead member with the raiser as its
+  source; Weakness's and Brink of Death's source (no one, or the member); `UIState.Hate`'s `Enmity` as
+  0–100 of the top, for your target only; `LimitBreakController`'s `BarCount × BarUnits` as the most and
+  `CurrentUnits` as the gauge's total (10,000 a bar); knockback effects (31–36) absent under Arm's Length
+  or Surecast, and a damage effect's `Param4` & 4 meaning partly absorbed; `GetAdjustedRecastTime` in
+  milliseconds with traits at the synced level and `GetMaxCharges(id, 0)`; `MarkingController.Markers`'
+  order (attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8); the hooks on out
+  of combat in a recorded duty costing nothing noticeable, and the pre-pull rows and countdown appearing;
+  the hook's target position for ground actions; a damage effect's `Param2` matching the battle log's
+  bonus %; the enemies' `TargetObjectId` as their target; the countdown agent's first reading (its
+  length rounded up).
 - Summaries waiting to be sent are lost when the game closes.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
@@ -1144,6 +1287,21 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`) shows or hides the party cooldown 
 - Settings → Recording → _Smoother replays_ (under _Record where the party stands_): places four times
   a second.
 - The meter's sample fight has events, a gauge and the new numbers too.
+- **Recorded too** (the site's contract, round four; every new key optional, format still version 1):
+  every action and item the party uses (and those in the 30 seconds before the pull, with the
+  countdown), ground placements, enemy casts stopped and who interrupted them, whether a cast could be
+  interrupted, raises (who, when it landed, the healers' limit break 3), the enemies' targets, your
+  target's enmity list, the party's MP and barriers, the limit break gauge, head signs, each enemy hit's
+  barriers and where its targets stood, knockbacks, absorbed hits, a status resisted, a hit's bonus %
+  (positionals), why a party cast stopped, the actions' cooldown groups and charges, your own recasts,
+  the statuses' categories, and your spot. About 13–20 KB a minute more.
+- **The summary** carries each spot's GCDs, potions, raises given and taken, time dead and interrupts,
+  the damage by phase (`ph`) and a few extras (`x`: interrupts of interruptible casts, tank swaps, limit
+  breaks, the countdown).
+- **Sending a big pull** thins it in a new order: four frames a second to two, then the enmity list
+  and MP, then the frames as before, then ground placements, casts, uses, ticks (frames by time now).
+- **Fixed**: a hit that did damage and had a status resisted (a stun on a boss immune to it) counted as
+  not landed (the game's "status resisted" was read as "fully resisted").
 
 ### 0.3.1
 

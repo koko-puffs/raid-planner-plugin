@@ -466,7 +466,7 @@ public class AlignmentTests
         // The BLM's view of the boss's enmity list (its target), MP, the gauge.
         (int, int)[] HateOn(double t) => t < 27.5 ? new[] { (Pld, 100), (War, 60), (Blm, 35) } : new[] { (War, 100), (Pld, 92), (Blm, 40) };
         int Mp(int who, double t) => who == Whm ? Math.Max(2_000, 10_000 - 300 * (int)(t / 3)) : who == Blm ? Math.Max(0, 10_000 - 160 * (int)t) : 10_000;
-        int Gauge(double t) => t < 38 ? (int)Math.Min(30_000, 1_000 + t * 700) : (int)Math.Min(30_000, (t - 38) * 500);
+        int Gauge(double t) => t < 38 ? (int)Math.Min(30_000, 1_000 + t * 800) : (int)Math.Min(30_000, (t - 38) * 500);
 
         for (var step = 0; step <= 950; step++)
         {
@@ -727,12 +727,12 @@ public class AlignmentTests
         Assert.Equal((59.0, "H2"), (m.Deaths[0].RaisedAt!.Value, m.Deaths[0].RaisedBy!));
         Assert.True(m.Deaths[7].HadWeakness);
         Assert.False(m.Deaths[0].HadWeakness);
-        // The events: the interrupt (the WAR's), the chant that went off, the Low Blow resisted, the Leg Sweep's stun, the
-        // potion, the tank swap (MT to OT), the WHM holding the boss, the limit break, the raise.
+        // The events: the interrupt (the WAR's), the Low Blow resisted, the potion, the Leg Sweep's stun, the chant that
+        // went off (the same moment: its end), the tank swap (MT to OT), the WHM holding the boss, the limit break, the raise.
         var events = played.Session.Events(m.Id);
         Assert.Equal(new[]
         {
-            MeterEventKind.Interrupt, MeterEventKind.Resisted, MeterEventKind.Potion, MeterEventKind.CastWentOff, MeterEventKind.Stun,
+            MeterEventKind.Interrupt, MeterEventKind.Resisted, MeterEventKind.Potion, MeterEventKind.Stun, MeterEventKind.CastWentOff,
             MeterEventKind.TankSwap, MeterEventKind.AggroLost, MeterEventKind.LimitBreak, MeterEventKind.Death, MeterEventKind.Raise,
             MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death,
             MeterEventKind.Death, MeterEventKind.Death,

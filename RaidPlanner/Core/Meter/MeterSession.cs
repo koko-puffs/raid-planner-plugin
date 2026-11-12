@@ -589,6 +589,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         private readonly Dictionary<uint, (double T, uint Action, double End, bool Interruptible)> casts = new();
         private readonly CastWatch interrupts = new();
         private readonly Dictionary<uint, (uint On, double Since, bool CastTarget, bool Judged, Member? Held)> aggro = new();
+        private readonly List<uint> judging = new();
         private IReadOnlyList<MeterEvent>? eventList;
         private int eventCount = -1;
 
@@ -777,8 +778,12 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         /// <summary>Each frame: the bosses' spans held long enough, and the interruptible casts that went off.</summary>
         public void Watch(double t, MeterSession s)
         {
-            foreach (var (enemy, a) in aggro.ToList())
-                if (!a.Judged) Judge(enemy, a, t, false);
+            // The keys copied first (Judge writes back), into a list kept for it: nothing made each frame.
+            judging.Clear();
+            foreach (var (enemy, a) in aggro)
+                if (!a.Judged && !a.CastTarget && t - a.Since >= PullStats.AggroSpan)
+                    judging.Add(enemy);
+            foreach (var enemy in judging) Judge(enemy, aggro[enemy], t, false);
             if (casts.Count == 0) return;
             List<uint>? done = null;
             foreach (var (enemy, c) in casts)
