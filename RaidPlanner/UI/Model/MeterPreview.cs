@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Diagnostics;
 using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
@@ -167,12 +168,19 @@ public sealed class MeterPreview : IMeterSource
         Ev(209.4, MeterEventKind.Death, 6, "MT", "Koko died to Starfall (the wipe)"),
     };
 
-    /// <summary>An earlier pull's events: Odette raised by Sylvie.</summary>
+    /// <summary>An earlier pull's events: the DPS's tinctures at the pull and at 2:00 (as its table counts them), Odette raised by Sylvie.</summary>
     private static readonly MeterEvent[] StillScript =
     {
         Ev(0.8, MeterEventKind.Potion, 1, "M1", "Rook used Grade 2 Gemdraught of Strength"),
+        Ev(0.9, MeterEventKind.Potion, 3, "M2", "Tamsin used Grade 2 Gemdraught of Dexterity"),
+        Ev(1.1, MeterEventKind.Potion, 4, "R1", "Fenn used Grade 2 Gemdraught of Dexterity"),
+        Ev(1.3, MeterEventKind.Potion, 2, "R2", "Ilya used Grade 2 Gemdraught of Intelligence"),
         Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance"),
         Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Dark Spike"),
+        Ev(120.5, MeterEventKind.Potion, 1, "M1", "Rook used Grade 2 Gemdraught of Strength"),
+        Ev(120.7, MeterEventKind.Potion, 3, "M2", "Tamsin used Grade 2 Gemdraught of Dexterity"),
+        Ev(121.0, MeterEventKind.Potion, 4, "R1", "Fenn used Grade 2 Gemdraught of Dexterity"),
+        Ev(121.2, MeterEventKind.Potion, 2, "R2", "Ilya used Grade 2 Gemdraught of Intelligence"),
         Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare"),
         Ev(180.4, MeterEventKind.Raise, 8, "H2", "Odette was raised by Sylvie", 7, "H1"),
     };
@@ -381,10 +389,10 @@ public sealed class MeterPreview : IMeterSource
     }
 
     /// <summary>The tinctures a player had used by second <paramref name="t"/> (the script's).</summary>
-    private static int PotionsBy(int id, double t)
+    private static int PotionsBy(int id, double t, bool still = false)
     {
         var n = 0;
-        foreach (var ev in Script)
+        foreach (var ev in still ? StillScript : Script)
             if (ev.Kind == MeterEventKind.Potion && ev.PartyId == id && ev.At <= t)
                 n++;
         return n;
@@ -459,7 +467,7 @@ public sealed class MeterPreview : IMeterSource
         var total = new MeterRow(0, string.Empty, "Party", string.Empty, string.Empty, false, false, damage, damage / Ref, damage / Ref, 1, 0.28, 0.4,
             LimitBreakDamage, "Bladedance", 3707310, 1200000, 19410, 0.3, 1, 0.2, 40000, taken, taken / duration, 1, 104880, 1, false, null, duration);
         // Odette was raised in the earlier pulls that lasted long enough (by Sylvie, H1, nine seconds after she died).
-        var raised = duration > 181;
+        var raised = duration >= 180.4;
         var deaths = new List<DeathEntry> { raised ? Deaths[0] with { RaisedAt = 180.4, RaisedBy = "H1" } : Deaths[0] };
         for (var i = 0; i < rows.Count; i++)
         {
@@ -468,7 +476,7 @@ public sealed class MeterPreview : IMeterSource
             rows[i] = r with
             {
                 Casts = (int)(duration / 2.45),
-                Potions = r.Role == "dps" ? 2 : 0,
+                Potions = PotionsBy(r.PartyId, duration, true),
                 Interrupts = r.Slot == "OT" ? 1 : 0,
                 RaisesGiven = raised && r.Slot == "H1" ? 1 : 0,
                 Raised = raised && r.Slot == "H2" ? 1 : 0,
@@ -478,7 +486,7 @@ public sealed class MeterPreview : IMeterSource
         }
         total = total with
         {
-            Casts = (int)(duration / 2.45) * 8, Potions = 8, Interrupts = 1, RaisesGiven = raised ? 1 : 0, Raised = raised ? 1 : 0,
+            Casts = (int)(duration / 2.45) * 8, Potions = rows.Sum(r => r.Potions), Interrupts = 1, RaisesGiven = raised ? 1 : 0, Raised = raised ? 1 : 0,
             DeadSeconds = raised ? 9.1 : duration - 171.3,
         };
         return new MeterEncounter(pull, pull, "Example Arena", 1, ago, duration, false, Outcome.Wipe, duration, "P2", 150, rows, total, deaths);

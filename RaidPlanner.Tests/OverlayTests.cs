@@ -173,6 +173,74 @@ public class CooldownTests
         Assert.Contains("taken to be ready", CooldownView.Tip(line with { Seen = false }));
     }
 
+    private static ActionRowInfo Row(uint id, string name, bool player, uint category, int level, double recast, bool pvp = false) =>
+        new(id, name, player, pvp, category, level, id, recast, 1, category is >= 113 and <= 120);
+
+    [Fact]
+    public void Each_cooldowns_rows_are_found_on_the_sheet_and_one_stands_for_it()
+    {
+        // Rows as the game's Action sheet has them (Nov 2026).
+        var m = CooldownCatalog.Match(new[]
+        {
+            Row(805, "Fey Illumination", false, 29, 40, 0), // the fairy's own: left out (an echo a moment later would teach a short recast)
+            Row(2248, "Mug", true, 93, 15, 120),
+            Row(7560, "Addle", true, 116, 8, 90),
+            Row(16538, "Fey Illumination", true, 29, 40, 120),
+            Row(17686, "Addle", true, 0, 0, 30), // another content's Addle: counted, but the job's stands for it
+            Row(25862, "Liturgy of the Bell", true, 25, 90, 180),
+            Row(28509, "Liturgy of the Bell", false, 25, 90, 1), // the bell going off: left out
+            Row(29000, "Addle", true, 0, 0, 30, pvp: true),
+            Row(34675, "Starry Muse", false, 197, 70, 120), // placed through Scenic Muse: not the player's on the sheet, but what's used
+            Row(35349, "Scenic Muse", true, 197, 70, 0),
+            Row(36957, "Dokumori", true, 92, 66, 120),
+            Row(38992, "Starry Muse", false, 0, 0, 90), // not a job's: left out
+            Row(40000, "  Reprisal ", true, 113, 22, 60),
+        });
+        Assert.Equal("Starry Muse", m.KeyOf[34675]);
+        Assert.Equal(34675u, m.Rows["Starry Muse"].Id);
+        Assert.Equal(120, m.Rows["Starry Muse"].Recast);
+        Assert.False(m.KeyOf.ContainsKey(38992));
+        Assert.False(m.KeyOf.ContainsKey(805));
+        Assert.Equal(16538u, m.Rows["Fey Illumination"].Id);
+        Assert.False(m.KeyOf.ContainsKey(28509));
+        Assert.Equal(25862u, m.Rows["Liturgy of the Bell"].Id);
+        Assert.Equal("Addle", m.KeyOf[17686]);
+        Assert.False(m.KeyOf.ContainsKey(29000));
+        Assert.Equal(7560u, m.Rows["Addle"].Id);
+        Assert.True(m.Rows["Addle"].Role);
+        // Mug and Dokumori are one, Dokumori's row standing for it.
+        Assert.Equal("Dokumori", m.KeyOf[2248]);
+        Assert.Equal(36957u, m.Rows["Dokumori"].Id);
+        Assert.False(m.KeyOf.ContainsKey(35349));
+        Assert.Equal("Reprisal", m.KeyOf[40000]);
+        Assert.Empty(CooldownCatalog.Match(Array.Empty<ActionRowInfo>()).Rows);
+        // The level each is first had at: the lowest of its job's rows (Mug's for Dokumori).
+        Assert.Equal(15, m.Level("Dokumori"));
+        Assert.Equal(70, m.Level("Starry Muse"));
+        Assert.Equal(8, m.Level("Addle"));
+        Assert.Equal(0, m.Level("Battle Voice"));
+    }
+
+    [Fact]
+    public void A_cooldown_above_a_members_level_is_not_listed()
+    {
+        var book = new CooldownBook();
+        CooldownAction? Seraphism(string key) => key == "Seraphism" ? new CooldownAction(key, 37014, key, 0, 180, 1, 100) : null;
+        var picks = new Dictionary<string, bool> { ["Seraphism"] = true };
+        CooldownMember Sch(int level) => new(4, "H2", "SCH", 4, false, level);
+        Assert.Empty(CooldownView.Lines(new[] { Sch(90) }, Seraphism, picks, book, _ => null, 0));
+        Assert.Single(CooldownView.Lines(new[] { Sch(100) }, Seraphism, picks, book, _ => null, 0));
+        // A level the game didn't give: listed.
+        Assert.Single(CooldownView.Lines(new[] { Sch(0) }, Seraphism, picks, book, _ => null, 0));
+    }
+
+    [Fact]
+    public void A_hair_from_ready_still_counts_a_second()
+    {
+        Assert.Equal("1", CooldownView.Time(1e-12));
+        Assert.Equal("1", CalloutTimeline.Countdown(1e-12));
+    }
+
     [Fact]
     public void The_sample_recharges_and_comes_back()
     {
@@ -259,6 +327,44 @@ public class CalloutTests
         Assert.Null(sounds.Due(again, times, 39, 3));
         sounds.Reset();
         Assert.Equal(0, sounds.Due(again, times, 10, 3));
+    }
+
+    [Fact]
+    public void A_plan_switched_to_and_back_mid_pull_plays_nothing_twice()
+    {
+        var times = CalloutTimeline.StepTimes(P.Game!.Cues, P.Steps.Count);
+        var other = P with { Id = "p2" };
+        var sounds = new CalloutSounds();
+        Assert.Equal(0, sounds.Due(P, times, 10, 3));
+        // Another plan: its own steps' sounds.
+        Assert.Equal(0, sounds.Due(other, times, 10.5, 3));
+        // Back to the first in the same pull: step 0 was heard.
+        Assert.Null(sounds.Due(P, times, 11, 3));
+        Assert.Equal(1, sounds.Due(P, times, 23.5, 3));
+        // A step count that changes (the plan read again with a step more) keeps what's heard.
+        var longer = times.Append(60).ToArray();
+        Assert.Null(sounds.Due(P, longer, 24, 3));
+        Assert.Equal(4, sounds.Due(P, longer, 58, 3));
+        // A new pull: all of them again.
+        sounds.Reset();
+        Assert.Equal(0, sounds.Due(P, times, 10, 3));
+    }
+
+    [Fact]
+    public void A_plan_read_once_gives_the_same_steps_each_frame_into_one_list()
+    {
+        var cp = new CalloutPlan(P);
+        Assert.Equal(new[] { 0, 1, 3 }, cp.Order);
+        var into = new List<CalloutLine> { new(9, "stale", null, 0, 0) };
+        CalloutTimeline.Upcoming(cp, 10, 20, 3, into);
+        Assert.Equal(CalloutTimeline.Upcoming(P, cp.Times, 10, 20, 3), into);
+        CalloutTimeline.Upcoming(cp, 14.5, 30, 3, into);
+        Assert.Equal(new[] { 1, 3 }, into.Select(l => l.Step));
+        CalloutTimeline.Upcoming(cp, double.NaN, 30, 3, into);
+        Assert.Empty(into);
+        // Ties go by the step's number.
+        var tie = new CalloutPlan(P, new[] { 5.0, 5.0, double.NaN, 1.0 });
+        Assert.Equal(new[] { 3, 0, 1 }, tie.Order);
     }
 
     [Fact]
@@ -377,6 +483,15 @@ public class MeterTextTests
         Assert.Equal("H1", d.RaisedBy);
         Assert.Contains(s.Events(11), ev => ev.Kind == MeterEventKind.Raise);
         Assert.Equal(1, eleven.Rows.Single(r => r.Slot == "H1").RaisesGiven);
+        // The earlier pulls' tinctures are the ones their events show, and the party's is their sum.
+        foreach (var id in new[] { 11, 10, 9, 4 })
+        {
+            var still = s.Get(id)!;
+            var pots = s.Events(id).Where(ev => ev.Kind == MeterEventKind.Potion).ToList();
+            foreach (var r in still.Rows.Where(r => !r.IsLimitBreak)) Assert.Equal(pots.Count(ev => ev.PartyId == r.PartyId), r.Potions);
+            Assert.Equal(pots.Count, still.Party.Potions);
+            Assert.Equal(still.Deaths[0].RaisedAt != null, s.Events(id).Any(ev => ev.Kind == MeterEventKind.Raise));
+        }
     }
 }
 
@@ -396,4 +511,23 @@ public class OverlayLayoutTests
         Assert.False(s.Show);
         Assert.Equal(MeterGrows.Down, s.Grows);
     }
+}
+
+/// <summary>/raidplan's words (UI/Model/Commands.cs).</summary>
+public class CommandWordsTests
+{
+    [Theory]
+    [InlineData("cooldowns unlock", "cooldowns unlock")]
+    [InlineData("  Cooldowns   UNLOCK  ", "cooldowns unlock")]
+    [InlineData("cds\tunlock", "cooldowns unlock")]
+    [InlineData("cds", "cooldowns")]
+    [InlineData("cooldown preview", "cooldowns preview")]
+    [InlineData("Callout  settings", "callouts settings")]
+    [InlineData("meter  unlock", "meter unlock")]
+    [InlineData("send  last", "send last")]
+    [InlineData("", "")]
+    [InlineData("   ", "")]
+    [InlineData(null, "")]
+    public void Commands_read_the_same_however_they_are_typed(string? args, string read) =>
+        Assert.Equal(read, CommandWords.Normalize(args));
 }

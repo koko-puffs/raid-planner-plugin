@@ -135,11 +135,12 @@ public class RecordingTests
         [1138] = new StatusInfo("Physical Vulnerability Up", 215532),
         [1769] = new StatusInfo("Doom", 215502),
         [1000] = new StatusInfo("Party Buff", 210001),
-        [1871] = new StatusInfo("Dia", 212675, 2),
+        [1871] = new StatusInfo("Dia", 212675, 2, true),
         [786] = new StatusInfo("Battle Litany", 212578, 1),
         // Since 0.4.0, with their categories and whether they can be cleansed: a raise's, Weakness.
         [148] = new StatusInfo("Raise", 210402, 1),
-        [43] = new StatusInfo("Weakness", 215009, 2, true),
+        // As the Status sheet has it: Weakness can't be cleansed (CanDispel False).
+        [43] = new StatusInfo("Weakness", 215009, 2),
     };
 
     /// <summary>What's what in the sample (interrupts, raises…), by its names, as the game side finds them on the English sheets.</summary>

@@ -39,6 +39,11 @@ namespace RaidPlanner.Game;
 /// whether an enemy's cast can be interrupted; and from the hooks a cast stopped (<see cref="OnCancel"/>).
 /// Out of a pull in a duty it records, the hooks stay on and the party's uses of the last 30 seconds
 /// and the countdown are kept (<see cref="PrePull"/>, <see cref="CountdownWatch"/>) for the pull's start.
+/// With Settings → Recording → Diagnostics on (<see cref="Diagnostics"/>), the raw values behind the readings
+/// not yet checked in the game go to the diagnostics file too (the hooks' own, and from here: the party at a
+/// pull's start, the enmity list, the gauge, the head signs, the Raise and Weakness statuses' sources, an enemy
+/// cast's interruptible flag, the countdown, your own recasts as you use an action); written at a pull's end,
+/// a zone change and unloading.
 ///
 /// Everything here runs on the game's framework thread, the hooks' detours too, so nothing is shared
 /// with another thread but the finished recording.
@@ -117,6 +122,16 @@ public sealed unsafe class FightRecorder : IDisposable
     private readonly (int Who, int Pct)[] hateBuffer = new (int, int)[32];
     private readonly Dictionary<int, int> signsBuffer = new();
 
+    // Diagnostics: its listener for your own recasts, whether it's listening, the zone's name for its lines, and the raw
+    // values last written (only changes are).
+    private readonly DiagnosticsSink diagSink;
+    private bool diagListening;
+    private uint diagTerritory = uint.MaxValue;
+    private string diagZone = string.Empty;
+    private (int Units, int Bars, int BarUnits) diagGauge = (-1, -1, -1);
+    private readonly ulong[] diagSigns = new ulong[SignsEvent.Count];
+    private bool diagCountdown;
+
     /// <summary>
     /// Only the enemies in the party's own fight are recorded (<see cref="Engaged"/>): in a field
     /// operation's open zone (<see cref="GameData.IsFieldZone"/>: Occult Crescent, Bozja, Eureka) the
@@ -149,6 +164,8 @@ public sealed unsafe class FightRecorder : IDisposable
         session.Start();
         Combat = new CombatParser(data.ActionCategory, data.IsShield, data.IsDot, data.IsArea);
         sink = new RecordingSink(() => Current, () => pullStart);
+        Diagnostics = new DiagnosticsLog(store.Folder) { Context = DiagnosticsContext };
+        diagSink = new DiagnosticsSink(this);
         hooks = new GameHooks(this);
         Services.Framework.Update += OnUpdate;
         Services.DutyState.DutyWiped += OnWiped;
@@ -185,6 +202,13 @@ public sealed unsafe class FightRecorder : IDisposable
 
     /// <summary>The meter wants the hooks on (set by it every frame).</summary>
     public bool MeterWants { get; set; }
+
+    /// <summary>
+    /// Settings → Recording → Diagnostics (since 0.4.0; off, and not kept: off again each time the plugin loads): the raw
+    /// values behind the readings not yet checked in the game, written to <c>diagnostics-&lt;date&gt;.log</c> in the recordings
+    /// folder while it's on (<see cref="DiagnosticsLog"/>).
+    /// </summary>
+    public DiagnosticsLog Diagnostics { get; }
 
     /// <summary>Anything else that listens to <see cref="Combat"/> and wants the hooks on (the cooldown tracker); asked every frame. Since 0.4.0.</summary>
     public Func<bool>? HooksWanted { get; set; }
@@ -299,6 +323,7 @@ public sealed unsafe class FightRecorder : IDisposable
         countdown.Clear();
         pullInZone = 0;
         pullTerritory = territory;
+        Diagnostics.Flush();
     });
 
     /// <summary>The held pull, saved as it is (the game didn't say).</summary>
@@ -356,6 +381,13 @@ public sealed unsafe class FightRecorder : IDisposable
             var on = current != null || MeterWants || prePullOn || WantedByOthers();
             hooks.Set(on);
             if (on && Now >= nextParty) RefreshParty();
+            // Your own recasts as you use an action, only while diagnostics are on.
+            if (Diagnostics.On != diagListening)
+            {
+                diagListening = Diagnostics.On;
+                if (diagListening) Combat.Add(diagSink);
+                else Combat.Remove(diagSink);
+            }
         }
         catch (Exception ex)
         {
@@ -406,7 +438,14 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         if (!prePullOn) return;
         var agent = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentCountDownSettingDialog.Instance();
-        if (agent != null) countdown.Frame(now, agent->Active, agent->TimeRemaining);
+        if (agent == null) return;
+        countdown.Frame(now, agent->Active, agent->TimeRemaining);
+        // The countdown's agent as read ([verify]), as it starts and stops.
+        if (Diagnostics.On && agent->Active != diagCountdown)
+        {
+            diagCountdown = agent->Active;
+            Diagnostics.Write("countdown", $"active {agent->Active} remaining {agent->TimeRemaining:0.000}");
+        }
     }
 
     /// <summary>The party by entity ids (just you when alone), for the parser: whose effects are the party's.</summary>
@@ -545,6 +584,7 @@ public sealed unsafe class FightRecorder : IDisposable
         countdown.Clear();
         hooks.Enable();
         RefreshParty();
+        if (Diagnostics.On) DiagnoseParty(current);
         // The party's own fight goes into the recording (a pull only followed keeps nothing).
         if (!follow) Combat.Add(sink);
         Tell(PullStarted);
@@ -594,6 +634,7 @@ public sealed unsafe class FightRecorder : IDisposable
         hooks.Set(MeterWants || prePullOn || WantedByOthers());
         // The uses kept before the next pull start from here (none of this one's).
         prePull.Clear();
+        Diagnostics.Flush();
         if (b == null) return;
         Tell(PullEnded);
         var t = Elapsed;
@@ -757,11 +798,16 @@ public sealed unsafe class FightRecorder : IDisposable
     }
 
     /// <summary>The limit break gauge: its units now and the most (bars × units a bar [verify]).</summary>
-    private static void ReadGauge(RecordingBuilder b, double t)
+    private void ReadGauge(RecordingBuilder b, double t)
     {
         var lb = LimitBreakController.Instance();
         if (lb == null) return;
         b.LimitGauge(t, lb->CurrentUnits, lb->BarCount * lb->BarUnits);
+        if (Diagnostics.On && (lb->CurrentUnits, lb->BarCount, lb->BarUnits) != diagGauge)
+        {
+            diagGauge = (lb->CurrentUnits, lb->BarCount, lb->BarUnits);
+            Diagnostics.Write("lb-gauge", $"units {lb->CurrentUnits} bars {lb->BarCount} barUnits {lb->BarUnits}");
+        }
     }
 
     /// <summary>
@@ -773,6 +819,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var ui = UIState.Instance();
         if (ui == null) return;
         var hate = &ui->Hate;
+        if (Diagnostics.On) DiagnoseHate(hate);
         if (hate->HateTargetId is 0 or InvalidId || b.KnownActor(hate->HateTargetId) is not { } on) return;
         var n = 0;
         var count = Math.Clamp(hate->HateArrayLength, 0, hateBuffer.Length);
@@ -793,6 +840,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (marking == null) return;
         signsBuffer.Clear();
         var markers = marking->Markers;
+        if (Diagnostics.On) DiagnoseSigns(marking);
         for (var i = 0; i < markers.Length && i < SignsEvent.Count; i++)
         {
             var id = markers[i].ObjectId;
@@ -849,6 +897,8 @@ public sealed unsafe class FightRecorder : IDisposable
         var aimed = loc.X != 0 || loc.Z != 0;
         b.Cast(Math.Max(0, start), id, cast->ActionId, cast->TotalCastTime, npc.Position.X, npc.Position.Z, cast->Rotation, target,
             aimed ? loc.X : null, aimed ? loc.Z : null, cast->Interruptible);
+        if (Diagnostics.On)
+            Diagnostics.Write("enemy-cast", $"actor {npc.EntityId:X8} action {cast->ActionId} cast {cast->TotalCastTime:0.00} interruptible {cast->Interruptible} target {cast->TargetId.ObjectId:X8}");
         if (CastBegan is { } listeners)
         {
             try
@@ -904,6 +954,9 @@ public sealed unsafe class FightRecorder : IDisposable
             // On an enemy only the party's are kept, and the enemies' own; on the party, as ever.
             var action = kind == StatusFrom.Party ? Combat.ActionFor(onEntity, id, member) : 0;
             b.StatusGained(t, on, id, from, kind, source, list[i].Param, list[i].RemainingTime, action);
+            // The Raise status's source on someone down, and Weakness's or Brink's ([verify] the raiser; no one or the member).
+            if (Diagnostics.On && (data.Kinds.RaiseStatus(id) || data.Kinds.Weakness(id) > 0))
+                Diagnostics.Write("status", $"on {onEntity:X8} {NameOf(onEntity)} status {id} {data.StatusName(id)} source {list[i].SourceObject.ObjectId:X8} {NameOf(list[i].SourceObject.ObjectId)} kind {kind} param {list[i].Param} left {list[i].RemainingTime:0.0} hp {((Character*)chara)->CharacterData.Health}");
         }
     }
 
@@ -975,6 +1028,115 @@ public sealed unsafe class FightRecorder : IDisposable
         if (obj is IBattleNpc enemy && enemy.BattleNpcKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)
             return (StatusFrom.Enemy, b.Actor(src, enemy.Name.TextValue, enemy.HitboxRadius, enemy.BaseId), 0);
         return (StatusFrom.Other, 0, 0);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Diagnostics (Settings → Recording → Diagnostics): the raw values, only while it's on.
+
+    /// <summary>Where a diagnostics line is: the zone (its name read once a zone), the pull going on and how far into it.</summary>
+    private (uint, string, int, double) DiagnosticsContext()
+    {
+        var territory = Services.ClientState.TerritoryType;
+        if (territory != diagTerritory)
+        {
+            diagTerritory = territory;
+            diagZone = data.Duty(territory)?.Name ?? data.PlaceName(territory);
+        }
+        return (territory, diagZone, current?.Pull ?? 0, current != null ? Elapsed : double.NaN);
+    }
+
+    /// <summary>A name for a diagnostics line (the object table's; "?" for someone not in it).</summary>
+    private static string NameOf(uint entityId) =>
+        entityId is 0 or InvalidId ? "-" : Services.Objects.SearchByEntityId(entityId) is { } o ? o.Name.TextValue : "?";
+
+    /// <summary>The party as a pull begins: each member's entity id, name, job and number in the recording (what the other lines' ids are).</summary>
+    private void DiagnoseParty(RecordingBuilder b)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var m in Services.Party)
+            if (m.EntityId is not (0 or InvalidId))
+                text.Append(System.FormattableString.Invariant($" [{m.EntityId:X8} {m.Name.TextValue} {data.Job(m.ClassJob.RowId).Item1} #{b.PartyId(m.EntityId) ?? 0}]"));
+        if (text.Length == 0 && Services.Objects.LocalPlayer is { } me)
+            text.Append(System.FormattableString.Invariant($" [{me.EntityId:X8} {me.Name.TextValue} #{b.PartyId(me.EntityId) ?? 0}]"));
+        Diagnostics.Write("party", $"you {Services.Objects.LocalPlayer?.EntityId ?? 0:X8}{text}");
+    }
+
+    /// <summary>The enmity list as the game has it ([verify]: your target's, % of the top), every entry, once a second.</summary>
+    private void DiagnoseHate(Hate* hate)
+    {
+        var text = new System.Text.StringBuilder();
+        var list = hate->HateInfo;
+        for (var i = 0; i < list.Length && i < Math.Max(0, hate->HateArrayLength); i++)
+            text.Append(System.FormattableString.Invariant($" [{list[i].EntityId:X8} {list[i].Enmity}]"));
+        Diagnostics.Write("hate", $"target {hate->HateTargetId:X8} length {hate->HateArrayLength}{text}");
+    }
+
+    /// <summary>The head signs' 17 slots as the game has them ([verify] their order), when any changed.</summary>
+    private void DiagnoseSigns(MarkingController* marking)
+    {
+        var markers = marking->Markers;
+        var changed = false;
+        for (var i = 0; i < markers.Length && i < diagSigns.Length; i++)
+        {
+            ulong id = markers[i].ObjectId;
+            if (id == diagSigns[i]) continue;
+            diagSigns[i] = id;
+            changed = true;
+        }
+        if (!changed) return;
+        var text = new System.Text.StringBuilder();
+        for (var i = 0; i < markers.Length && i < diagSigns.Length; i++)
+            if (markers[i].ObjectId is not (0 or InvalidId))
+                text.Append(System.FormattableString.Invariant($" [{i} {markers[i].ObjectId:X8} {NameOf(markers[i].ObjectId)}]"));
+        Diagnostics.Write("signs", $"slots{(text.Length == 0 ? " none" : text.ToString())}");
+    }
+
+    /// <summary>
+    /// Diagnostics' listener: as you use an action, your recast for it as the game has it then (ActionManager: the recast and
+    /// how far into it, the adjusted recast [verify: ms, traits at the synced level], the most and current charges), with the
+    /// sheet's. Listens to the parser only while diagnostics are on.
+    /// </summary>
+    private sealed class DiagnosticsSink : ICombatSink
+    {
+        private readonly FightRecorder recorder;
+
+        public DiagnosticsSink(FightRecorder recorder) => this.recorder = recorder;
+
+        public void Used(double t, uint member, uint caster, uint action)
+        {
+        }
+
+        public void Effect(in PartyEffect e)
+        {
+        }
+
+        public void Taken(in TakenHit e)
+        {
+        }
+
+        public void Tick(in TickEvent e, ReadOnlySpan<TickShare> shares)
+        {
+        }
+
+        public void Use(in PartyUse u)
+        {
+            var diag = recorder.Diagnostics;
+            if (!diag.On || (u.Flags & (UseFlags.Item | UseFlags.Pet)) != 0) return;
+            try
+            {
+                if (Services.Objects.LocalPlayer is not { } me || u.Caster != me.EntityId) return;
+                var am = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.Instance();
+                if (am == null) return;
+                var id = u.Action;
+                const FFXIVClientStructs.FFXIV.Client.Game.ActionType Act = FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action;
+                var sheet = recorder.data.Action(id);
+                diag.Write("own-recast", $"action {id} {sheet?.Name} recast {am->GetRecastTime(Act, id):0.000} elapsed {am->GetRecastTimeElapsed(Act, id):0.000} adjusted {FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(Act, id, true)} ms maxCharges {FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetMaxCharges(id, 0)} charges {am->GetCurrentCharges(id)} sheet recast {sheet?.Recast ?? 0:0.0} cdg {sheet?.CooldownGroup ?? 0} cdg2 {sheet?.CooldownGroup2 ?? 0} sheet charges {sheet?.Charges ?? 0}");
+            }
+            catch (Exception)
+            {
+                // Never into the game: the line is lost.
+            }
+        }
     }
 
     private static readonly string[] MarkNames = WaymarksEvent.Names;
@@ -1116,6 +1278,7 @@ public sealed unsafe class FightRecorder : IDisposable
             Guarded(() => Services.DutyState.DutyCompleted -= OnCompleted);
             Guarded(() => Services.ClientState.TerritoryChanged -= OnTerritoryChanged);
             Guarded(() => Combat.Remove(prePull));
+            Guarded(() => Combat.Remove(diagSink));
         }
         finally
         {
@@ -1138,6 +1301,8 @@ public sealed unsafe class FightRecorder : IDisposable
             {
                 // A save that failed has said so already.
             }
+            // What diagnostics gathered, written (a moment at most), and off.
+            Guarded(Diagnostics.Dispose);
         }
     }
 

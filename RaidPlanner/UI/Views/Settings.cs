@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using RaidPlanner.Core;
@@ -207,6 +209,9 @@ public sealed partial class MainWindow
             config.ShowInBar = !config.ShowInBar;
             config.Save();
         }
+        if (SwitchRow(i++, "##diagnostics", "Diagnostics", "Writes what it reads from the game to a file, for checking", recorder.Diagnostics.On,
+                "While on (until the plugin next loads), the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written."))
+            recorder.Diagnostics.On = !recorder.Diagnostics.On;
         if (ButtonRow(i, "##folder", "Recordings folder", "Where the pulls are kept", "Open", Btn.Outline, false, null, store.Folder))
             Dalamud.Utility.Util.OpenLink(store.Folder);
         Kit.EndPanel();
@@ -379,6 +384,22 @@ public sealed partial class MainWindow
         }
     }
 
+    /// <summary>Each kind's section and panel ids (by the kind's number), made once.</summary>
+    private static readonly (string Section, string Panel)[] KindIds =
+        Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => ($"##cd-kind{k}", $"##set-cd{k}")).ToArray();
+
+    /// <summary>Each cooldown's switch id and its jobs ("PLD, WAR, DRK, GNB"), as the catalogue lists them, made once.</summary>
+    private static readonly (string Id, string Jobs)[] SpecWords = CooldownCatalog.All.Select(s => ("##cd-" + s.Key, string.Join(", ", s.Jobs))).ToArray();
+
+    private static readonly Dictionary<(int, int), string> OnOfWords = new();
+
+    /// <summary>"3 of 12", made once each.</summary>
+    private static string OnOf(int on, int of)
+    {
+        if (!OnOfWords.TryGetValue((on, of), out var text)) OnOfWords[(on, of)] = text = $"{on} of {of}";
+        return text;
+    }
+
     /// <summary>
     /// Cooldowns (0.4.0): the tracker (show it, where, yours too, those ready, the limit break gauge,
     /// its window), a sample, then each kind's cooldowns with a switch each (the kind's head turns them
@@ -433,7 +454,7 @@ public sealed partial class MainWindow
             Kit.Gap(18);
             var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
             var all = on == of;
-            if (Kit.Section("##cd-kind" + (int)kind, CooldownCatalog.KindWord(kind), $"{on} of {of}", all ? "Turn all off" : "Turn all on"))
+            if (Kit.Section(KindIds[(int)kind].Section, CooldownCatalog.KindWord(kind), OnOf(on, of), all ? "Turn all off" : "Turn all on"))
             {
                 foreach (var spec in CooldownCatalog.All)
                     if (spec.Kind == kind)
@@ -441,13 +462,14 @@ public sealed partial class MainWindow
                 config.Save();
             }
             Kit.Gap(10);
-            Kit.BeginPanel("##set-cd" + (int)kind, 0, 0, 0);
+            Kit.BeginPanel(KindIds[(int)kind].Panel, 0, 0, 0);
             var j = 0;
-            foreach (var spec in CooldownCatalog.All)
+            for (var k = 0; k < CooldownCatalog.All.Count; k++)
             {
+                var spec = CooldownCatalog.All[k];
                 if (spec.Kind != kind) continue;
                 var picked = CooldownCatalog.IsOn(spec, config.CooldownPicks);
-                if (SwitchRow(j++, "##cd-" + spec.Key, spec.Key, string.Join(", ", spec.Jobs), picked, null, pad: 8))
+                if (SwitchRow(j++, SpecWords[k].Id, spec.Key, SpecWords[k].Jobs, picked, null, pad: 8))
                 {
                     config.CooldownPicks[spec.Key] = !picked;
                     config.Save();

@@ -145,8 +145,9 @@ public sealed class Plugin : IDalamudPlugin
                 else StartSample();
             };
             plans.ShowWindow = open => planWindow.IsOpen = open;
-            // With recording off, a pull is still followed when the plan window shows this duty's plan.
-            recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;
+            // With recording off, a pull is still followed when this duty's plan is shown: in the plan window, or as the
+            // on-screen callouts (they need the plan's clock, which only a followed pull runs).
+            recorder.FollowWanted = () => (planWindow.IsOpen || config.CalloutOverlay.Show) && plans.ForThisDuty;
 
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
@@ -170,7 +171,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        switch (args.Trim().ToLowerInvariant())
+        // Lower case, one space between words, "cds" as "cooldowns" (CommandWords.Normalize).
+        switch (CommandWords.Normalize(args))
         {
             case "stop":
                 if (recorder.Recording) recorder.Stop();
@@ -220,7 +222,6 @@ public sealed class Plugin : IDalamudPlugin
                 else if (!StartSample()) PlanService.Print("The meter's sample waits until this fight is over.");
                 break;
             case "cooldowns":
-            case "cds":
                 Toggle(config.Cooldowns, cooldownWindow);
                 break;
             case "cooldowns unlock":
@@ -322,7 +323,15 @@ public sealed class Plugin : IDalamudPlugin
         // The overlays follow their settings (and their samples); the tracker's game side listens while it's shown where it may be.
         if (cooldownWindow.IsOpen != cooldownWindow.WantedOpen) cooldownWindow.IsOpen = cooldownWindow.WantedOpen;
         if (calloutWindow.IsOpen != calloutWindow.WantedOpen) calloutWindow.IsOpen = calloutWindow.WantedOpen;
-        cooldowns.Wanted = config.Cooldowns.Show && !cooldownWindow.Previewing && (config.Cooldowns.Everywhere || recorder.DutyHere != null);
+        try
+        {
+            cooldowns.Wanted = config.Cooldowns.Show && !cooldownWindow.Previewing && (config.Cooldowns.Everywhere || recorder.DutyHere != null);
+        }
+        catch (Exception ex)
+        {
+            cooldowns.Wanted = false;
+            Services.Log.Debug(ex, "Raid Planner couldn't tell where the cooldown tracker may show");
+        }
         cooldowns.Update();
         try
         {

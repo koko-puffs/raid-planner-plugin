@@ -167,6 +167,71 @@ public static class CooldownCatalog
         }
         return (on, of);
     }
+
+    /// <summary>
+    /// Which rows of the Action sheet (read in English) are each cooldown's, and the row that stands for
+    /// it (its icon, base recast and charges). A row counts when it has one of the cooldown's names, isn't
+    /// PvP, and is the player's (<see cref="ActionRowInfo.Player"/>); for a name the sheet has no player's
+    /// row of, a job's own row (a job category and a level) counts instead: Starry Muse is placed through
+    /// Scenic Muse, so the sheet doesn't mark it the player's, but its own id is what the game says was
+    /// used. (A pet's row, as the fairy's Fey Illumination, and a follow-up's, as the bell's, are left
+    /// out: a second "use" a moment later would teach a recast that short.) The row standing for it: one
+    /// of its first name, with a recast, of a job, the lowest id, in that order.
+    /// </summary>
+    public static CooldownRows Match(IEnumerable<ActionRowInfo> rows)
+    {
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in All)
+            foreach (var n in spec.Names)
+                byName[n] = spec.Key;
+        var found = new List<(ActionRowInfo Row, string Key)>();
+        var playerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            if (row.PvP) continue;
+            var name = row.Name.Trim();
+            if (name.Length == 0 || !byName.TryGetValue(name, out var key)) continue;
+            found.Add((row with { Name = name }, key));
+            if (row.Player) playerNames.Add(name);
+        }
+        var keyOf = new Dictionary<uint, string>();
+        var best = new Dictionary<string, ActionRowInfo>(StringComparer.OrdinalIgnoreCase);
+        var levels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (row, key) in found)
+        {
+            var counts = row.Player || (!playerNames.Contains(row.Name) && row.Category != 0 && row.Level > 0);
+            if (!counts) continue;
+            keyOf[row.Id] = key;
+            if (!best.TryGetValue(key, out var had) || Better(row, had, key)) best[key] = row;
+            // The level it's first had at: its lowest job row's (Mug's 15 for Dokumori).
+            if (row.Category != 0 && row.Level > 0 && (!levels.TryGetValue(key, out var lv) || row.Level < lv)) levels[key] = row.Level;
+        }
+        return new CooldownRows(keyOf, best, levels);
+    }
+
+    /// <summary>Does <paramref name="a"/> stand for the cooldown better than <paramref name="b"/>: its first name, a recast, a job's, the lower id.</summary>
+    private static bool Better(ActionRowInfo a, ActionRowInfo b, string key)
+    {
+        var af = string.Equals(a.Name, key, StringComparison.OrdinalIgnoreCase);
+        var bf = string.Equals(b.Name, key, StringComparison.OrdinalIgnoreCase);
+        if (af != bf) return af;
+        if (a.Recast > 0 != b.Recast > 0) return a.Recast > 0;
+        if (a.Category != 0 != (b.Category != 0)) return a.Category != 0;
+        return a.Id < b.Id;
+    }
+}
+
+/// <summary>What the tracker reads of an Action sheet row (in English): its id, name, whether it's the player's (a hotbar's) and PvP, its job category and level, icon, base recast (s), charges, and whether it's a role action.</summary>
+public readonly record struct ActionRowInfo(uint Id, string Name, bool Player, bool PvP, uint Category, int Level, uint Icon, double Recast, int Charges, bool Role);
+
+/// <summary>
+/// Each counted row's id to its cooldown's key, the row standing for each cooldown, and the level each is
+/// first had at (none for a cooldown with no job's row) (<see cref="CooldownCatalog.Match"/>).
+/// </summary>
+public sealed record CooldownRows(IReadOnlyDictionary<uint, string> KeyOf, IReadOnlyDictionary<string, ActionRowInfo> Rows, IReadOnlyDictionary<string, int> Levels)
+{
+    /// <summary>The level a cooldown is first had at, or 0 when it isn't known.</summary>
+    public int Level(string key) => Levels.TryGetValue(key, out var l) ? l : 0;
 }
 
 /// <summary>A cooldown's state now: how long until a charge is ready, the charges ready, the recast it was worked out by.</summary>
@@ -271,11 +336,11 @@ public sealed class CooldownBook
     }
 }
 
-/// <summary>A party member as the tracker shows them: the game's id, their spot, job and role, and whether it's you.</summary>
-public sealed record CooldownMember(uint Id, string Slot, string Job, byte Role, bool IsYou);
+/// <summary>A party member as the tracker shows them: the game's id, their spot, job and role, whether it's you, and their level now (synced; 0 when not known).</summary>
+public sealed record CooldownMember(uint Id, string Slot, string Job, byte Role, bool IsYou, int Level = 0);
 
-/// <summary>What the game says about a tracked cooldown: the action's id, name (in the client's language) and icon, its base recast (s) and charges.</summary>
-public sealed record CooldownAction(string Key, uint Id, string Name, uint Icon, double Recast, int Charges);
+/// <summary>What the game says about a tracked cooldown: the action's id, name (in the client's language) and icon, its base recast (s), charges, and the level it's first had at (0: not known).</summary>
+public sealed record CooldownAction(string Key, uint Id, string Name, uint Icon, double Recast, int Charges, int Level = 0);
 
 /// <summary>One of your own cooldowns as the game has it now (exact): until a charge is ready, the next charge, charges, recast.</summary>
 public readonly record struct OwnCooldown(double ReadyIn, double NextIn, int Charges, int MaxCharges, double Recast);
@@ -304,7 +369,7 @@ public static class CooldownView
     /// The tracker's rows now: each party member's tracked cooldowns (those their job has), by kind,
     /// then as the catalogue lists them, then spot order. Your own are the game's (<paramref name="own"/>),
     /// the others' the book's. Without <paramref name="you"/>, yours are left out; with
-    /// <paramref name="hideReady"/>, those ready are.
+    /// <paramref name="hideReady"/>, those ready are. One a member's level (synced) doesn't have yet isn't listed.
     /// </summary>
     public static List<CooldownLine> Lines(IReadOnlyList<CooldownMember> party, Func<string, CooldownAction?> action, IReadOnlyDictionary<string, bool>? picks,
         CooldownBook book, Func<string, OwnCooldown?> own, double now, bool you = true, bool hideReady = false)
@@ -325,6 +390,7 @@ public static class CooldownView
                     looked = true;
                 }
                 if (a == null) break;
+                if (m.Level > 0 && a.Level > m.Level) continue;
                 CooldownLine line;
                 if (m.IsYou && own(spec.Key) is { } o)
                     line = new CooldownLine(m, spec, a, Math.Max(0, o.ReadyIn), Math.Max(0, o.NextIn), o.Charges, Math.Max(1, o.MaxCharges), o.Recast > 0 ? o.Recast : a.Recast,
@@ -352,7 +418,8 @@ public static class CooldownView
     public static string Time(double readyIn)
     {
         if (!(readyIn > 0)) return "Ready";
-        var s = (int)Math.Ceiling(readyIn - 1e-9);
+        // At least 1 while it recharges (a hair over 0 isn't "0").
+        var s = Math.Max(1, (int)Math.Ceiling(readyIn - 1e-9));
         return s < 60 ? s.ToString(CultureInfo.InvariantCulture) : Format.Clock(s);
     }
 

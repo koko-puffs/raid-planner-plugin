@@ -277,7 +277,9 @@ public class FourFormatTests
         // Not asked for others' actions, nor GCDs.
         Assert.Equal(0f, back.Actions[7538].AdjustedRecast);
         Assert.Equal(0f, back.Actions[9005].AdjustedRecast);
-        Assert.True(back.Statuses[43].Dispel);
+        // As the Status sheet has them: Dia can be cleansed, Weakness can't.
+        Assert.True(back.Statuses[1871].Dispel);
+        Assert.False(back.Statuses[43].Dispel);
     }
 
     [Fact]

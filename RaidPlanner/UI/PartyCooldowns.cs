@@ -26,19 +26,17 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
 
     private readonly GameData data;
     private readonly FightRecorder recorder;
-    private readonly Task<Lookup> lookup;
+    private readonly Task<CooldownRows> lookup;
     private readonly Dictionary<string, OwnCooldown> own = new();
     private readonly Dictionary<string, double> roleRecast = new();
     private readonly Dictionary<string, CooldownAction> named = new();
     private readonly List<CooldownMember> party = new();
     private readonly List<Partier> partiers = new();
+    private readonly Dictionary<uint, int> levels = new();
     private bool listening;
     private bool disposed;
     private double nextParty;
     private DateTime failedAt;
-
-    /// <summary>What the Action sheet says about each cooldown: its rows' ids, the first row's id, icon, base recast and charges, and whether it's a role action.</summary>
-    private sealed record Lookup(Dictionary<uint, string> KeyOf, Dictionary<string, (uint Id, uint Icon, double Recast, int Charges, bool Role)> Rows);
 
     public PartyCooldowns(GameData data, FightRecorder recorder)
     {
@@ -67,36 +65,25 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     /// <summary>The sheet has been read.</summary>
     public bool Ready => lookup.IsCompletedSuccessfully;
 
-    private static Lookup Read()
+    /// <summary>Each cooldown's rows on the Action sheet in English, and the row standing for it (<see cref="CooldownCatalog.Match"/>).</summary>
+    private static CooldownRows Read()
     {
-        var keyOf = new Dictionary<uint, string>();
-        var rows = new Dictionary<string, (uint, uint, double, int, bool)>(StringComparer.OrdinalIgnoreCase);
-        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        // The keys whose row so far has their first name (a row of a later name gives way to one of the first).
-        var firstName = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var spec in CooldownCatalog.All)
-            foreach (var n in spec.Names)
-                byName[n] = spec.Key;
         try
         {
-            foreach (var row in Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>(ClientLanguage.English))
-            {
-                if (row.IsPvP || !row.IsPlayerAction) continue;
-                var name = row.Name.ExtractText().Trim();
-                if (name.Length == 0 || !byName.TryGetValue(name, out var key)) continue;
-                keyOf[row.RowId] = key;
-                // The first row with the cooldown's first name stands for it (its icon, recast and charges).
-                var isFirst = string.Equals(name, key, StringComparison.OrdinalIgnoreCase);
-                if (rows.ContainsKey(key) && (firstName.Contains(key) || !isFirst)) continue;
-                rows[key] = (row.RowId, row.Icon, row.Recast100ms / 10.0, Math.Max(1, (int)row.MaxCharges), row.IsRoleAction);
-                if (isFirst) firstName.Add(key);
-            }
+            return CooldownCatalog.Match(Rows());
         }
         catch (Exception ex)
         {
             Services.Log.Warning(ex, "Raid Planner couldn't read the game's actions for the cooldown tracker");
+            return new CooldownRows(new Dictionary<uint, string>(), new Dictionary<string, ActionRowInfo>(), new Dictionary<string, int>());
         }
-        return new Lookup(keyOf, rows);
+    }
+
+    private static IEnumerable<ActionRowInfo> Rows()
+    {
+        foreach (var row in Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>(ClientLanguage.English))
+            yield return new ActionRowInfo(row.RowId, row.Name.ExtractText(), row.IsPlayerAction, row.IsPvP, row.ClassJobCategory.RowId, row.ClassJobLevel, row.Icon,
+                row.Recast100ms / 10.0, Math.Max(1, (int)row.MaxCharges), row.IsRoleAction);
     }
 
     /// <summary>A cooldown as the game has it (its name in the client's language), or null while the sheet is read or when it has no row.</summary>
@@ -104,7 +91,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     {
         if (named.TryGetValue(key, out var a)) return a;
         if (!Ready || !lookup.Result.Rows.TryGetValue(key, out var r)) return null;
-        a = new CooldownAction(key, r.Id, data.ActionName(r.Id), r.Icon, r.Recast, r.Charges);
+        a = new CooldownAction(key, r.Id, data.ActionName(r.Id), r.Icon, r.Recast, r.Charges, lookup.Result.Level(key));
         named[key] = a;
         return a;
     }
@@ -167,7 +154,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
             if (now >= nextParty || party.Count == 0)
             {
                 nextParty = now + 0.25;
-                ReadParty(me.EntityId, me.ClassJob.RowId);
+                ReadParty(me.EntityId, me.ClassJob.RowId, me.Level);
             }
             ReadOwn();
         }
@@ -177,23 +164,27 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         }
     }
 
-    private void ReadParty(uint meId, uint myClassJob)
+    private void ReadParty(uint meId, uint myClassJob, int myLevel)
     {
         partiers.Clear();
+        levels.Clear();
         foreach (var m in Services.Party)
         {
             if (m.EntityId is 0 or InvalidId) continue;
             var (job, role) = data.Job(m.ClassJob.RowId);
             partiers.Add(new Partier(m.EntityId, job, role));
+            levels[m.EntityId] = m.Level;
         }
         if (partiers.Count == 0)
         {
             var (job, role) = data.Job(myClassJob);
             partiers.Add(new Partier(meId, job, role));
         }
+        // Yours from your character (the level you're synced to).
+        levels[meId] = myLevel;
         party.Clear();
         foreach (var (who, slot) in Roles.Assign(partiers))
-            party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId));
+            party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId, levels.TryGetValue((uint)who.Key, out var lv) ? lv : 0));
     }
 
     /// <summary>Your own tracked cooldowns, from the game's timers (and the recast your role's actions have for you, for the others').</summary>

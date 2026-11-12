@@ -69,6 +69,12 @@ public sealed class CombatParser
     private readonly Dictionary<(uint On, uint Status, uint Member), (uint Action, double At)> applied = new();
 
     private readonly List<(uint, uint, uint)> stale = new();
+
+    /// <summary>When <see cref="applied"/> may next be pruned: at most once a second, so a crowd of statuses isn't walked on every one put on.</summary>
+    private double nextPrune = double.NegativeInfinity;
+
+    /// <summary>The most statuses remembered: past it (more than a minute's worth can't be pruned yet) they're forgotten, so memory stays bounded.</summary>
+    private const int MostApplied = 4096;
     private readonly TickShare[] shares = new TickShare[MostParty];
     private readonly uint[] sharers = new uint[MostParty];
 
@@ -90,6 +96,12 @@ public sealed class CombatParser
         this.isDot = isDot ?? (_ => false);
         this.isArea = isArea ?? (_ => false);
     }
+
+    /// <summary>An action's ActionCategory row, as the parser reads it (the diagnostics' question: 1 an auto-attack).</summary>
+    public int Category(uint action) => category(action);
+
+    /// <summary>Is an action placed on the ground, as the parser reads it (the diagnostics' question).</summary>
+    public bool IsArea(uint action) => isArea(action);
 
     /// <summary>Effects that made no sense and were dropped (see the class's notes).</summary>
     public int Anomalies { get; private set; }
@@ -364,7 +376,7 @@ public sealed class CombatParser
                 if (d.Status == 0) return;
                 // Remembered on anyone (the action a buff, a DoT or a HoT came from; a DoT's for sharing out a tick).
                 applied[(recipient, d.Status, from)] = (b.Action, b.T);
-                if (applied.Count > 512) Prune(b.T);
+                if (applied.Count > 512 && b.T >= nextPrune) Prune(b.T);
                 var kind = isShield(d.Status) ? FxKind.Shield : FxKind.Status;
                 if (kind == FxKind.Status && withAmount) return;
                 Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, kind, flags, 0, hp, max, d.Status, recipientParty, recipientHostile));
@@ -485,11 +497,14 @@ public sealed class CombatParser
 
     private void Prune(double t)
     {
+        nextPrune = t + 1;
         stale.Clear();
         foreach (var (key, value) in applied)
             if (t - value.At > DotMemory)
                 stale.Add(key);
         foreach (var key in stale) applied.Remove(key);
+        // Still too many (a minute of a huge crowd): forgotten, rather than growing without end.
+        if (applied.Count > MostApplied) applied.Clear();
     }
 
     /// <summary>Forget the statuses remembered (a new zone).</summary>
@@ -497,5 +512,8 @@ public sealed class CombatParser
     {
         applied.Clear();
         dots.Clear();
+        nextPrune = double.NegativeInfinity;
+        Array.Clear(usedSeq);
+        usedNext = 0;
     }
 }

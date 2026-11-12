@@ -28,6 +28,9 @@ public sealed class CooldownWindow : OverlayWindow
     /// <summary>When the rows were worked out last (the tracker's clock).</summary>
     private double linesAt = double.NegativeInfinity;
     private LimitBreakGauge? gauge;
+
+    /// <summary>The gauge's bars, worked out again only when the gauge changes.</summary>
+    private (LimitBreakGauge? Of, float[] Bars) gaugeBars = (null, Array.Empty<float>());
     private readonly long started = Stopwatch.GetTimestamp();
 
     /// <summary>The words drawn for each line, made again only when they change (no strings each frame).</summary>
@@ -235,7 +238,8 @@ public sealed class CooldownWindow : OverlayWindow
         var npx = compact ? 11 : 12;
         x += Txt.Line(dl, new Vector2(x, y), "Limit break", Face.SansMedium, npx, Palette.White, RowCss) + S(10);
         var right = left + w - S(10);
-        MeterWindow.DrawGauge(dl, new Vector2(x, y + h / 2), right - x, MeterText.Bars(g), compact ? 5 : 6);
+        if (!Equals(gaugeBars.Of, g)) gaugeBars = (g, MeterText.Bars(g));
+        MeterWindow.DrawGauge(dl, new Vector2(x, y + h / 2), right - x, gaugeBars.Bars, compact ? 5 : 6);
         if (Kit.Pointed(new Vector2(left, y), new Vector2(left + w, y + h))) Kit.Tooltip(MeterText.GaugeTip(g));
     }
 }

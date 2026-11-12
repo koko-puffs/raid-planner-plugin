@@ -177,7 +177,7 @@ public enum MeterEventKind
 
 /// <summary>
 /// One line of an encounter's events (the Events tab), oldest first. <see cref="At"/> seconds since
-/// the encounter began; <see cref="PartyId"/>/<see cref="Slot"/> who it's about (0/"" for none);
+/// the encounter began (below 0 for a potion drunk in the 30 seconds before it); <see cref="PartyId"/>/<see cref="Slot"/> who it's about (0/"" for none);
 /// <see cref="Text"/> ready to show (it carries names, so it stays in the game); the other member
 /// and the action when there is one. Added in 0.4.0.
 /// </summary>

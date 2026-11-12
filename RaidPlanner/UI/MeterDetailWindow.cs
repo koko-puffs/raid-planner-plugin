@@ -588,8 +588,21 @@ public sealed class MeterDetailWindow : Window
         dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), r, ImDrawFlags.None, 1f);
     }
 
+    /// <summary>The event log's row ids, made once each.</summary>
+    private readonly List<string> eventIds = new();
+
+    /// <summary>The event log's times in words, made again only for a new list of events.</summary>
+    private (IReadOnlyList<MeterEvent>? Of, int Count, string[] Times) eventTimes = (null, 0, Array.Empty<string>());
+
     private void EventRows(MeterEncounter e, IReadOnlyList<MeterEvent> events, float w, float viewH)
     {
+        if (!ReferenceEquals(eventTimes.Of, events) || eventTimes.Count != events.Count)
+        {
+            var times = new string[events.Count];
+            for (var i = 0; i < times.Length; i++) times[i] = Format.Clock(events[i].At);
+            eventTimes = (events, events.Count, times);
+        }
+        while (eventIds.Count < events.Count) eventIds.Add("##dev" + eventIds.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
         var dl = ImGui.GetWindowDrawList();
         var rowH = S(34);
         var start = ImGui.GetCursorScreenPos() + new Vector2(S(6), S(2));
@@ -603,7 +616,7 @@ public sealed class MeterDetailWindow : Window
             var min = start + new Vector2(0, rowH * i);
             var max = min + new Vector2(rw, rowH);
             var picked = ev.PartyId != 0 && ev.PartyId == player;
-            var (clicked, hovered, _) = Kit.Hit("##dev" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), min, max - min);
+            var (clicked, hovered, _) = Kit.Hit(eventIds[i], min, max - min);
             if (picked || hovered) dl.AddRectFilled(min, max, Palette.U32(picked ? Palette.Rgba(255, 255, 255, 0.05f) : Palette.Hover), S(Palette.RadiusSm));
             if (clicked)
             {
@@ -617,7 +630,7 @@ public sealed class MeterDetailWindow : Window
                         }
             }
             var x = min.X + S(10);
-            Txt.LineRight(dl, x + S(40), min.Y, Format.Clock(ev.At), Face.Mono, 12, Palette.Muted, 34);
+            Txt.LineRight(dl, x + S(40), min.Y, eventTimes.Times[i], Face.Mono, 12, Palette.Muted, 34);
             x += S(40) + S(12);
             Icons.Draw(dl, MeterWindow.EventIcon(ev.Kind), new Vector2(x, min.Y + (rowH - S(15)) / 2), S(15), MeterWindow.ToneColor(MeterText.Tone(ev.Kind)));
             x += S(15) + S(10);

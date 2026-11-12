@@ -467,20 +467,28 @@ public class CombatParserTests
             p.Concerns(1, 0, concerns);
             p.Action(b);
         }
+        // Measured in up to three rounds, the least kept: the runtime itself can allocate on this thread now and then (a few KB
+        // once, as it compiles a method again or replaces a running loop: seen once, 8,160 bytes, on a busy machine), which the
+        // parser would do on every message (20,000 runs: hundreds of KB) were it allocating. Each round's time and bytes are said.
         var watch = new System.Diagnostics.Stopwatch();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        watch.Start();
         const int Runs = 20_000;
-        for (var i = 0; i < Runs; i++)
+        var allocated = long.MaxValue;
+        for (var round = 0; round < 3 && allocated != 0; round++)
         {
-            Fill(5 + i * 0.001);
-            p.Concerns(1, 0, concerns);
-            p.Action(b);
-            p.Tick(5 + i * 0.001, 900, 0, false, 100, 1, 0, -1, -1);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            watch.Restart();
+            for (var i = 0; i < Runs; i++)
+            {
+                Fill(5 + round * 100 + i * 0.001);
+                p.Concerns(1, 0, concerns);
+                p.Action(b);
+                p.Tick(5 + round * 100 + i * 0.001, 900, 0, false, 100, 1, 0, -1, -1);
+            }
+            watch.Stop();
+            var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+            allocated = Math.Min(allocated, bytes);
+            output.WriteLine($"round {round + 1}: {watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs for an eight-target action and a tick; {bytes} bytes allocated in {Runs}");
         }
-        watch.Stop();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        output.WriteLine($"{watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs for an eight-target action and a tick; {allocated} bytes allocated in {Runs}");
         Assert.Equal(0, allocated);
         // About 10 µs here; the bound only catches something gone badly wrong (the machine may be busy with other work).
         Assert.True(watch.Elapsed.TotalMilliseconds / Runs < 0.5, $"{watch.Elapsed.TotalMilliseconds / Runs * 1000:F2} µs a message");

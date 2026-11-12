@@ -144,8 +144,7 @@ public sealed class RecordingBuilder
     private (int Value, int Max)? gaugeLast;
     private Dictionary<int, int>? signs;
 
-    // Raises: when each member last died; the Raise status put on them since (when, by whom); the last raise used on them while down.
-    private readonly Dictionary<int, double> diedAt = new();
+    // Raises: the Raise status put on each member since they died (when, by whom); the last raise used on them while down.
     private readonly Dictionary<int, (double T, int By)> raiseStatus = new();
     private readonly Dictionary<int, (double T, int By, bool Lb)> raiseUse = new();
 
@@ -595,8 +594,17 @@ public sealed class RecordingBuilder
     /// <summary>The head signs now (by the game's index, the recording id marked): a <c>signs</c> event when they changed.</summary>
     public void Signs(double t, IReadOnlyDictionary<int, int> now)
     {
-        if (signs != null && signs.Count == now.Count && now.All(kv => signs.TryGetValue(kv.Key, out var v) && v == kv.Value)) return;
-        if (signs == null && now.Count == 0)
+        // Compared as they'd be kept (a sign on no one, or past the 17, isn't one), so one of those never makes an event every second.
+        var placed = 0;
+        var same = signs != null;
+        foreach (var (k, v) in now)
+        {
+            if (v == 0 || k is < 0 or >= SignsEvent.Count) continue;
+            placed++;
+            if (same && (!signs!.TryGetValue(k, out var was) || was != v)) same = false;
+        }
+        if (same && signs!.Count == placed) return;
+        if (signs == null && placed == 0)
         {
             signs = new Dictionary<int, int>();
             return;
@@ -688,7 +696,6 @@ public sealed class RecordingBuilder
             Raised(t, who);
             return;
         }
-        diedAt[who] = t;
         raiseStatus.Remove(who);
         raiseUse.Remove(who);
         if (!Room) return;

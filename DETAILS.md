@@ -518,7 +518,8 @@ events (`PullStarted`, `CastBegan`, `HitLanded`, `PullEnded`), each a null check
 with a listener that throws logged and never let into the recording or the game.
 
 With _Record fights by themselves_ off (or in a duty it doesn't record), a pull is still followed
-when the plan window is open on a plan for this duty on the frame combat begins
+when the plan window is open on a plan for this duty on the frame combat begins, or (since 0.4.0)
+the on-screen callouts are on with this duty's plan picked: they run on the plan's clock
 (`FightRecorder.FollowWanted`; a plan opened or read mid-fight waits for the next pull, rather than
 starting from 0 there): the recorder runs follow-only, with the same pull detection, hooks and
 events, but the pull is never kept, sent or summed up (nothing is written, even on unloading). The
@@ -901,7 +902,8 @@ one (both tested).
   "3,912,400" whole). The rows' words and bars, and the fight's other words (its clock, which pull,
   its deaths' lines), are worked out once a snapshot (the source makes one four times a second
   during a fight), not each frame (`MeterView.Lines`, and the window's own words for the fight), and
-  the kit keeps the capitals it has made (`Txt.Caps`), so tags and labels make no strings each frame. Before any fight, the
+  the kit keeps the capitals it has made (`Txt.Caps`) and the words it has cut to fit (`Txt.Fit`, by
+  face, size and whole pixels; since 0.4.0), so tags, labels and cut names make no strings each frame. Before any fight, the
   Boss asleep, "No fight yet", "It starts on the first hit." and a quiet _See a sample_ link (the
   sample fight, below); stopped (`IMeterSource.Problem`), the
   Boss awake, "The meter has stopped" and why (`MeterView.StoppedLine`; a kept fight can still be
@@ -1098,9 +1100,15 @@ _Yours too_ (on) lists your own.
   Leg Sweep (off). Settings → Cooldowns lists them by kind with a switch each (`CooldownPicks`
   keeps only what you changed) and the kind's head turning them all on or off ("Turn all on", "Turn all off").
 - **How it knows** (`PartyCooldowns`, the game side): the Action sheet read once in English on a
-  worker (rows that are the player's and not PvP, by name: each row's id to its cooldown; the first
-  row of its first name gives the icon, the base recast and the charges, and whether it's a role
-  action). While the tracker is shown where it may be, it listens to the recorder's combat parser
+  worker (`CooldownCatalog.Match`, tested: rows that are the player's and not PvP, by name, each
+  row's id to its cooldown; for a name with no player's row on the sheet, a job's own row (a job
+  category and a level): Starry Muse, placed through Scenic Muse, isn't marked the player's but is
+  the id the game says was used. A pet's row (the fairy's Fey Illumination) and a follow-up's (the
+  bell going off) don't count: a second "use" a moment later would teach a recast that short. The
+  row standing for it gives the icon, the base recast and the charges, and whether it's a role
+  action: one of its first name, with a recast, a job's, the lowest id, in that order; and the
+  lowest level of its job rows is when it's first had: Mug's 15 for Dokumori). A cooldown above a
+  member's level now (the party list's, synced; yours your character's) isn't listed. While the tracker is shown where it may be, it listens to the recorder's combat parser
   (`ICombatSink.Used`: every action a party member or their pet uses, as the game's message has it,
   zero targets too) and asks the recorder to keep its hooks on (`FightRecorder.HooksWanted`). The
   party is the party list's, read four times a second, its spots by `Core/Roles`. A new zone forgets
@@ -1122,7 +1130,8 @@ _Yours too_ (on) lists your own.
 
 **The on-screen callouts** (`CalloutWindow`; Settings → Plan window → On-screen callouts;
 `/raidplan callouts`; on at first). While your plan follows a pull (`PlanService.Following`, its
-clock running: a cue has matched, `PlanService.PlanClock`), its next steps over the fight, each with
+clock running: a cue has matched, `PlanService.PlanClock`; with recording off, the callouts being on
+is enough for a pull to be followed, as the plan window being open is), its next steps over the fight, each with
 a countdown to when it goes off: a step's time is its earliest cue's (`CalloutTimeline.StepTimes`;
 a step with no cue has none and isn't shown), counted on the plan's own clock, which the cue follower
 keeps to the fight (a cast matched moves it). The steps going off within _How far ahead_ (15 s at
@@ -1143,7 +1152,11 @@ muted. 12px down and 14 in; 12 between the first and the next, 8 between the res
   so it follows the game's own sound settings; no text-to-speech. Once a step a pull
   (`CalloutSounds`): a step the clock passes without it (the plan moved on by a match, or it was past
   when the plan engaged) is never played late; the same plan read again mid-pull keeps what's been
-  heard; a new pull (`FightRecorder.PullStarted`) plays them again. Not in the sample.
+  heard, and so does a plan switched away from and back to in the same pull (what's heard is kept by
+  plan); a new pull (`FightRecorder.PullStarted`) plays them again. Not in the sample.
+- A plan is read once for the callouts (`CalloutPlan`: each step's time and words, the timed steps
+  in the order they go off), so a frame makes nothing but its lines. A countdown still to come
+  reads at least "1" (never "0"), as the tracker's times do.
 - **Settings → Plan window → On-screen callouts**: _Show the callouts_, _How far ahead_, _How many_, _A
   sound before each step_, _Which sound_, _How early_, _Hear it_, then the window's own: _Lock it
   where it is_ with _Click-through when locked_, _Grows_, _Compact_, _Background_ (0 to 100%, 45% at
@@ -1173,7 +1186,8 @@ RaidPlanner/
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
-              the callouts' timeline (CalloutTimeline), the overlays' settings (Overlay), SVG
+              the callouts' timeline (CalloutTimeline), the overlays' settings (Overlay),
+              /raidplan's words (Commands), SVG
               paths, dashes), tested
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
 tools/      the icon (icon.svg → images/icon.png)
@@ -1188,7 +1202,8 @@ being recorded (and keeps it); `/raidplan plan` shows or hides the plan window; 
 shows or hides the meter, `/raidplan meter unlock` gives it the mouse back (and unlocks it),
 `/raidplan meter big` opens it up, `/raidplan meter settings` opens Settings → Meter, `/raidplan meter
 preview` (or `meter sample`) shows the sample fight in it (again to stop; not while a real fight is on).
-Since 0.4.0: `/raidplan cooldowns` (or `cds`) shows or hides the party cooldown tracker and
+What follows `/raidplan` is read in lower case with runs of spaces as one (`CommandWords.Normalize`).
+Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the party cooldown tracker and
 `/raidplan callouts` the on-screen callouts (each says in chat where it will show); after either,
 `unlock` gives it the mouse back (and shows it), `preview` (or `sample`) shows or stops its sample,
 `settings` opens Settings on its tab (Cooldowns, Plan window).
@@ -1302,6 +1317,16 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`) shows or hides the party cooldown 
   and MP, then the frames as before, then ground placements, casts, uses, ticks (frames by time now).
 - **Fixed**: a hit that did damage and had a status resisted (a stun on a boss immune to it) counted as
   not landed (the game's "status resisted" was read as "fully resisted").
+- **Fixed before release** (the windows): the cooldown tracker found no row for Starry Muse (the
+  sheet doesn't mark it the player's: it's placed through Scenic Muse), so a pictomancer's never
+  showed; a cooldown above a member's level now (synced) isn't listed as ready; with recording off,
+  the on-screen callouts follow a pull when they're on (before, only with the plan window open); a
+  plan switched away from and back to mid-pull doesn't sound a step twice; `/raidplan` reads its
+  words in any case and spacing, and `cds unlock`, `cds preview`, `cds settings` work as
+  `cooldowns …`; the limit break gauge in the meter's foot no longer runs over the Healing tab's
+  "HPS"; a countdown a hair from ready reads "1", not "0"; the sample's earlier pulls' tinctures agree
+  with their events; and less is made each frame (words cut to fit kept, the callouts' plan read once, the opened-up
+  window's event log's times and Settings → Cooldowns' words made once).
 
 ### 0.3.1
 

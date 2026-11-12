@@ -26,7 +26,9 @@ public sealed class CalloutWindow : OverlayWindow
     private readonly CalloutSounds sounds = new();
     private readonly long started = Stopwatch.GetTimestamp();
     private List<CalloutLine> lines = new();
-    private (Plan? Of, double[] Times) times = (null, Array.Empty<double>());
+
+    /// <summary>The plan followed, read once (its steps' times and words, in time order).</summary>
+    private CalloutPlan? read;
     private DateTime soundFailedAt;
 
     /// <summary>The countdowns' words, made again only when their second changes.</summary>
@@ -52,9 +54,10 @@ public sealed class CalloutWindow : OverlayWindow
             return true;
         }
         if (!Settings.Show || plans?.Plan is not { } plan || !plans.Following || plans.PlanClock is not { } clock) return false;
-        if (!ReferenceEquals(times.Of, plan)) times = (plan, CalloutTimeline.StepTimes(plan.Game?.Cues, plan.Steps.Count));
-        if (Config.CalloutSound && sounds.Due(plan, times.Times, clock, Math.Clamp(Config.CalloutSoundLead, 1, 10)) != null) Play(Config.CalloutSoundId);
-        lines = CalloutTimeline.Upcoming(plan, times.Times, clock, ahead, count);
+        var cp = read is { } r && ReferenceEquals(r.Plan, plan) ? r : read = new CalloutPlan(plan);
+        if (Config.CalloutSound && sounds.Due(plan, cp.Times, clock, Math.Clamp(Config.CalloutSoundLead, 1, 10)) != null) Play(Config.CalloutSoundId);
+        // Into the list kept here: nothing made each frame but the lines.
+        CalloutTimeline.Upcoming(cp, clock, ahead, count, lines);
         return lines.Count > 0;
     }
 
@@ -146,7 +149,8 @@ public sealed class CalloutWindow : OverlayWindow
 
     private string Countdown(CalloutLine l)
     {
-        var seconds = l.Now ? 0 : (int)Math.Ceiling(l.In - 1e-9);
+        // "Now" is its own (−1): a countdown a hair over 0 reads "0", not the "NOW" kept for it.
+        var seconds = l.Now ? -1 : (int)Math.Ceiling(l.In - 1e-9);
         if (countdowns.TryGetValue(l.Step, out var had) && had.Seconds == seconds) return had.Text;
         if (countdowns.Count > 256) countdowns.Clear();
         var text = CalloutTimeline.Countdown(l.In);

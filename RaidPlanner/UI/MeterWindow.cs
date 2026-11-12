@@ -165,8 +165,8 @@ public sealed class MeterWindow : Window
     private DateTime copiedAt;
 
     /// <summary>The Events tab's feed (newest first, each time in words, the foot's counts), made again only for a new list from the source.</summary>
-    private (IReadOnlyList<MeterEvent>? Of, int Count, List<MeterEvent> Newest, List<string> Times, string Foot) feed =
-        (null, -1, new List<MeterEvent>(), new List<string>(), string.Empty);
+    private (IReadOnlyList<MeterEvent>? Of, int Count, bool Compact, List<MeterEvent> Newest, List<string> Times, string Foot) feed =
+        (null, -1, false, new List<MeterEvent>(), new List<string>(), string.Empty);
 
     /// <summary>The limit break gauge's bars, worked out again only when the gauge changes.</summary>
     private (LimitBreakGauge? Of, float[] Bars) gaugeBars = (null, Array.Empty<float>());
@@ -887,7 +887,8 @@ public sealed class MeterWindow : Window
         var x = left + S(z.Pad);
         x += Txt.Line(dl, new Vector2(x, y), "Party · ", Face.Mono, z.FootPx, Palette.Muted, z.Foot);
         x += Txt.Line(dl, new Vector2(x, y), value, Face.MonoSemibold, z.FootPx, Palette.White, z.Foot);
-        if (unit != null) Txt.Line(dl, new Vector2(x + Txt.Width(" ", Face.Mono, z.FootPx), y), unit, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
+        // The unit after the number ("HPS"), and the gauge only after it.
+        if (unit != null) x += Txt.Width(" ", Face.Mono, z.FootPx) + Txt.Line(dl, new Vector2(x + Txt.Width(" ", Face.Mono, z.FootPx), y), unit, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
         var rx = left + w - S(z.Pad);
         if (previewInFoot)
         {
@@ -1206,13 +1207,14 @@ public sealed class MeterWindow : Window
     /// <summary>The feed for a list of events: made again only when the source gives a new list (or it grew).</summary>
     private (List<MeterEvent> Newest, List<string> Times, string Foot) Feed(IReadOnlyList<MeterEvent> events)
     {
-        if (!ReferenceEquals(feed.Of, events) || feed.Count != events.Count)
+        var compact = Z.IsCompact;
+        if (!ReferenceEquals(feed.Of, events) || feed.Count != events.Count || feed.Compact != compact)
         {
-            var newest = MeterText.Newest(events, 64);
+            var newest = MeterText.Newest(events, EventIds.Length);
             var times = new List<string>(newest.Count);
             foreach (var ev in newest) times.Add(Format.Clock(ev.At));
-            var foot = events.Count == 0 ? "No events yet" : MeterText.Counts(events, Z.IsCompact ? 2 : 3);
-            feed = (events, events.Count, newest, times, foot);
+            var foot = events.Count == 0 ? "No events yet" : MeterText.Counts(events, compact ? 2 : 3);
+            feed = (events, events.Count, compact, newest, times, foot);
         }
         return (feed.Newest, feed.Times, feed.Foot);
     }

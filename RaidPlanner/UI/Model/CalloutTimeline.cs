@@ -7,10 +7,51 @@ namespace RaidPlanner.UI.Model;
 /// <summary>A step on the on-screen callouts: its number (from 0), its big words, its name under them (when they aren't just the name), when it goes off and how soon.</summary>
 /// <param name="At">When its first mechanic goes off, in the plan's own time (its cues' times).</param>
 /// <param name="In">Seconds until then (negative once it has).</param>
-public sealed record CalloutLine(int Step, string Big, string? Name, double At, double In)
+public readonly record struct CalloutLine(int Step, string Big, string? Name, double At, double In)
 {
     /// <summary>It's going off now (its time has come): shown as "Now" for <see cref="CalloutTimeline.NowFor"/>.</summary>
     public bool Now => In <= 0;
+}
+
+/// <summary>
+/// A plan as the callouts read it, worked out once a plan (not each frame): when each step goes off
+/// (<see cref="CalloutTimeline.StepTimes"/>), its words (<see cref="CalloutTimeline.Words"/>), and the
+/// steps with a time in the order they go off.
+/// </summary>
+public sealed class CalloutPlan
+{
+    public CalloutPlan(Plan plan, double[]? times = null)
+    {
+        Plan = plan;
+        Times = times ?? CalloutTimeline.StepTimes(plan.Game?.Cues, plan.Steps.Count);
+        var n = Math.Min(Times.Length, plan.Steps.Count);
+        Words = new (string, string?)[n];
+        var order = new List<int>(n);
+        for (var s = 0; s < n; s++)
+        {
+            if (double.IsNaN(Times[s])) continue;
+            Words[s] = CalloutTimeline.Words(plan.Steps[s]);
+            order.Add(s);
+        }
+        var t = Times;
+        order.Sort((a, b) =>
+        {
+            var c = t[a].CompareTo(t[b]);
+            return c != 0 ? c : a.CompareTo(b);
+        });
+        Order = order.ToArray();
+    }
+
+    public Plan Plan { get; }
+
+    /// <summary>Each step's time (NaN: no cue).</summary>
+    public double[] Times { get; }
+
+    /// <summary>Each timed step's big words and name (the others' are left empty).</summary>
+    public (string Big, string? Name)[] Words { get; }
+
+    /// <summary>The timed steps, soonest first (ties by their number).</summary>
+    public int[] Order { get; }
 }
 
 /// <summary>
@@ -53,36 +94,31 @@ public static class CalloutTimeline
     public static List<CalloutLine> Upcoming(Plan plan, double[] times, double clock, double ahead, int count)
     {
         var list = new List<CalloutLine>();
-        if (count <= 0 || !double.IsFinite(clock)) return list;
-        var n = Math.Min(times.Length, plan.Steps.Count);
-        var order = new List<int>();
-        for (var s = 0; s < n; s++)
-        {
-            var at = times[s];
-            if (double.IsNaN(at)) continue;
-            var d = at - clock;
-            if (d < -NowFor || d > ahead) continue;
-            order.Add(s);
-        }
-        order.Sort((a, b) =>
-        {
-            var c = times[a].CompareTo(times[b]);
-            return c != 0 ? c : a.CompareTo(b);
-        });
-        foreach (var s in order)
-        {
-            if (list.Count >= count) break;
-            var (big, name) = Words(plan.Steps[s]);
-            list.Add(new CalloutLine(s, big, name, times[s], times[s] - clock));
-        }
+        Upcoming(new CalloutPlan(plan, times), clock, ahead, count, list);
         return list;
+    }
+
+    /// <summary>As above, into <paramref name="into"/> (cleared first), from a plan read once: nothing made but the lines, each frame.</summary>
+    public static void Upcoming(CalloutPlan plan, double clock, double ahead, int count, List<CalloutLine> into)
+    {
+        into.Clear();
+        if (count <= 0 || !double.IsFinite(clock)) return;
+        foreach (var s in plan.Order)
+        {
+            if (into.Count >= count) break;
+            var d = plan.Times[s] - clock;
+            if (d < -NowFor || d > ahead) continue;
+            var (big, name) = plan.Words[s];
+            into.Add(new CalloutLine(s, big, name, plan.Times[s], d));
+        }
     }
 
     /// <summary>The countdown as the callouts write it: "Now", "8" (seconds, rounded up), "1:05".</summary>
     public static string Countdown(double seconds)
     {
         if (seconds <= 0) return "Now";
-        var s = (int)Math.Ceiling(seconds - 1e-9);
+        // At least 1 while it's still to come (a hair over 0 isn't "0").
+        var s = Math.Max(1, (int)Math.Ceiling(seconds - 1e-9));
         return s < 60 ? s.ToString(System.Globalization.CultureInfo.InvariantCulture) : Format.Clock(s);
     }
 }
@@ -90,31 +126,38 @@ public static class CalloutTimeline
 /// <summary>
 /// When the callouts' sound plays: once a step, a pull, <c>lead</c> seconds before it goes off. A
 /// step the clock passes without its sound (a match moved the plan on, the sound was off, it was
-/// already past when the plan engaged) is marked heard, never played late. Reset for a new pull or another plan.
+/// already past when the plan engaged) is marked heard, never played late. What's been heard is kept by
+/// plan for the pull (switching to another plan and back mid-pull plays nothing twice); reset for a new pull.
 /// </summary>
 public sealed class CalloutSounds
 {
+    private readonly Dictionary<string, bool[]> byPlan = new();
     private bool[] heard = Array.Empty<bool>();
     private string? of;
 
     public void Reset()
     {
-        Array.Clear(heard);
+        byPlan.Clear();
+        heard = Array.Empty<bool>();
         of = null;
     }
 
     /// <summary>
     /// The step whose sound is due now (marked heard), or null; call every frame while the plan's clock
-    /// runs. The same plan read again (it changed on the site) keeps what's been heard; another starts afresh.
+    /// runs. The same plan read again (it changed on the site) keeps what's been heard, and so does a
+    /// plan switched back to in the same pull; one not yet followed this pull starts afresh.
     /// </summary>
     public int? Due(Plan plan, double[] times, double clock, double lead)
     {
-        if (of != plan.Id)
+        var id = plan.Id ?? string.Empty;
+        if (of != id || heard.Length != times.Length)
         {
-            of = plan.Id;
-            heard = new bool[times.Length];
+            if (of != null) byPlan[of] = heard;
+            of = id;
+            heard = byPlan.TryGetValue(id, out var had) ? had : Array.Empty<bool>();
+            if (heard.Length != times.Length) Array.Resize(ref heard, times.Length);
+            byPlan[id] = heard;
         }
-        else if (heard.Length != times.Length) Array.Resize(ref heard, times.Length);
         if (!double.IsFinite(clock)) return null;
         int? due = null;
         var dueAt = double.PositiveInfinity;

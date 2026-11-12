@@ -106,9 +106,10 @@ public class AlignmentTests
         [297] = new StatusInfo("Galvanize", 212801),
         // Since 0.4.0.
         [148] = new StatusInfo("Raise", 210402, 1),
-        [43] = new StatusInfo("Weakness", 215009, 2, true),
+        // As the Status sheet has them (Weakness can't be cleansed; a stun can).
+        [43] = new StatusInfo("Weakness", 215009, 2),
         [49] = new StatusInfo("Medicated", 216202, 1),
-        [2] = new StatusInfo("Stun", 215004, 2),
+        [2] = new StatusInfo("Stun", 215004, 2, true),
         [1209] = new StatusInfo("Arm's Length", 210813, 1),
     };
 
@@ -285,7 +286,8 @@ public class AlignmentTests
             parser.Action(batch);
         });
 
-        // One of the party's actions on one target (a pet's with its owner): the HP read only on the party, as the game side reads it.
+        // One of the party's actions on one target (a pet's with its owner): the HP read only on the party, as the game side reads
+        // it, and whether the target is hostile with it (GameHooks.ReadTarget: so never for an enemy the party only puts a status on).
         void PartyAction(double t, uint caster, uint action, uint target, params RawEffect[] effects) => When(t, () =>
         {
             var batch = new EffectBatch();
@@ -296,7 +298,7 @@ public class AlignmentTests
             var onParty = who is >= 1 and <= 8;
             batch.Hp[k] = onParty ? Hp(who, t - 0.01) : -1;
             batch.MaxHp[k] = onParty ? MaxHp[who] : -1;
-            batch.Hostile[k] = !onParty;
+            batch.Hostile[k] = !onParty && parser.WantsTarget(target, batch.EffectsOf(k));
             parser.Action(batch);
         });
 
@@ -705,12 +707,10 @@ public class AlignmentTests
             Assert.Equal(row.Damage / len, row.EncDps, 6);
             Assert.Equal(row.Healing / len, row.Hps, 6);
             Assert.Equal(row.Damage / Math.Max(1, row.ActiveSeconds), row.Dps, 6);
-            // Since 0.4.0: the same counts (the potions before the pull aren't the meter's: not in an encounter).
+            // Since 0.4.0: the same counts (the potions in the 30 seconds before the pull included, both ways).
             int Count(string key) => s[key]?.GetValue<int>() ?? 0;
-            var member = played.Recording.Party.Single(p => p.Slot == row.Slot).Id;
-            var prePots = played.Recording.Combat!.Pre.Count(p => p.Source == member && ((UseFlags)p.Flags & UseFlags.Item) != 0);
             Assert.Equal(Count("gcds"), row.Casts);
-            Assert.Equal(Count("pots"), row.Potions + prePots);
+            Assert.Equal(Count("pots"), row.Potions);
             Assert.Equal(Count("raises"), row.RaisesGiven);
             Assert.Equal(Count("raised"), row.Raised);
             Assert.Equal(Count("ints"), row.Interrupts);
@@ -727,18 +727,21 @@ public class AlignmentTests
         Assert.Equal((59.0, "H2"), (m.Deaths[0].RaisedAt!.Value, m.Deaths[0].RaisedBy!));
         Assert.True(m.Deaths[7].HadWeakness);
         Assert.False(m.Deaths[0].HadWeakness);
-        // The events: the interrupt (the WAR's), the Low Blow resisted, the potion, the Leg Sweep's stun, the chant that
-        // went off (the same moment: its end), the tank swap (MT to OT), the WHM holding the boss, the limit break, the raise.
+        // The events: the PLD's potion before the pull (at its own time, before 0), the interrupt (the WAR's), the Low Blow
+        // resisted, the potion, the Leg Sweep's stun, the chant that went off (the same moment: its end), the tank swap (MT to
+        // OT), the WHM holding the boss, the limit break, the raise.
         var events = played.Session.Events(m.Id);
         Assert.Equal(new[]
         {
-            MeterEventKind.Interrupt, MeterEventKind.Resisted, MeterEventKind.Potion, MeterEventKind.Stun, MeterEventKind.CastWentOff,
+            MeterEventKind.Potion, MeterEventKind.Interrupt, MeterEventKind.Resisted, MeterEventKind.Potion, MeterEventKind.Stun, MeterEventKind.CastWentOff,
             MeterEventKind.TankSwap, MeterEventKind.AggroLost, MeterEventKind.LimitBreak, MeterEventKind.Death, MeterEventKind.Raise,
             MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death, MeterEventKind.Death,
             MeterEventKind.Death, MeterEventKind.Death,
         }, events.Select(e => e.Kind));
-        Assert.Equal(("OT", "MT"), (events[5].Slot, events[5].OtherSlot));
-        Assert.Equal(("R2", "H2"), (events[9].Slot, events[9].OtherSlot));
+        Assert.Equal(("MT", -3.1), (events[0].Slot, Math.Round(events[0].At, 2)));
+        Assert.EndsWith("before the pull", events[0].Text);
+        Assert.Equal(("OT", "MT"), (events[6].Slot, events[6].OtherSlot));
+        Assert.Equal(("R2", "H2"), (events[10].Slot, events[10].OtherSlot));
     }
 
     /// <summary>

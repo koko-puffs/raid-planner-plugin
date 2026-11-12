@@ -28,11 +28,14 @@ public readonly record struct PartyState(uint Id, string Name, string Job, byte 
 /// recording's rule (<see cref="PhaseClock"/>), from the enemies' targetability the game side reports.
 ///
 /// Since 0.4.0 also what the party used (<see cref="Use"/>: GCDs, items, limit breaks, interrupts, a status
-/// resisted), raises (a dead member's HP above 0 again: credited to the last raise used on them while down,
-/// or the healers' limit break 3), the enemies' casts (<see cref="EnemyCast"/>) and their being stopped
+/// resisted; the potions in the <see cref="PrePull.Keep"/> seconds before an encounter are its own, as the
+/// summary's <c>pots</c> count them), raises (a dead member's HP above 0 again: credited as the recording
+/// credits them, to the Raise status a party member put on them while down, else the healers' limit break 3,
+/// else the last raise used on them while down), the enemies' casts (<see cref="EnemyCast"/>) and their being stopped
 /// (<see cref="Cancelled"/>, credited as the recording credits them: <see cref="CastWatch"/>), the bosses'
-/// targets (<see cref="Aggro"/>: tank swaps, a non-tank holding a boss), stuns and the like landing, and the
-/// limit break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
+/// targets (<see cref="Aggro"/>: tank swaps, a non-tank holding a boss), stuns and the like landing (a control
+/// status a party member's action put on someone outside the party, its message's own status effect), and the limit
+/// break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
 /// </summary>
 public sealed class MeterSession : IMeterSource, ICombatSink
 {
@@ -71,6 +74,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     private readonly List<PartyState> party = new();
     private readonly PartyEffect[] early = new PartyEffect[64];
     private readonly PartyUse[] earlyUses = new PartyUse[32];
+
+    // Items used out of an encounter (the last few): those in the PrePull.Keep seconds before one begins are its own.
+    private readonly PartyUse[] earlyItems = new PartyUse[16];
+    private int earlyItemCount;
+    private int earlyItemNext;
     private int earlyUseCount;
     private int earlyUseNext;
     private int earlyCount;
@@ -150,6 +158,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         {
             if (live != null) End(Outcome.Ended);
             ownPull = 0;
+            // A potion drunk in another zone is no pull's here.
+            earlyItemCount = 0;
         }
         territory = territoryId;
         content = contentId;
@@ -285,6 +295,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             if (t - u.T <= Before) f.Use(u with { T = Math.Max(t, u.T) }, this);
         }
         earlyUseCount = 0;
+        // The potions drunk before it (the pre-pull tincture): its own, at their own (negative) times.
+        for (var i = 0; i < earlyItemCount; i++)
+        {
+            var u = earlyItems[(earlyItemNext - earlyItemCount + i + earlyItems.Length) % earlyItems.Length];
+            if (t - u.T <= PrePull.Keep && u.T <= t) f.Use(u, this);
+        }
+        earlyItemCount = 0;
         kept = null;
     }
 
@@ -301,7 +318,15 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         if (Problem != null) return;
         if (live == null)
         {
-            // Kept a moment, as the effects are: a use in the second before the first hit is the encounter's.
+            // An item kept longer (the pre-pull tincture is the pull's); anything else a moment, as the effects are: a use in
+            // the second before the first hit is the encounter's.
+            if ((u.Flags & UseFlags.Item) != 0)
+            {
+                earlyItems[earlyItemNext] = u;
+                earlyItemNext = (earlyItemNext + 1) % earlyItems.Length;
+                earlyItemCount = Math.Min(earlyItemCount + 1, earlyItems.Length);
+                return;
+            }
             earlyUses[earlyUseNext] = u;
             earlyUseNext = (earlyUseNext + 1) % earlyUses.Length;
             earlyUseCount = Math.Min(earlyUseCount + 1, earlyUses.Length);
@@ -316,8 +341,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     /// </summary>
     public void EnemyCast(double t, uint enemy, uint action, float duration, bool interruptible)
     {
-        if (Problem != null || live == null || enemy == 0 || action == 0) return;
-        live.EnemyCast(t, enemy, action, duration, interruptible);
+        if (Problem != null || live == null || enemy == 0 || action == 0 || !double.IsFinite(t)) return;
+        live.EnemyCast(t, enemy, action, float.IsFinite(duration) ? duration : 0, interruptible);
     }
 
     /// <summary>
@@ -347,7 +372,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     public void Effect(in PartyEffect e)
     {
         if (Problem != null) return;
-        if (live != null && e.Kind == FxKind.Status && e.RecipientHostile && kinds.Control(e.Status)) live.Control(e, this);
+        // A stun (sleep, bind…) on someone outside the party: an enemy (the game side reads whether a target is hostile only
+        // when it needs its HP, so not for a status put on an enemy), and the Raise status on a member who's down.
+        if (live != null && e.Kind == FxKind.Status)
+        {
+            if (!e.RecipientParty && kinds.Control(e.Status)) live.Control(e, this);
+            else if (e.RecipientParty && kinds.RaiseStatus(e.Status)) live.RaiseStatus(e, this);
+        }
         if (live == null)
         {
             if (e.Kind == FxKind.Damage && !e.RecipientParty)
@@ -518,6 +549,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public int Interrupts;
         public byte Weakness;
         public (double T, Member By, bool Lb)? RaisedWith;
+
+        /// <summary>The Raise status a party member put on them while down (when, by whom): what their getting up is credited to first.</summary>
+        public (double T, Member By)? RaiseStatus;
         public Death? LastDeath;
 
         public readonly Recap[] Recent = new Recap[RecapLength];
@@ -668,6 +702,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             Deaths.Add(d);
             m.LastDeath = d;
             m.RaisedWith = null;
+            m.RaiseStatus = null;
             Happen(new Happening(t - Start, MeterEventKind.Death, m, null, 0, 0, d));
         }
 
@@ -679,19 +714,30 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             if (happenings.Count < MostEvents) happenings.Add(h);
         }
 
-        /// <summary>A dead member alive again: raised by the last raise used on them while down (or the limit break 3), if any.</summary>
+        /// <summary>
+        /// A dead member alive again, credited as the recording credits it (<c>RecordingBuilder.Raised</c>): to the Raise status a
+        /// party member put on them while down, else to the last raise used on them while down (or the healers' limit break 3).
+        /// </summary>
         public void Raised(Member m, double t)
         {
-            var by = m.RaisedWith;
+            var use = m.RaisedWith;
+            var by = m.RaiseStatus?.By ?? use?.By;
             m.RaisedWith = null;
+            m.RaiseStatus = null;
             m.Raised++;
-            if (by is { } b) b.By.RaisesGiven++;
+            if (by != null) by.RaisesGiven++;
             if (m.LastDeath is { RaisedAt: null } d)
             {
                 d.RaisedAt = t - Start;
-                d.RaisedBy = by?.By;
+                d.RaisedBy = by;
             }
-            Happen(new Happening(t - Start, MeterEventKind.Raise, m, by?.By, 0, 0, null, by is { Lb: true } ? 1 : 0));
+            Happen(new Happening(t - Start, MeterEventKind.Raise, m, by, 0, 0, null, use is { Lb: true } ? 1 : 0));
+        }
+
+        /// <summary>The Raise status put on a member who's down, by a party member [verify: the game names the raiser as its source].</summary>
+        public void RaiseStatus(in PartyEffect e, MeterSession s)
+        {
+            if (Of(e.Recipient) is { Dead: true } on && Of(e.Member, s) is { } by) on.RaiseStatus = (e.T, by);
         }
 
         public void Use(in PartyUse u, MeterSession s)
@@ -700,6 +746,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var t = u.T - Start;
             if ((u.Flags & UseFlags.Item) != 0)
             {
+                // One before the encounter (the pre-pull tincture) at its own time, before 0.
                 m.Potions++;
                 Happen(new Happening(t, MeterEventKind.Potion, m, null, u.Action, 0, null));
                 return;
@@ -820,7 +867,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 MeterEventKind.CastWentOff => $"{s.actionName(h.Action)} went off",
                 MeterEventKind.Stun => $"{who}'s {s.statusName(h.Status)} landed",
                 MeterEventKind.Resisted => $"{who}'s {s.actionName(h.Action)} was resisted",
-                MeterEventKind.Potion => $"{who} used {s.itemName(h.Action)}",
+                MeterEventKind.Potion => h.T < 0 ? $"{who} used {s.itemName(h.Action)} before the pull" : $"{who} used {s.itemName(h.Action)}",
                 MeterEventKind.LimitBreak => $"{who} used {s.actionName(h.Action)}",
                 MeterEventKind.TankSwap => $"Tank swap: {other} to {who}",
                 MeterEventKind.AggroLost => $"{who} held a boss for {h.Seconds:0.0}s",
