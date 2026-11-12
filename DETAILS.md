@@ -873,6 +873,13 @@ preview` shows a made-up fight in it (again to stop).
 
 ## Release notes
 
+### 0.3.1
+
+- **The reticle's corners are never cut off.** A row that runs a list's or menu's full width (the
+  plan window's plans menu, the pulls, the meter's rows) kept its corners just outside the area the
+  window shows, so they were clipped; a corner that would fall outside it is now drawn just inside its
+  edge.
+
 ### 0.3.0
 
 - **The Occult Crescent isn't recorded.** South and North Horn, their critical engagements and

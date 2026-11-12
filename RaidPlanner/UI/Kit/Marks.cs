@@ -317,7 +317,10 @@ public static partial class Kit
 
     /// <summary>
     /// The reticle (`.ret`): four corner brackets 9px long and 1.5px thick, 5px outside what's
-    /// targeted, closing in from 1.035 and fading in over 160ms when it's pointed at or picked.
+    /// targeted, closing in from 1.035 and fading in over 160ms when it's pointed at or picked. A side
+    /// that would fall outside what the window (or the list, menu or child it's in) shows is drawn just
+    /// inside its edge instead, so a row that runs the list's full width, or one scrolled half out of
+    /// it, never has its corners cut off.
     /// </summary>
     public static void Reticle(ImDrawListPtr dl, string id, Vector2 min, Vector2 max, bool on, Vector4? color = null)
     {
@@ -331,6 +334,11 @@ public static partial class Kit
         var k = 1.035f - 0.035f * e;
         a = c + (a - c) * k;
         b = c + (b - c) * k;
+        // Kept inside what's drawn here (the draw list's clip rect, less a hair so the line isn't on it).
+        var edge = S(0.5f);
+        a = Vector2.Max(a, dl.GetClipRectMin() + new Vector2(edge));
+        b = Vector2.Min(b, dl.GetClipRectMax() - new Vector2(edge));
+        if (b.X - a.X < S(4) || b.Y - a.Y < S(4)) return;
         var col = Palette.U32(Palette.WithAlpha(color ?? Palette.White, e));
         var l = S(9);
         var w = S(1.5f);
