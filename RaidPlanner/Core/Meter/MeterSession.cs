@@ -34,8 +34,8 @@ public readonly record struct PartyState(uint Id, string Name, string Job, byte 
 /// else the last raise used on them while down), the enemies' casts (<see cref="EnemyCast"/>) and their being stopped
 /// (<see cref="Cancelled"/>, credited as the recording credits them: <see cref="CastWatch"/>), the bosses'
 /// targets (<see cref="Aggro"/>: tank swaps, a non-tank holding a boss), stuns and the like landing (a control
-/// status a party member's action put on someone outside the party, its message's own status effect), and the limit
-/// break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
+/// status a party member's action put on someone outside the party, its message's own status effect, with damage or
+/// not: <see cref="StatusOn"/>), and the limit break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
 /// </summary>
 public sealed class MeterSession : IMeterSource, ICombatSink
 {
@@ -372,13 +372,6 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     public void Effect(in PartyEffect e)
     {
         if (Problem != null) return;
-        // A stun (sleep, bind…) on someone outside the party: an enemy (the game side reads whether a target is hostile only
-        // when it needs its HP, so not for a status put on an enemy), and the Raise status on a member who's down.
-        if (live != null && e.Kind == FxKind.Status)
-        {
-            if (!e.RecipientParty && kinds.Control(e.Status)) live.Control(e, this);
-            else if (e.RecipientParty && kinds.RaiseStatus(e.Status)) live.RaiseStatus(e, this);
-        }
         if (live == null)
         {
             if (e.Kind == FxKind.Damage && !e.RecipientParty)
@@ -394,6 +387,18 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             }
         }
         live!.Effect(e, this);
+    }
+
+    /// <summary>
+    /// A status a party member put on (with damage or not: Shield Bash's stun too): a stun (sleep, bind…) on someone outside the
+    /// party is one landed (the game side reads whether a target is hostile only when it needs its HP, so not for an enemy the
+    /// party only puts a status on), and the Raise status on a member who's down is what their getting up is credited to.
+    /// </summary>
+    public void StatusOn(in PartyEffect e)
+    {
+        if (Problem != null || live == null || e.Kind != FxKind.Status) return;
+        if (!e.RecipientParty && kinds.Control(e.Status)) live.Control(e, this);
+        else if (e.RecipientParty && kinds.RaiseStatus(e.Status)) live.RaiseStatus(e, this);
     }
 
     public void Taken(in TakenHit e)
@@ -1021,7 +1026,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             int deaths, bool dead, double? diedAt, Member? m, double duration)
         {
             // Seconds dead: each death not the wipe's, to when they were up again (or the end, or now).
-            var deadFor = m == null ? 0 : Deaths.Where(d => d.Who == m && !d.PartOfWipe).Sum(d => Math.Max(0, (d.RaisedAt ?? duration) - d.T));
+            var deadFor = m == null ? 0 : Deaths.Where(d => d.Who == m && !d.PartOfWipe).Sum(d => Math.Max(0, Math.Min(d.RaisedAt ?? duration, duration) - d.T));
             var encDps = t.Damage / clock;
             // The limit break has no time of its own: its DPS is its ENCDPS (the window shows a dash).
             var dps = lb ? encDps : t.Damage / Math.Max(1, t.Active);

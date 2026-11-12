@@ -17,8 +17,11 @@ namespace RaidPlanner.Core;
 /// </summary>
 public static class PullStats
 {
-    /// <summary>The most bytes the summary's <c>stats</c> may take (the site's column allows 8 KB).</summary>
-    public const int MaxBytes = 6 * 1024;
+    /// <summary>
+    /// The most bytes the summary's <c>stats</c> may take, as the server measures it (<see cref="Size"/>: Postgres's jsonb text,
+    /// a space after each <c>:</c> and <c>,</c>), so its 8,192-byte check can't be passed: 7 KB, a kilobyte to spare.
+    /// </summary>
+    public const int MaxBytes = 7 * 1024;
 
     public const int MaxHits = 400;
     public const int MaxDebuffs = 200;
@@ -269,8 +272,8 @@ public static class PullStats
     /// <summary>
     /// The summary's <c>stats</c> (contract §3): each spot's totals, the limit break's damage, the
     /// enemies' hits on the party (autos left out), the damage downs and vulnerability ups gained, and
-    /// the names of the actions and statuses those use. At most <see cref="MaxBytes"/>: past that the
-    /// latest hits go first, then the latest debuffs.
+    /// the names of the actions and statuses those use. At most <see cref="MaxBytes"/> (as the server measures it: <see cref="Size"/>):
+    /// past that the damage by phase goes first (its latest phases), then the latest hits, then the latest debuffs, then <c>x</c>.
     /// </summary>
     /// <param name="failKind">A status's kind (<see cref="CombatLists.FailKind"/>); by default from its name in the recording.</param>
     /// <param name="phaseStarts">When each phase began (the summary's <c>phases</c>), for <c>ph</c>; by default <see cref="PhaseStarts"/>.</param>
@@ -372,10 +375,10 @@ public static class PullStats
             slotsJson.Add(slot);
         }
         // The damage by phase, with the phase's start (whole seconds, as `phases`), when the recording has amounts.
-        JsonArray? ph = null;
+        List<JsonArray>? ph = null;
         if (r.Combat != null)
         {
-            ph = new JsonArray();
+            ph = new List<JsonArray>();
             for (var i = 0; i < starts.Count; i++)
             {
                 var row = new JsonArray((long)Math.Round(double.IsFinite(starts[i]) ? Math.Max(0, starts[i]) : 0, MidpointRounding.AwayFromZero));
@@ -384,9 +387,10 @@ public static class PullStats
             }
         }
         var x = extra.X;
+        var phCount = ph?.Count ?? 0;
 
-        // The first so many hits and debuffs, with the names they use; the damage by phase and the extras unless dropped.
-        JsonObject Make(int hitCount, int debuffCount, bool withPh = true, bool withX = true)
+        // The first so many hits, debuffs and phases' damage, with the names they use; the extras unless dropped.
+        JsonObject Make(int hitCount, int debuffCount, int phaseCount, bool withX = true)
         {
             var names = new JsonObject();
             foreach (var h in hits.Take(hitCount))
@@ -406,7 +410,7 @@ public static class PullStats
             };
             // The fight's length the numbers are over (the meter's), when there was damage to measure it by.
             if (length is { } len) o["len"] = len;
-            if (withPh && ph != null) o["ph"] = ph.DeepClone();
+            if (ph != null && phaseCount > 0) o["ph"] = new JsonArray(ph.Take(phaseCount).Select(p => (JsonNode)p.DeepClone()).ToArray());
             if (withX && x.Count > 0) o["x"] = x.DeepClone();
             return o;
         }
@@ -425,15 +429,19 @@ public static class PullStats
             return lo;
         }
 
-        // Past the size: the latest hits first, then the latest debuffs, then the damage by phase, then the extras.
-        var stats = Make(hits.Count, debuffs.Count);
-        if (Size(stats) <= MaxBytes) return stats;
-        if (Size(Make(0, debuffs.Count)) <= MaxBytes)
-            return Make(Most(hits.Count, n => Size(Make(n, debuffs.Count)) <= MaxBytes), debuffs.Count);
-        if (Size(Make(0, 0)) <= MaxBytes)
-            return Make(0, Most(debuffs.Count, n => Size(Make(0, n)) <= MaxBytes));
-        if (Size(Make(0, 0, false)) <= MaxBytes) return Make(0, 0, false);
-        return Make(0, 0, false, false);
+        // Past the size: the damage by phase from the latest phases (a fight with dozens of them: the summary's `phases` still
+        // has every start, so a phase kept still has its end), then the latest hits (what failed, by whom: Progress's heart),
+        // then the latest debuffs, then the extras.
+        bool Fits(JsonObject o) => Size(o) <= MaxBytes;
+        var stats = Make(hits.Count, debuffs.Count, phCount);
+        if (Fits(stats)) return stats;
+        if (Fits(Make(hits.Count, debuffs.Count, 0)))
+            return Make(hits.Count, debuffs.Count, Most(phCount, n => Fits(Make(hits.Count, debuffs.Count, n))));
+        if (Fits(Make(0, debuffs.Count, 0)))
+            return Make(Most(hits.Count, n => Fits(Make(n, debuffs.Count, 0))), debuffs.Count, 0);
+        if (Fits(Make(0, 0, 0)))
+            return Make(0, Most(debuffs.Count, n => Fits(Make(0, n, 0))), 0);
+        return Make(0, 0, 0, false);
     }
 
     /// <summary>Since 0.4.0: a spot's counts for the summary (each 0 when the recording hasn't the data).</summary>
@@ -481,8 +489,10 @@ public static class PullStats
             var dead = 0.0;
             foreach (var d in r.Events.OfType<DeathEvent>().Where(d => d.Who == p.Id && !wipe.Contains(d)))
             {
+                // To their raise or the fight's end, whichever came first (a raise after the fight isn't time dead in it: Review's rule).
                 var back = raises.FirstOrDefault(x => x.Who == p.Id && x.T >= d.T);
-                dead += Math.Max(0, (back?.T ?? Math.Max(d.T, fightEnd ?? r.Duration)) - d.T);
+                var end = fightEnd ?? r.Duration;
+                dead += Math.Max(0, Math.Min(back?.T ?? end, end) - d.T);
             }
             ex.Members[p.Id] = new SlotExtras(gcds.TryGetValue(p.Id, out var g) ? g : 0, pots.TryGetValue(p.Id, out var pt) ? pt : 0,
                 raises.Count(x => x.By == p.Id), raises.Count(x => x.Who == p.Id), dead, cancels.Count(x => x.Interrupted && x.By == p.Id));
@@ -515,13 +525,32 @@ public static class PullStats
     /// <summary>A target held this long or more is a span that counts (a tank swap, aggro lost: the site's rule).</summary>
     public const double AggroSpan = 1.0;
 
+    /// <summary>A wipe's recording runs on past its last death at most this long and still ends there as fought (the site's <c>WIPE_TAIL</c>).</summary>
+    public const double WipeTail = 20;
+
     /// <summary>
-    /// The bosses' tank swaps (the site's rule): each boss's target as the <c>aggro</c> events say, in spans; those of at least
-    /// <see cref="AggroSpan"/> on a tank and not inside one of its casts aimed at them (a tankbuster on the other tank isn't a
-    /// swap); one tank's span followed by another tank's is a swap.
+    /// The pull as fought, on its clock (the site's <c>foughtLength</c>): a wipe ends at its last death when the recording ran on
+    /// at most <see cref="WipeTail"/> past it; else the recording's length.
+    /// </summary>
+    public static double FoughtLength(Recording r)
+    {
+        if (r.Outcome != Outcome.Wipe) return r.Duration;
+        var last = r.Events.OfType<DeathEvent>().Select(d => d.T).Where(double.IsFinite).DefaultIfEmpty(0).Max();
+        if (last <= 0) return r.Duration;
+        if (r.Duration <= 0) return last;
+        return last < r.Duration && r.Duration - last <= WipeTail ? last : r.Duration;
+    }
+
+    /// <summary>
+    /// The bosses' tank swaps (the site's rule, <c>pullEvents.ts</c>): each boss's target as the <c>aggro</c> events say, in
+    /// spans to the next (the last to the pull as fought, <see cref="FoughtLength"/>); those of at least <see cref="AggroSpan"/>
+    /// on a tank and not a cast's (inside one of its casts aimed at them, from half a second before it to a second and a half
+    /// after its end: a boss looking back after a tankbuster on the other tank isn't a swap); one tank's span followed by
+    /// another tank's is a swap.
     /// </summary>
     public static int TankSwaps(Recording r)
     {
+        var fought = FoughtLength(r);
         var tanks = r.Party.Where(p => p.Role == "tank").Select(p => p.Id).ToHashSet();
         var bosses = r.Actors.Where(a => a.Kind == ActorKind.Boss).Select(a => a.Id).ToHashSet();
         var swaps = 0;
@@ -533,9 +562,9 @@ public static class PullStats
             for (var i = 0; i < list.Count; i++)
             {
                 var (start, on) = (list[i].T, list[i].On);
-                var end = i + 1 < list.Count ? list[i + 1].T : r.Duration;
+                var end = Math.Min(fought, i + 1 < list.Count ? list[i + 1].T : fought);
                 if (!tanks.Contains(on) || end - start < AggroSpan) continue;
-                if (casts.Any(c => c.Target == on && start >= c.T - 0.1 && end <= c.T + c.Duration + 1.0)) continue;
+                if (casts.Any(c => c.Target == on && start >= c.T - 0.5 && end <= c.T + c.Duration + 1.5)) continue;
                 if (held != 0 && held != on) swaps++;
                 held = on;
             }
@@ -547,7 +576,29 @@ public static class PullStats
 
     private static long Ds(double t) => double.IsFinite(t) ? (long)Math.Round(Math.Max(0, t) * 10, MidpointRounding.AwayFromZero) : 0;
 
-    public static int Size(JsonNode node) => Encoding.UTF8.GetByteCount(node.ToJsonString());
+    /// <summary>
+    /// A summary part's size as the server measures it (<c>octet_length(stats::text)</c>: Postgres writes jsonb with a space
+    /// after each <c>:</c> and <c>,</c>): the compact JSON's bytes and one for each of those outside a string. (The compact
+    /// JSON escapes non-ASCII letters, six bytes each where jsonb's text has two or three, so this never comes out short.)
+    /// </summary>
+    public static int Size(JsonNode node)
+    {
+        var json = node.ToJsonString();
+        var spaces = 0;
+        var inString = false;
+        for (var i = 0; i < json.Length; i++)
+        {
+            var c = json[i];
+            if (inString)
+            {
+                if (c == '\\') i++;
+                else if (c == '"') inString = false;
+            }
+            else if (c == '"') inString = true;
+            else if (c is ':' or ',') spaces++;
+        }
+        return Encoding.UTF8.GetByteCount(json) + spaces;
+    }
 
     /// <summary>A target's effect bits that mean the hit didn't count on them: missed (fully resisted), invulnerable, dodged.</summary>
     private const int NotLanded = Effects.FxResisted | Effects.FxInvulnerable | Effects.FxDodged;

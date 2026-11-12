@@ -229,6 +229,15 @@ public interface ICombatSink
 
     void Effect(in PartyEffect e);
 
+    /// <summary>
+    /// A status a party member's action put on someone (<see cref="FxKind.Status"/> or <see cref="FxKind.Shield"/>), whether or
+    /// not it came with damage or a heal (one that did is no <see cref="Effect"/> of its own: Shield Bash's stun is only this).
+    /// Told before <see cref="Effect"/> for one that's a row too. Since 0.4.0 (the meter's stuns and raises); nothing by default.
+    /// </summary>
+    void StatusOn(in PartyEffect e)
+    {
+    }
+
     void Taken(in TakenHit e);
 
     /// <summary>A tick, with whom it's credited to (none: not the party's, or a bleed on the party).</summary>

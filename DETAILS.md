@@ -425,7 +425,9 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   null when it isn't known.
 - `phases`: when each phase began, whole seconds, the first 0 (the site's `phaseStarts`), as the
   recorder counted them while it recorded (the same count as `phase`, even past the events' cap).
-- `stats` (at most 6 KB): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
+- `stats` (at most 7 KB as the server measures it, `PullStats.Size`: Postgres's jsonb text, a space after
+  each `:` and `,`, so the server's 8,192-byte check always has a kilobyte to spare; 6 KB compact before the
+  round-five review, which a summary of small numbers could have taken past 8,192): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
   recording's order (the party list's), each with its spot: `dmg` (their damage, their pets' and DoTs' included; a tick the game sent without saying
   whose is shared between the party's DoTs on the target then, as the meter does), `heal` (what their
   heals restored: the heal less what went past the HP missing then; a HoT's tick against the HP read
@@ -445,7 +447,7 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   bit i the i-th of `slots`, only those it landed on (a miss, a dodge or an invulnerable target isn't
   in it, as the site reads a recording's hits; a hit that landed on no one isn't sent); `debuffs`, the damage downs and vulnerability ups as they were gained
   (200 at most) as `[deciseconds, status, slot mask]`; `names`, those actions' and statuses' names
-  by id. Over 6 KB, the latest hits go first, then the latest debuffs. Damage downs and
+  by id. Over the size, see the end of this list for what goes first. Damage downs and
   vulnerability ups are the statuses so named on the game's Status sheet in English
   (`GameData.FailKinds`: every row named exactly "Damage Down" or "Vulnerability Up", as the site's
   `model/debuffs.ts` lists them; "Physical Vulnerability Up" and "Magic Vulnerability Up" aren't
@@ -454,14 +456,20 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   recording player's spot), `gcds` (their GCDs used: actions whose cooldown group, or additional one,
   is the GCD's, 58; their pets' not), `pots` (items used, before the pull too), `raises` (raise events
   they're credited with), `raised` (raised), `dead` (seconds dead, one decimal: from each death not the
-  wipe's to their raise, or to the fight's end, `len`'s end), `ints` (enemy casts they're credited with
+  wipe's to their raise or the fight's end, `len`'s end, whichever came first: a raise after the fight
+  isn't time dead in it), `ints` (enemy casts they're credited with
   interrupting). And two new keys (the site's `…_rp_round_four` migration accepts them): `ph`, the damage
   by phase, `[[start, d0, d1, …], …]` aligned with `phases` (≤ 50; each `slots` entry's damage in it, pets
   and DoTs in, the limit break out: each spot's adds up to its `dmg`); `x`, small extras (≤ 2 KB):
-  `int` `[interrupted, interruptible casts]`, `swaps` (tank swaps on the bosses: their targets as spans,
-  those of a second or more on a tank and not inside one of their casts aimed at that tank; one tank's
-  after another's is a swap: `PullStats.TankSwaps`), `lbUses` (`[deciseconds, action]`, the first 10)
-  and `cd` (the countdown's `end`). Over 6 KB: the hits go first, then the debuffs, then `ph`, then `x`.
+  `int` `[interrupted, interruptible casts]`, `swaps` (tank swaps on the bosses, the site's rule: their
+  targets as spans, each to the next, the last to the pull as fought, `PullStats.FoughtLength`: a wipe's
+  last death when the recording ran on 20 s or less past it; those of a second or more on a tank and not
+  inside one of their casts aimed at that tank, from half a second before it to a second and a half after
+  its end; one tank's after another's is a swap: `PullStats.TankSwaps`), `lbUses` (`[deciseconds,
+  action]`, the first 10) and `cd` (the countdown's `end`). Over the size: `ph` goes first, from its latest
+  phases (a fight with dozens of phases; `phases` keeps every start, so a phase kept still has its end
+  there), then the latest hits, then the latest debuffs, then `x`. The hits (who failed what) are what
+  Progress is about; with 50 phases, `ph` left room for only about 20 of them.
 
 The site reads these as the meter means them, and works the same numbers out from the pull's
 recording by the same rules (Review); `AlignmentTests` (`RaidPlanner.Tests/AlignmentTests.cs`) plays
@@ -1365,6 +1373,15 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   type, the Raise and Weakness statuses' sources, the enmity list, the gauge, head signs, your recasts,
   ground placements) go to `diagnostics-<date>.log` in the recordings folder, for checking the plugin
   against the game. It holds character names. Capped at 5 MB a file, the newest six kept.
+- **Fixed in review (the summary)**: its size is measured as the server measures it (jsonb text, a space
+  after each `:` and `,`), at most 7 KB, so the 8,192-byte check can't be passed; past it the damage by
+  phase goes first (from its latest phases), then the hits, then the debuffs, then `x` (the hits went
+  first before). Time dead stops at the fight's end even when the raise came after it. Tank swaps use the
+  site's window round a cast (half a second before to a second and a half after) and end the last span
+  where the pull was fought (a wipe's last death), so a boss turning back after a buster on the other
+  tank, or in the seconds after the wipe, is no swap. The meter counts a stun that came with damage
+  (Shield Bash's): the parser now tells its listeners of every status put on (`ICombatSink.StatusOn`), not
+  only those that are rows of their own; the meter's time dead stops at the encounter's end too.
 - **Fixed in review**: the meter never counted a stun (the game side doesn't read whether an enemy the
   party only puts a status on is hostile, and the meter asked); now any control status put on someone
   outside the party is one. The meter's potions include the pre-pull one (30 s before the encounter, at

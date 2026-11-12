@@ -89,6 +89,25 @@ public class ReviewFiveMeterTests
     }
 
     [Fact]
+    public void A_stun_that_came_with_damage_is_one_landed_and_still_no_status_row_of_its_own()
+    {
+        var (p, s) = Meter();
+        var rows = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0.4.0", _ => null);
+        rows.SetParty(new[] { new Partier(Mt, "PLD", 1), new Partier(Ot, "WAR", 1), new Partier(Whm, "WHM", 4), new Partier(Sch, "SCH", 4) });
+        p.Add(new RecordingSink(() => rows, () => 0));
+        p.Action(Batch(1, Mt, 9001, 1, Boss, E(3, 10_000)));
+        // A Shield Bash: damage and the stun in one message.
+        p.Action(Batch(2, Ot, 16, 1, Add, E(3, 5_000), E(14, 2)));
+        var events = s.Events(s.Current!.Id);
+        Assert.Equal(new[] { MeterEventKind.Stun }, events.Select(e => e.Kind));
+        Assert.Equal("Tank B's S2 landed", events[0].Text);
+        // The recording keeps its damage, not a status row (as before): the site sees the stun in combat.st.
+        var fx = rows.Finish(20, Outcome.Ended).Combat!.Fx;
+        Assert.DoesNotContain(fx, f => f.Action == 16 && (f.Kind & 7) == (int)FxKind.Status);
+        Assert.Contains(fx, f => f.Action == 16 && (f.Kind & 7) == (int)FxKind.Damage);
+    }
+
+    [Fact]
     public void A_raise_is_credited_to_its_status_first_as_the_recording_credits_it()
     {
         var (p, s) = Meter();
@@ -179,6 +198,51 @@ public class ReviewFiveRecordingTests
         Assert.Equal(new[] { 0.0, 5.0, 6.0 }, signs.Select(x => x.T));
         Assert.Equal(new[] { 0 }, signs[0].Marks.Keys);
         Assert.Empty(signs[2].Marks);
+    }
+}
+
+public class ReviewFiveSummaryTests
+{
+    private static RecordingBuilder Builder()
+    {
+        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0.4.0", id => new ActionInfo($"A{id}", 1, 0, 0, "", 5));
+        b.SetParty(new[] { new Partier(1, "PLD", 1), new Partier(2, "WAR", 1), new Partier(3, "WHM", 4), new Partier(4, "BLM", 3) });
+        return b;
+    }
+
+    [Fact]
+    public void A_boss_looking_back_after_a_buster_on_the_other_tank_is_no_swap_and_spans_end_where_the_pull_was_fought()
+    {
+        var b = Builder();
+        int Id(ulong key) => b.PartyId(key)!.Value;
+        var boss = b.Actor(900, "Boss", 5, 1);
+        b.SeenTargetable(boss, 1_000_000);
+        foreach (var k in new ulong[] { 1, 2, 3, 4 }) b.Alive(0, Id(k), false);
+        b.Aggro(0, boss, Id(1));
+        // A buster on the OT (10–15): the boss turns to them, and back to the MT 1.2 s after it went off.
+        b.Cast(10, boss, 600, 5, 100, 100, 0, Id(2), null, null);
+        b.Aggro(10, boss, Id(2));
+        b.Aggro(16.2, boss, Id(1));
+        // Half a second before the wipe's last death (30) it turns to the OT: the recording runs on to 45, the fight doesn't.
+        b.Aggro(29.5, boss, Id(2));
+        foreach (var k in new ulong[] { 1, 2, 3, 4 }) b.Alive(30, Id(k), true);
+        var r = b.Finish(45, Outcome.Wipe);
+        Assert.Equal(30, PullStats.FoughtLength(r));
+        Assert.Equal(0, PullStats.TankSwaps(r));
+    }
+
+    [Fact]
+    public void Time_dead_stops_at_the_fights_end_though_the_raise_came_after()
+    {
+        var b = Builder();
+        var whm = b.PartyId(3)!.Value;
+        b.Alive(0, whm, false);
+        b.Alive(10, whm, true);
+        b.Alive(25, whm, false);
+        var r = b.Finish(40, Outcome.Ended);
+        Assert.Equal(10, PullStats.Extras(r, fightEnd: 20).Of(whm).Dead, 6);
+        // Raised within it: to the raise.
+        Assert.Equal(15, PullStats.Extras(r, fightEnd: 30).Of(whm).Dead, 6);
     }
 }
 

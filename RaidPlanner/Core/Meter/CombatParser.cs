@@ -378,8 +378,12 @@ public sealed class CombatParser
                 applied[(recipient, d.Status, from)] = (b.Action, b.T);
                 if (applied.Count > 512 && b.T >= nextPrune) Prune(b.T);
                 var kind = isShield(d.Status) ? FxKind.Shield : FxKind.Status;
+                var put = new PartyEffect(b.T, b.Action, from, origin, recipient, kind, flags, 0, hp, max, d.Status, recipientParty, recipientHostile);
+                // Every status put on is told (a stun that came with damage too: the meter's stuns, as the status lists show them),
+                // but one with damage or a heal on the same target isn't a row of its own.
+                foreach (var s in sinks) s.StatusOn(put);
                 if (kind == FxKind.Status && withAmount) return;
-                Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, kind, flags, 0, hp, max, d.Status, recipientParty, recipientHostile));
+                Emit(put);
                 return;
         }
     }

@@ -514,8 +514,8 @@ public class FourSummaryTests
         Assert.Equal(2, Slot("R2")["pots"]!.GetValue<int>());
         Assert.Equal(1, Slot("H1")["raises"]!.GetValue<int>());
         Assert.Equal(1, Slot("H2")["raised"]!.GetValue<int>());
-        // H2 dead from 45.5 to 57.5; R2's death is the wipe's.
-        Assert.Equal(12.0, Slot("H2")["dead"]!.GetValue<double>());
+        // H2 dead from 45.5 to the fight's end, the wipe's last death (56.2; their raise at 57.5 came after it); R2's death is the wipe's.
+        Assert.Equal(10.7, Slot("H2")["dead"]!.GetValue<double>());
         Assert.False(Slot("R2").ContainsKey("dead"));
         Assert.Equal(1, Slot("OT")["ints"]!.GetValue<int>());
         Assert.False(Slot("M1").ContainsKey("gcds"));
@@ -532,29 +532,55 @@ public class FourSummaryTests
     }
 
     [Fact]
-    public void Past_6_KB_the_hits_go_then_the_debuffs_then_ph_then_x()
+    public void Past_the_size_ph_goes_from_its_latest_phases_then_the_hits_then_the_debuffs_then_x()
     {
-        var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0",
-            id => new ActionInfo($"A rather long mechanic name number {id}", 2, 10, 0, "", 0), id => new StatusInfo("Damage Down", 1));
-        b.SetParty(Enumerable.Range(1, 8).Select(i => new Partier((ulong)i, "PLD", (byte)(i % 4 + 1))).ToArray());
-        var boss = b.Actor(900, "Boss", 5, 1);
-        b.SeenTargetable(boss, 1000);
-        // Fifty phases, each with damage for all eight: ph alone is near 3 KB.
-        for (var p = 0; p < 50; p++)
+        Recording Pull(int hitCount)
         {
-            b.Targetable(p * 20, boss, true);
-            b.EndTargets(p * 20);
-            for (var i = 1; i <= 8; i++) b.CombatFx(p * 20 + 1, 9001, i, boss, 1_234_567, 1, -1);
-            b.Targetable(p * 20 + 10, boss, false);
-            b.EndTargets(p * 20 + 10);
+            var b = new RecordingBuilder(new DutyInfo("X", 1, 1), 1, DateTimeOffset.Now, true, "0",
+                id => new ActionInfo($"A rather long mechanic name number {id}", 2, 10, 0, "", 0), id => new StatusInfo("Damage Down", 1));
+            b.SetParty(Enumerable.Range(1, 8).Select(i => new Partier((ulong)i, "PLD", (byte)(i % 4 + 1))).ToArray());
+            var boss = b.Actor(900, "Boss", 5, 1);
+            b.SeenTargetable(boss, 1000);
+            // Fifty phases, each with damage for all eight: ph alone is near 4 KB as the server writes it.
+            for (var p = 0; p < 50; p++)
+            {
+                b.Targetable(p * 20, boss, true);
+                b.EndTargets(p * 20);
+                for (var i = 1; i <= 8; i++) b.CombatFx(p * 20 + 1, 9001, i, boss, 1_234_567, 1, -1);
+                b.Targetable(p * 20 + 10, boss, false);
+                b.EndTargets(p * 20 + 10);
+            }
+            for (var i = 0; i < hitCount; i++)
+                b.Hit(i * 0.5, boss, (uint)(1000 + i % 300), 0, 0, 0, 0, 0, new[] { 1 + i % 8, 1 + (i + 3) % 8 }, new long[] { 1, 1 }, new[] { 0, 0 }, new long[] { 1, 1 });
+            var r = b.Finish(1000, Outcome.Wipe);
+            return r;
         }
-        for (var i = 0; i < 400; i++) b.Hit(i * 0.5, boss, (uint)(1000 + i % 300), 0, 0, 0, 0, 0, new[] { 1 + i % 8, 1 + (i + 3) % 8 }, new long[] { 1, 1 }, new[] { 0, 0 }, new long[] { 1, 1 });
-        var r = b.Finish(1000, Outcome.Wipe);
-        var stats = PullStats.Stats(r, phaseStarts: b.PhaseStarts);
-        Assert.True(PullStats.Size(stats) <= PullStats.MaxBytes, $"{PullStats.Size(stats)} bytes");
-        Assert.Equal(50, stats["ph"]!.AsArray().Count);
-        // The hits made room for ph.
-        Assert.True(stats["hits"]!.AsArray().Count < 400);
+
+        // Forty failed mechanics and fifty phases: every hit kept, the latest phases' damage let go (the earliest kept, in order).
+        var few = PullStats.Stats(Pull(40));
+        Assert.True(PullStats.Size(few) <= PullStats.MaxBytes, $"{PullStats.Size(few)} bytes");
+        Assert.Equal(40, few["hits"]!.AsArray().Count);
+        var ph = few["ph"]!.AsArray().Select(x => x!.AsArray()[0]!.GetValue<long>()).ToList();
+        Assert.InRange(ph.Count, 1, 49);
+        Assert.Equal(Enumerable.Range(0, ph.Count).Select(i => (long)i * 20), ph);
+        // Four hundred (three hundred of them different, each with its long name): no phase damage at all, then as many of the
+        // earliest hits as fit (four times the twenty-odd that fitted beside ph before).
+        var many = PullStats.Stats(Pull(400));
+        Assert.True(PullStats.Size(many) <= PullStats.MaxBytes, $"{PullStats.Size(many)} bytes");
+        Assert.False(many.ContainsKey("ph"));
+        Assert.InRange(many["hits"]!.AsArray().Count, 80, 399);
+    }
+
+    [Fact]
+    public void The_size_is_the_servers_jsonb_text_a_space_after_each_colon_and_comma()
+    {
+        // Postgres writes {"a": [1, 2], "b": "x,y:z"}: 27 bytes (the string's own , and : unspaced).
+        Assert.Equal(27, PullStats.Size(JsonNode.Parse("{\"a\":[1,2],\"b\":\"x,y:z\"}")!));
+        // A quote escaped inside a string doesn't end it: its , and : aren't spaced.
+        var escaped = JsonNode.Parse("{\"q\":\"a\\\",:b\",\"n\":1}")!;
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(escaped.ToJsonString()) + 3, PullStats.Size(escaped));
+        // The limit leaves a kilobyte under the server's 8,192.
+        Assert.True(PullStats.MaxBytes <= 8192 - 1024);
     }
 }
 
