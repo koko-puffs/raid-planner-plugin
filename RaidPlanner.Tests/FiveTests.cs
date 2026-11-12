@@ -357,3 +357,19 @@ public class PlanCooldownTests
         Assert.Contains(Enumerable.Range(0, 30).SelectMany(t => CooldownSample.At(t, null)), l => l.Planned != null);
     }
 }
+
+/// <summary>0.5.0: the summary carries the recording player's average item level (<c>x.ilvl</c>) when the gear was read.</summary>
+public class GearSummaryTests
+{
+    [Fact]
+    public void The_summary_says_the_item_level_only_when_the_gear_was_read()
+    {
+        var r = RecordingTests.SampleBuilder(true, out var phase);
+        var x = PullSummary.Build(r, phase, isDot: id => id == 1871)["stats"]!["x"]!.AsObject();
+        Assert.Equal(730, x["ilvl"]!.GetValue<int>());
+        r.Gear = null;
+        Assert.False(PullSummary.Build(r, phase, isDot: id => id == 1871)["stats"]!["x"]!.AsObject().ContainsKey("ilvl"));
+        r.Gear = RecordingTests.SampleGear with { ItemLevel = 0 };
+        Assert.False(PullSummary.Build(r, phase, isDot: id => id == 1871)["stats"]!["x"]!.AsObject().ContainsKey("ilvl"));
+    }
+}
