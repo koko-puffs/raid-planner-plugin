@@ -143,6 +143,15 @@ public class RealArenaTests
         Assert.False(a.OnFloor(0, 0)); // the hole
         Assert.True(a.OnFloor(400, 0)); // the second platform (11 to 12 yalms: 385 to 420)
         Assert.False(a.OnFloor(-400, 0));
+        // Two platforms that overlap: the overlap is floor (each polygon read on its own, then any).
+        var both = new List<IReadOnlyList<float[]>>
+        {
+            new[] { new float[] { -2, -2, 2, -2, 2, 2, -2, 2 } },
+            new[] { new float[] { 0, -2, 4, -2, 4, 2, 0, 2 } },
+        };
+        Assert.True(Rings.Contains(both, 1, 0));
+        Assert.True(Rings.Contains(both, 3, 0));
+        Assert.False(Rings.Contains(both, 5, 0));
 
         // The plain shapes, for what tests "inside the arena" the same way.
         Assert.True(PlanArena.Default.OnFloor(0, 419));

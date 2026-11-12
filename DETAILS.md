@@ -744,9 +744,10 @@ hole after a good outline is just skipped); at most 32 polygons of 32 rings of 5
 corners in all, the first kept. A `poly` with no ring left is drawn as a plain square (as the site does);
 without `yalms` its size is twice the rings' reach, rounded up to a tenth; `edge` missing is a wall. On
 the board a corner is at its value × 840 / yalms. Rings aren't closed and are read **even-odd**: a point
-is on the floor when it's inside an odd number of rings (`PlanArena.OnFloor`, as the site's `inRings`;
-the other shapes answer too), so which way a ring goes doesn't matter, a hole is a ring inside its
-outline, and a split arena's gap isn't floor.
+is on the floor when, in any one polygon, it's inside an odd number of that polygon's rings
+(`PlanArena.OnFloor`, as the site's `inRings`; the other shapes answer too), so which way a ring goes
+doesn't matter, a hole is a ring inside its outline, platforms that overlap are floor where they
+overlap, and a split arena's gap isn't floor.
 
 Drawn as the site draws it (as a custom arena's outlines, holes even-odd): each polygon's floor in the
 arena's colour, then the grid, then the rim along every ring, outlines and holes alike, in the edge's

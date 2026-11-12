@@ -67,14 +67,21 @@ public static class Rings
         return output;
     }
 
-    /// <summary>Whether (x, y) (in the rings' units) is on the floor: inside an odd number of rings, every polygon's counted (the site's <c>inRings</c>).</summary>
+    /// <summary>
+    /// Whether (x, y) (in the rings' units) is on the floor: inside any polygon, each polygon read
+    /// even-odd on its own (its outline less its holes), so overlapping platforms are floor, as the
+    /// board draws them (the site's <c>inRings</c>).
+    /// </summary>
     public static bool Contains(IReadOnlyList<IReadOnlyList<float[]>> rings, float x, float y)
     {
-        var inside = false;
         foreach (var poly in rings)
+        {
+            var inside = false;
             foreach (var ring in poly)
                 if (InRing(ring, x, y)) inside = !inside;
-        return inside;
+            if (inside) return true;
+        }
+        return false;
     }
 
     /// <summary>Whether (x, y) is inside one ring (a flat list of corners), even-odd.</summary>
