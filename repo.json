@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Raid Planner",
     "InternalName": "RaidPlanner",
-    "AssemblyVersion": "0.2.0.0",
-    "TestingAssemblyVersion": "0.2.0.0",
+    "AssemblyVersion": "0.3.0.0",
+    "TestingAssemblyVersion": "0.3.0.0",
     "Punchline": "Record a fight, then make it a plan on Koko's Raid Planner.",
     "Description": "Records the fights you're in: the boss's casts and where they land, stacks, spreads, tankbusters, tethers, head markers and waymarks, and (if you like) where your party stood. Send a pull to Koko's Raid Planner and it becomes a plan, step by step, ready to draw your strats on, or save it as a file to import there.\n\nIn a duty you've made a plan for, a small window shows it step by step, moving along with the pull, with callouts in chat a few seconds before each mechanic.\n\nIt only watches: nothing is sent to the game. Open it with /raidplan.",
     "ApplicableVersion": "any",
@@ -27,9 +27,9 @@
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1793596283,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.2.0/RaidPlanner.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.2.0/RaidPlanner.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.2.0/RaidPlanner.zip"
+    "LastUpdate": 1794462619,
+    "DownloadLinkInstall": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.3.0/RaidPlanner.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.3.0/RaidPlanner.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.3.0/RaidPlanner.zip"
   }
 ]
