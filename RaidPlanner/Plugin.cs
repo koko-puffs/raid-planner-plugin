@@ -9,6 +9,7 @@ using Dalamud.Plugin.Services;
 using RaidPlanner.Core;
 using RaidPlanner.Game;
 using RaidPlanner.UI;
+using RaidPlanner.UI.Model;
 
 namespace RaidPlanner;
 
@@ -95,6 +96,7 @@ public sealed class Plugin : IDalamudPlugin
             meterWindow.InDuty = () => recorder.DutyHere != null;
             meterWindow.OpenDetail = (tab, fight, member, death) => meterDetail.Show(tab, fight, member, death);
             meterWindow.OpenSettings = window.ShowMeterSettings;
+            meterWindow.StartSample = StartSample;
             meterDetail.Source = meterSource;
             // Back to the small meter: it follows Show the meter (OnUpdate), so that's turned on too, or it would close again next frame.
             meterDetail.ShowSmall = () =>
@@ -108,6 +110,14 @@ public sealed class Plugin : IDalamudPlugin
             };
             window.Meter = meterSource;
             window.MeterProblem = () => meter.Source.Problem;
+            // Settings → Meter's sample fight: on and off, and not while a real fight is on.
+            window.SampleOn = () => meterWindow.Preview != null;
+            window.SampleWaits = () => RealFightOn;
+            window.ToggleSample = () =>
+            {
+                if (meterWindow.Preview != null) meterWindow.Preview = null;
+                else StartSample();
+            };
             plans.ShowWindow = open => planWindow.IsOpen = open;
             // With recording off, a pull is still followed when the plan window shows this duty's plan.
             recorder.FollowWanted = () => planWindow.IsOpen && plans.ForThisDuty;
@@ -115,7 +125,7 @@ public sealed class Plugin : IDalamudPlugin
             Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
             {
                 HelpMessage = "Open Raid Planner. /raidplan plan shows your plan, /raidplan next and /raidplan prev move its step; "
-                    + "/raidplan meter shows or hides the meter, /raidplan meter unlock gives it the mouse back; "
+                    + "/raidplan meter shows or hides the meter, /raidplan meter unlock gives it the mouse back, /raidplan meter preview shows a sample fight in it; "
                     + "/raidplan send last sends the newest pull; /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
             });
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
@@ -177,14 +187,27 @@ public sealed class Plugin : IDalamudPlugin
                 meterDetail.Show(config.MeterTab, null, null, null);
                 break;
             case "meter preview":
-                // A made-up fight, under a Preview tag, to see the windows without one.
-                meterWindow.Preview = meterWindow.Preview == null ? new MeterPreview() : null;
-                meterWindow.IsOpen = true;
+            case "meter sample":
+                // A sample fight, under a Preview tag, to see the windows mid-fight without one (again to stop it).
+                if (meterWindow.Preview != null) meterWindow.Preview = null;
+                else if (!StartSample()) PlanService.Print("The meter's sample waits until this fight is over.");
                 break;
             default:
                 window.Toggle();
                 break;
         }
+    }
+
+    /// <summary>A real fight is on (or the party is in combat waiting for its first hit): a sample would end at once.</summary>
+    private bool RealFightOn => meter.Source.InEncounter || meter.Source.Waiting;
+
+    /// <summary>The meter's sample fight, its numbers made up (<see cref="MeterPreview"/>); not while a real fight is on. False when it didn't start.</summary>
+    private bool StartSample()
+    {
+        if (RealFightOn) return false;
+        meterWindow.Preview = new MeterPreview();
+        meterWindow.IsOpen = true;
+        return true;
     }
 
     private void OnKept(RecordingInfo info)
@@ -223,7 +246,9 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>The server info bar: "● Rec 2:31" while a pull is recorded, "Pull 3 kept" for a moment after.</summary>
     private void OnUpdate(IFramework framework)
     {
-        // The meter's window follows Settings' Show the meter (and /raidplan meter).
+        // A real fight ends the sample at once: its numbers are never shown with the real ones.
+        if (meterWindow.Preview != null && RealFightOn) meterWindow.Preview = null;
+        // The meter's window follows Settings' Show the meter (and /raidplan meter), or a sample.
         var meterWanted = config.ShowMeter || meterWindow.Preview != null;
         if (meterWindow.IsOpen != meterWanted) meterWindow.IsOpen = meterWanted;
         try

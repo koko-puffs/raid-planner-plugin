@@ -742,15 +742,16 @@ thousand times and allocates nothing), the object table only four times a second
 ## The meter's windows (`UI/MeterWindow.cs`, `UI/MeterDetailWindow.cs`)
 
 Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `CombatMeter.Source`);
-`Model/MeterView` orders and words what they show. `/raidplan meter preview` shows a made-up fight
-(the mock-ups' pull 12, `MeterPreview`) under a _Preview_ tag, to see the windows without one.
+`Model/MeterView` orders and words what they show, `Model/MeterLayout` sizes and places the small
+one (both tested).
 
-- **The meter** (`MeterWindow`, "Meter", 330×382 at first, translucent as Settings says: its
+- **The meter** (`MeterWindow`, "Meter", 330 wide at first, translucent as Settings says: its
   background rgb 13 13 16 at _Background_, its rows solid, 10px corners). Shown with _Show the meter_
   (or `/raidplan meter`), in duties or everywhere. Its head (36 tall): the fight's clock in mono
   (600 15px) with the ember dot beating while a fight is on (a still faint dot otherwise), a _Wipe_
   or _Clear_ tag when the fight shown is over, the picker ("Pull 12 ⌄", 24 tall) and the lock (24px:
-  ember-washed when locked, a pointer when click-through, quiet when open). Locked, it has no title
+  ember-washed when locked, a pointer when click-through, quiet when open); the buttons are laid
+  first and the tags only drawn as far as they fit before them. Locked, it has no title
   bar and can't be moved or sized (its tabs and picker still answer); click-through, the mouse goes
   to the game (`/raidplan meter unlock` or Settings gives it back); open, Dalamud's title bar comes
   back with its menu, its × and the resize grip. Four tabs (27 tall, the ember bar under the one
@@ -763,23 +764,83 @@ Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `Com
   under it to the top player's (grey; yours ember; a death's dimmer, its name muted with a red
   skull). The limit break has its own row under a hairline; the party's number at the foot ("Party ·
   165,000", "… HPS"), with where in the fight, "shields not counted", "incl. bleeds", "kept as pull
-  12" or "click-through" on the right. Rows don't grow: a taller window only has room for more; past
-  the room they're cut. A total of ten million or more is shortened in the 66px column ("13.1M";
-  "3,912,400" whole). The rows' words and bars are worked out once a snapshot (the source makes one
-  four times a second during a fight), not each frame (`MeterView.Lines`). Before any fight, the
-  Boss asleep, "No fight yet", "It starts on the first hit."; stopped (`IMeterSource.Problem`), the
+  12" or "click-through" on the right. A total of ten million or more is shortened in the 66px column ("13.1M";
+  "3,912,400" whole). The rows' words and bars, and the fight's other words (its clock, which pull,
+  its deaths' lines), are worked out once a snapshot (the source makes one four times a second
+  during a fight), not each frame (`MeterView.Lines`, and the window's own words for the fight), and
+  the kit keeps the capitals it has made (`Txt.Caps`), so tags and labels make no strings each frame. Before any fight, the
+  Boss asleep, "No fight yet", "It starts on the first hit." and a quiet _See a sample_ link (the
+  sample fight, below); stopped (`IMeterSource.Problem`), the
   Boss awake, "The meter has stopped" and why (`MeterView.StoppedLine`; a kept fight can still be
   picked); in combat before the first hit, "0:00" with "Waiting for the first hit" and the party with
   dashes; between pulls it folds to one line (the last fight's length and tag, "Pull 12 · party
-  163,188", a chevron that opens it again), or hides with _Hide out of combat_. Folded, empty or
-  stopped, the window itself is as tall as what it shows (ImGui fits it, its width kept); showing a
-  fight again, it opens to the height it had then (kept in the settings, `MeterHeight`, once you let
-  go of its edge; 382 the first time). A new pull shows itself, whatever was picked before it.
+  163,188", a chevron that opens it again), or hides with _Hide out of combat_. A new pull shows itself, whatever was picked before it.
   Pressing a row opens the meter opened up on that player; a death, on its recap.
-- **The picker** (the site's menu, 300 wide): the shown fight's duty's fights newest first ("Tonight
+- **Its height**: folded, empty or stopped, the window is as tall as what it shows (ImGui fits it,
+  its width kept). In a fight (or waiting for one) it's as tall as its party needs
+  (`MeterSizes.Needed`: the head, the tabs, pace's room when pace is on, the column heads, a row
+  each, the limit break's room and the foot, so it doesn't jump when pace or the limit break comes:
+  364 for eight, the title bar's height on top when it shows), and never taller than the height you
+  gave it by its edge (`MeterHeight`, `MeterCompactHeight` in compact, kept once you let go: none
+  until you do; one taller than the party needs goes back to what they need, and rows past one
+  shorter are cut; 0.3.0 kept 382, the height it first opened to, by itself, so a 382 saved by it is
+  read as none). A bigger party makes it taller, a smaller one shorter (a member joining mid-fight
+  adds a row).
+- **Where it stays put** (_Grows_, `MeterGrows`): as its height changes by itself (folding, opening,
+  a bigger party, compact), growing **down** keeps its top edge where it is, growing **up** its foot.
+  Its anchor (`MeterAnchorX`, `MeterAnchorY`, screen px: its top-left corner, or its bottom-left
+  growing up, `MeterAnchorFor`) is read from where the window is the first time it's drawn (so one
+  saved by an older version keeps its place), moved to the other corner when Grows changes (so it
+  doesn't move then), and follows the window while you move or size it (unlocked; saved once you let
+  go, not each frame). Each frame the meter is placed from it (`MeterLayout.Place`, ImGui's
+  SetNextWindowPos before Dalamud's Begin: it never sets the meter's Position), kept whole on the
+  game's screen while the anchor is on it (moved in as little as it takes, its head's edge first
+  when it's taller than the screen, and back onto it after the resolution shrinks; the anchor itself
+  stays, so it goes back as it shrinks; with Dalamud's multi-monitor windows on, an anchor off the
+  game's screen is on another monitor, and left alone); while you hold it (the
+  left button went down on it and is still down) it's neither placed nor sized.
+- **Growing up, the head at the foot**: the clock, the picker, the lock (and compact's tab menu)
+  sit at the foot, where it's anchored, and everything else is the other way up from them (as WoW's
+  meters that grow up have it): the tabs over the head, pace over them, the column heads over those,
+  the rows reading up from them (the top player nearest the head), the limit break over the rows and
+  the party's line at the top; on Deaths the first death nearest the head, "7 alive" over them; the
+  empty and stopped states the Boss and its words over the tabs; the waiting state likewise. A row
+  reads as ever (its bar still under its words); each band's hairline is on its side away from the
+  head, the limit break's and the foot's toward it; the column heads hug the rows (at their band's
+  top). The menus open upwards (below).
+- **Compact** (`MeterCompact`; Settings, and the picker's foot): the same meter with less air
+  (`MeterSizes.Compact`): 20px rows (the spot 16, the name at 12px, the job in mono 9, the number in
+  mono 600 12px, the share in mono 10px), the bar drawn as the row's background (6 in from each side,
+  a pixel short of the row's edges, white at 5.5%, yours ember-washed, a death's at 3%, with a 1px
+  line of the bar's colour along its foot: grey, yours the ember gradient), a 30px head (the clock at
+  13px) with a hairline on its far side, 22px pace, 16px column heads, a 21px limit break, a 22px foot
+  (mono 10), 10 in at the sides and 6 between columns, and a death on one 20px line (its spot, name,
+  job, what killed them and how big cut to fit, its time in red). The four tabs are one dropdown by the
+  lock (the tab's word and a chevron, the picker's button), its menu the site's (200 wide): Damage,
+  Healing, Taken, Deaths with the opened-up window's icons, the one you're on ticked, the deaths
+  counted. The eight and the limit break in 271px instead of 364: where the normal meter shows 8
+  rows, compact shows 12. The opened-up window is the same either way.
+- **The picker** (the site's menu, 300 wide, 6px off the head and 14 in from the meter's side: down
+  from a head on top, up from one at the foot, the other way when there isn't room; compact's tab
+  menu the same, by its button): the shown fight's duty's fights newest first ("Tonight
   · Example Arena"), the one shown ticked, the live one tagged _Now_, the best (the one that got
   furthest) starred ("Pull 4 · the best", added at the end when it's older), each with its length in
-  mono and its outcome's tag; other duties' after; and _Pace against_ (Best, Last, Off) at its foot.
+  mono and its outcome's tag; other duties' after; and _Pace against_ (Best, Last, Off) and _Compact_
+  (a switch) at its foot. While the sample is on, _Stop the sample_ first.
+- **The sample fight** (`Model/MeterPreview`): Settings → Meter's _Show a sample fight_, the empty
+  meter's _See a sample_, or `/raidplan meter preview` show the meter mid-fight with made-up numbers,
+  to place and size it: the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
+  its clock running and its numbers moving four times a second (bursts in the buffs at the pull and
+  at 2:00, a raidwide every 24 seconds, each player's rate rising and falling with their rotation;
+  ENCDPS at 3:11 is the mock-ups'), the limit break used at 0:58, P2 from 2:30, pace against pull 4
+  (11 with Last) from 10 seconds into each phase, Odette dying at 2:51 and Fenn at 3:22, and the wipe
+  at 3:31 (the rest within two seconds: the wipe's, counted against no one); it stays on the wipe
+  for 8 seconds and plays again. Its earlier pulls (11, 10, 9, and 4, the best) are in the picker,
+  and the opened-up window has its abilities. Under the _Preview_ tag (pressed, it stops; in the
+  foot when the head hasn't room), with _Stop the sample_ in the picker; the button, the command or
+  the meter's × again stop it too. The windows read it instead of the meter's own numbers, never
+  both, and what was picked in one (a pull, a player) is let go of in the other. It doesn't start
+  while a real fight is on (in combat or after its first hit), and one starting ends it at once.
 - **Opened up** (`MeterDetailWindow`, "Raid Planner meter", 1180×560 at first, 840×360 at the least;
   `/raidplan meter big`): the four tabs full size with their icons and the deaths counted; the clock,
   where in the fight ("P2 · 0:41 in"; these two only as they fit beside the tabs), which pull ("Pull
@@ -802,8 +863,11 @@ Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `Com
 - **Settings → Meter**: _Show the meter_ (`/raidplan meter` too) with _Where_ (In duties,
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
-  (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it;
-  _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it); _A fight ends after_ (2 to 15 s) and _Keep the
+  (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it; _Grows_
+  (Down, Up: which edge stays put, the head going with it); _Compact_;
+  _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it); _See it in a
+  fight_ · _Show a sample fight_ (_Stop the sample_ while it's on; dimmed while a real fight is on,
+  "After this fight"); _A fight ends after_ (2 to 15 s) and _Keep the
   last_ (5 to 50), read by the meter's session; _Pace against_; _Use ACT's numbers_ (not in this
   version: dimmed, saying so); _Kept fights_ · Clear. When the meter has stopped itself
   (`IMeterSource.Problem`), an amber warning box says why.
@@ -821,9 +885,10 @@ RaidPlanner/
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
               in the game (PlanService), summaries and the roster (Uploads)
   UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
-              (PlanBoard, BoardArt), MeterWindow and MeterDetailWindow (MeterPreview), Glyphs;
+              (PlanBoard, BoardArt), MeterWindow and MeterDetailWindow, Glyphs;
               Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame); Model/ (numbers and
-              words, curves, polygons, the screens' states, the meter's and a pull's views, SVG
+              words, curves, polygons, the screens' states, the meter's and a pull's views, the
+              meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), SVG
               paths, dashes), tested
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
 tools/      the icon (icon.svg → images/icon.png)
@@ -837,7 +902,7 @@ being recorded (and keeps it); `/raidplan plan` shows or hides the plan window; 
 `/raidplan prev` move its step; `/raidplan send last` sends the newest kept pull; `/raidplan meter`
 shows or hides the meter, `/raidplan meter unlock` gives it the mouse back (and unlocks it),
 `/raidplan meter big` opens it up, `/raidplan meter settings` opens Settings → Meter, `/raidplan meter
-preview` shows a made-up fight in it (again to stop).
+preview` (or `meter sample`) shows the sample fight in it (again to stop; not while a real fight is on).
 
 ## Not yet
 
@@ -848,7 +913,12 @@ preview` shows a made-up fight in it (again to stop).
   window under the title bar, the meter's click-through and translucent background, and the glyphs
   "●" (the info bar), "×", "→", "·", "–" and "−". Also: the meter folding to its line and opening
   to its height again (ImGui's auto-fit with the width set; a window saved folded when the game
-  closed); the menus' shadow rings over the window under them; a Japanese client's fonts (8 of
+  closed); the meter's anchor (growing down and up: folding, opening, compact, a bigger party, the
+  lock's title bar coming and going, a resolution change, a meter saved by 0.3.0 keeping its place),
+  moving and sizing it by its title bar, edges and grip while it's placed every frame (it lets go
+  while the left button is held on it), the height you give it by its edge being kept, the menus
+  opening upwards from a head at the foot (a pivot on a popup), compact's 20px rows and 7px spot
+  labels being readable; the menus' shadow rings over the window under them; a Japanese client's fonts (8 of
   Dalamud's, shared by size) and its eyebrows with a duty's name; the font atlas's size and build time
   with Dalamud set to Chinese or Korean (the extra glyphs on six faces); a concave custom arena.
 - The combat parser and the round-three recording (0.3.0) want checking in the game, side by side
@@ -875,6 +945,19 @@ preview` shows a made-up fight in it (again to stop).
 
 ### 0.3.1
 
+- **The meter grows the way you choose.** Settings → Meter → _Grows_: down keeps its top edge where
+  you put it (as before), up keeps its foot there, for a meter sitting on your hotbars. Growing up,
+  the clock and its buttons go to the foot with it, and the rows read up from them, the top player
+  nearest, and its menus open upwards. It stays on the screen as it grows, and remembers where it is
+  across restarts. The pull picker now opens off the meter's head (the mock-up's place), not at the mouse.
+- **The meter fits its party.** In a fight it's as tall as the party needs, up to the height you give
+  it (before, it opened to the height you gave it, whatever the party).
+- **Compact.** Settings → Meter → _Compact_ (or the switch at the foot of the pull picker): 20px rows
+  with the bars behind them and the four tabs in one menu by the lock, so the eight and the limit
+  break fit in 271px instead of 364.
+- **See it in a fight.** _Show a sample fight_ in Settings → Meter (or _See a sample_ on the empty
+  meter, or `/raidplan meter preview`) plays a made-up pull in the meter under a _Preview_ tag: the
+  clock running, the numbers moving, a limit break, pace, deaths and the wipe. A real fight ends it.
 - **The reticle's corners are never cut off.** A row that runs a list's or menu's full width (the
   plan window's plans menu, the pulls, the meter's rows) kept its corners just outside the area the
   window shows, so they were clipped; a corner that would fall outside it is now drawn just inside its

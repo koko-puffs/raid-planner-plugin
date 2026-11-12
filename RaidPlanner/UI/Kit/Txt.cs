@@ -27,8 +27,17 @@ public static class Txt
 {
     public static Fonts Fonts { get; set; } = null!;
 
+    /// <summary>Words already put in capitals (tags and labels are drawn every frame): kept, so a frame makes no strings.</summary>
+    private static readonly Dictionary<string, string> CapsKept = new();
+
     /// <summary>The site's text-transform for the mono capitals (tags, eyebrows, labels): the windows' own words, in capitals on every client.</summary>
-    public static string Caps(string text) => Format.Caps(text, false);
+    public static string Caps(string text)
+    {
+        if (CapsKept.TryGetValue(text, out var caps)) return caps;
+        caps = Format.Caps(text, false);
+        if (CapsKept.Count > 512) CapsKept.Clear();
+        return CapsKept[text] = caps;
+    }
 
     /// <summary>The callout's capitals: as written on a Japanese client (Dalamud's font, the plan's own words), else in capitals.</summary>
     public static string CalloutCaps(string text) => Format.Caps(text, Fonts.Japanese);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Dalamud.Configuration;
 using RaidPlanner.Core.Meter;
+using RaidPlanner.UI.Model;
 
 namespace RaidPlanner;
 
@@ -86,10 +87,39 @@ public sealed class Configuration : IPluginConfiguration
     public MeterTab MeterTab { get; set; } = MeterTab.Damage;
 
     /// <summary>
-    /// The meter's height when it shows a fight (CSS px, before Dalamud's scale; 0 not set yet): it
-    /// folds to one line between pulls and opens to this again.
+    /// The height you gave the meter (its window's, in CSS px, before Dalamud's scale; 0 not set yet):
+    /// in a fight it's as tall as the party needs, never taller than this. It folds to one line between
+    /// pulls and opens again to that.
     /// </summary>
     public float MeterHeight { get; set; }
+
+    /// <summary>Compact: 20px rows with smaller words and the tabs in a menu by the lock, so more of the party fits in less room.</summary>
+    public bool MeterCompact { get; set; }
+
+    /// <summary>The height you gave the meter in compact (as <see cref="MeterHeight"/>, kept apart: compact is shorter).</summary>
+    public float MeterCompactHeight { get; set; }
+
+    /// <summary>
+    /// Which way the meter grows when its height changes by itself (folding, opening, a bigger party,
+    /// compact): down keeps its top edge where it is, up keeps its foot there (and puts its head at the foot).
+    /// </summary>
+    public MeterGrows MeterGrows { get; set; } = MeterGrows.Down;
+
+    /// <summary>
+    /// The point the meter stays put at (screen px): its top-left corner when it grows down, its
+    /// bottom-left when it grows up (<see cref="MeterAnchorFor"/> says which). Set once the meter has
+    /// been drawn (<see cref="MeterAnchored"/>), so one saved by an older version keeps where it was;
+    /// it follows the meter when you move it.
+    /// </summary>
+    public float MeterAnchorX { get; set; }
+
+    public float MeterAnchorY { get; set; }
+
+    /// <summary>Whether <see cref="MeterAnchorX"/> and <see cref="MeterAnchorY"/> are set.</summary>
+    public bool MeterAnchored { get; set; }
+
+    /// <summary>Which corner the anchor is (moved to the other's place when Grows is changed).</summary>
+    public MeterGrows MeterAnchorFor { get; set; } = MeterGrows.Down;
 
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();

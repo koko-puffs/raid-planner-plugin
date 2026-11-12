@@ -125,6 +125,15 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>Why the meter stopped, if it did (set by the plugin): said in a warning box on Settings → Meter.</summary>
     public Func<string?>? MeterProblem { get; set; }
 
+    /// <summary>The meter's sample fight is on (set by the plugin), so Settings → Meter's button says Stop the sample.</summary>
+    public Func<bool>? SampleOn { get; set; }
+
+    /// <summary>A real fight is on, which would end a sample at once (set by the plugin): the button waits.</summary>
+    public Func<bool>? SampleWaits { get; set; }
+
+    /// <summary>Starts or stops the meter's sample fight (set by the plugin).</summary>
+    public Action? ToggleSample { get; set; }
+
     public override void PreDraw()
     {
         if (!firstSizeFitted)

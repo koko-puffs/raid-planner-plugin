@@ -31,6 +31,8 @@ public sealed partial class MainWindow
 
     private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Plan window"), new("Meter"), new("Account") };
 
+    private static readonly string[] GrowsItems = { "Down", "Up" };
+
     /// <summary>How Send my party to my roster went, and when (shown for a while under the slab).</summary>
     private (string Text, bool Ok, DateTime At)? rosterNote;
 
@@ -286,6 +288,21 @@ public sealed partial class MainWindow
             config.MeterClickThrough = !config.MeterClickThrough;
             config.Save();
         }
+        // Which edge stays put when its height changes by itself (folding, opening, a bigger party, compact).
+        var grows = SegmentRow(i++, "##meter-grows", "Grows", "Which edge stays put as it folds and opens", GrowsItems, (int)config.MeterGrows,
+            tip: "Down: its top edge stays where you put it, with the clock and its buttons on top, and it grows downwards. Up: its foot stays, with the clock and its buttons at the foot and the rows reading up from them, and it grows upwards (for a meter sitting on your hotbars).");
+        if (grows != (int)config.MeterGrows)
+        {
+            config.MeterGrows = (MeterGrows)grows;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##meter-compact", "Compact", "Smaller rows, the tabs in a menu by the lock", config.MeterCompact,
+                "20px rows with smaller words and the bars behind them, and the four tabs as one menu beside the lock: the party in less room. The meter's own menu (the pull picker) has this switch too. The opened-up window stays as it is.",
+                pad: 10))
+        {
+            config.MeterCompact = !config.MeterCompact;
+            config.Save();
+        }
         // 20% at the least, as the meter draws it (below that its edge and words would float on nothing).
         var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", "Rows stay solid", Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
         if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
@@ -299,6 +316,15 @@ public sealed partial class MainWindow
             backgroundDirty = false;
             config.Save();
         }
+        // The meter mid-fight with made-up numbers, to place and size it (and see compact and Grows) without a pull.
+        var sampleOn = SampleOn?.Invoke() == true;
+        var waits = !sampleOn && SampleWaits?.Invoke() == true;
+        if (ButtonRow(i++, "##meter-sample", "See it in a fight",
+                waits ? "After this fight: a real one ends a sample" : sampleOn ? "Made-up numbers under a Preview tag, until a fight starts" : "A made-up pull, its clock running, under a Preview tag",
+                sampleOn ? "Stop the sample" : "Show a sample fight", Btn.Outline, waits || ToggleSample == null, null,
+                "Eight players mid-pull, with a limit break, a death, pace and the clock running: the meter as it looks in a fight, to place and size it. Nothing in it is real, it's never mixed with real numbers, and a real fight ends it at once.",
+                pad: 10))
+            ToggleSample?.Invoke();
         var end = StepperRow(i++, "##meter-end", "A fight ends after", "Nobody in combat for this long", $"{config.MeterEndAfter} s", config.MeterEndAfter > 2, config.MeterEndAfter < 15, pad: 10);
         if (end != 0)
         {
@@ -426,10 +452,10 @@ public sealed partial class MainWindow
     }
 
     /// <summary>A setting with a dense segmented control; returns the item picked.</summary>
-    private int SegmentRow(int index, string id, string name, string? note, string[] items, int selected, bool sub = false, bool off = false)
+    private int SegmentRow(int index, string id, string name, string? note, string[] items, int selected, bool sub = false, bool off = false, string? tip = null)
     {
         var picked = selected;
-        SetRow(index, name, note, Kit.SegmentedWidth(items), S(HSm), p => picked = Kit.Segmented(id, p, items, selected, true, off), null, off, sub, pad: 10);
+        SetRow(index, name, note, Kit.SegmentedWidth(items), S(HSm), p => picked = Kit.Segmented(id, p, items, selected, true, off), tip, off, sub, pad: 10);
         return off ? selected : picked;
     }
 

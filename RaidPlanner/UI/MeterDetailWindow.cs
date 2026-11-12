@@ -31,6 +31,9 @@ public sealed class MeterDetailWindow : Window
     private int? player;
     private int? death;
 
+    /// <summary>The numbers' source last drawn: when it changes (the meter's sample starts or ends) the picks made in the other are let go.</summary>
+    private IMeterSource? lastSource;
+
     public MeterDetailWindow(Configuration config, Fonts fonts)
         : base("Raid Planner meter###RaidPlannerMeterDetail")
     {
@@ -56,6 +59,7 @@ public sealed class MeterDetailWindow : Window
         fight = fightId;
         player = partyId;
         death = deathIndex;
+        lastSource = Source?.Invoke();
         IsOpen = true;
         BringToFront();
     }
@@ -101,6 +105,14 @@ public sealed class MeterDetailWindow : Window
     private void DrawInside()
     {
         var m = Source?.Invoke();
+        if (!ReferenceEquals(m, lastSource))
+        {
+            // A sample's ids mean nothing in the real numbers (nor the other way): back to the current fight.
+            lastSource = m;
+            fight = null;
+            player = null;
+            death = null;
+        }
         var e = fight is { } id ? m?.Get(id) ?? m?.Current : m?.Current;
         var win = ImGui.GetWindowPos();
         var top = ImGui.GetCursorScreenPos();

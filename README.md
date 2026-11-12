@@ -52,7 +52,8 @@ there; its list button picks any of your plans.
 
 `/raidplan stop` ends the pull being recorded (and keeps it). `/raidplan settings` opens Settings.
 `/raidplan plan` shows the plan window; `/raidplan next` and `/raidplan prev` move its step.
-`/raidplan meter` shows or hides the meter; `/raidplan meter unlock` gives it the mouse back.
+`/raidplan meter` shows or hides the meter; `/raidplan meter unlock` gives it the mouse back;
+`/raidplan meter preview` shows a sample fight in it.
 `/raidplan send last` sends the newest pull.
 
 ### Settings
@@ -73,8 +74,9 @@ there; its list button picks any of your plans.
   sends your party's names to your own account, only when you press it (do it in the duty, where the
   game shows your whole party).
 - **Meter**: _Show the meter_ (on, in duties or everywhere, folded or hidden out of combat), ENCDPS or
-  DPS, names or jobs only, lock and click-through, its background, when a fight ends, how many pulls
-  it keeps, and what pace compares with.
+  DPS, names or jobs only, lock and click-through, which way it grows (down, or up with its clock and
+  buttons at the foot), compact (smaller rows, the tabs in a menu), its background, a sample fight to
+  see it mid-fight, when a fight ends, how many pulls it keeps, and what pace compares with.
 
 ## Building it
 
