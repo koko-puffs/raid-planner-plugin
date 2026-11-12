@@ -104,10 +104,60 @@ public sealed record BoardObj(
     public float[]? Points { get; init; }
 }
 
-/// <summary>The arena a step is drawn on: its shape, proportions, outlines (custom shapes) and floor colour.</summary>
+/// <summary>
+/// The arena a step is drawn on: its shape (circle, square, rectangle, custom, or since 0.5.0 a real arena's
+/// <c>poly</c>), proportions, outlines (custom shapes), rings (a real arena's) and floor colour.
+/// </summary>
 public sealed record PlanArena(string Shape, float Aspect, IReadOnlyList<float[]> Outlines, uint Color)
 {
     public static PlanArena Default { get; } = new("circle", 1, Array.Empty<float[]>(), 0x1b1c21);
+
+    /// <summary>
+    /// A real arena's polygons (since 0.5.0; <c>shape: 'poly'</c>): <c>[polygon][outline, then holes][x0, y0, …]</c> in yalms
+    /// from the board's centre, x east, y south, read even-odd (<see cref="Core.Rings"/>). On the board a corner is at
+    /// its value × 840 / <see cref="Yalms"/>. Empty for any other shape, and for a <c>poly</c> without one to draw (drawn as a square).
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<float[]>> Rings { get; init; } = Array.Empty<IReadOnlyList<float[]>>();
+
+    /// <summary>A real arena's polygons to draw: <c>poly</c> with at least one.</summary>
+    public bool IsPoly => Shape == "poly" && Rings.Count > 0;
+
+    /// <summary>The world point (x, z) at the board's centre, when the site set it (a real arena's): only for information.</summary>
+    public ArenaCenter? Center { get; init; }
+
+    /// <summary>The duty (ContentFinderCondition) a real arena was picked from, when the site set it: only for information.</summary>
+    public uint? Duty { get; init; }
+
+    /// <summary>
+    /// Whether a point on the board (board units, from its centre, y down) is on the floor: for a real arena, inside an
+    /// odd number of its rings (even-odd, every polygon's counted, so a hole or a split arena's gap isn't floor); for the
+    /// rest, inside the circle, square or rectangle (a custom arena's outlines, any of them).
+    /// </summary>
+    public bool OnFloor(float x, float y)
+    {
+        const float e = 420;
+        if (IsPoly)
+        {
+            var per = Yalms / (2 * e);
+            return Core.Rings.Contains(Rings, x * per, y * per);
+        }
+        switch (Shape)
+        {
+            case "custom" when Outlines.Count > 0:
+                foreach (var o in Outlines)
+                    if (Core.Rings.InRing(o, x, y)) return true;
+                return false;
+            case "rectangle":
+            {
+                var (hx, hy) = Aspect <= 1 ? (e, e * Aspect) : (e / Aspect, e);
+                return MathF.Abs(x) <= hx && MathF.Abs(y) <= hy;
+            }
+            case "circle":
+                return x * x + y * y <= e * e;
+            default:
+                return MathF.Abs(x) <= e && MathF.Abs(y) <= e;
+        }
+    }
 
     /// <summary>The arena's half-width in yalms (the board's ±420 is this many): the board's marks are sized by it.</summary>
     public float Yalms { get; init; } = 20;
@@ -118,6 +168,9 @@ public sealed record PlanArena(string Shape, float Aspect, IReadOnlyList<float[]
     /// <summary>The floor's grid: none, square, radial or both.</summary>
     public string Grid { get; init; } = "none";
 }
+
+/// <summary>A world point (x, z), as the site's arena <c>center</c> has it.</summary>
+public readonly record struct ArenaCenter(float X, float Z);
 
 /// <summary>
 /// A cooldown planned in a step (since 0.5.0; the site's <c>phase.cooldowns</c>, SPEC5 §3.1): who (<paramref name="Spot"/>: MT, OT,
@@ -457,12 +510,21 @@ public static class PlanJson
                 }
                 if (ok) outlines.Add(flat);
             }
-        var shape = Str(a["shape"], 16) is ("circle" or "square" or "rectangle" or "custom") and var s ? s : "circle";
+        var shape = Str(a["shape"], 16) is ("circle" or "square" or "rectangle" or "custom" or "poly") and var s ? s : "circle";
+        // A real arena's polygons (since 0.5.0): read only for its shape, as the site cleans them.
+        var rings = shape == "poly" ? Rings.Read(a["rings"]) : Array.Empty<IReadOnlyList<float[]>>();
+        // Its size when the site didn't say: the game's, twice the rings' reach rounded up to a tenth (as the site makes it).
+        var yalms = Num(a["yalms"]) ?? (rings.Count > 0 ? Math.Ceiling(Rings.ReachOf(rings) * 2 * 10 - 1e-6) / 10 : 20);
         return new PlanArena(shape, Clamp(Num(a["aspect"]) ?? 1, 0.1, 10), outlines, Hex(Str(a["color"], 16)) ?? PlanArena.Default.Color)
         {
-            Yalms = Clamp(Num(a["yalms"]) ?? 20, 1, 200),
+            Yalms = Clamp(yalms, 1, 200),
             Edge = Str(a["edge"], 8) is ("wall" or "death" or "drop") and var e ? e : "wall",
             Grid = Str(a["grid"], 8) is ("square" or "radial" or "both") and var g ? g : "none",
+            Rings = rings,
+            Center = a["center"] is JsonObject c && Num(c["x"]) is { } cx && Num(c["z"]) is { } cz
+                ? new ArenaCenter(Clamp(cx, -100000, 100000), Clamp(cz, -100000, 100000))
+                : null,
+            Duty = UInt(a["duty"]) is { } duty and > 0 ? duty : null,
         };
     }
 

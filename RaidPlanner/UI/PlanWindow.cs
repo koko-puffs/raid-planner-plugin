@@ -211,6 +211,8 @@ public sealed class PlanWindow : Window
             Cooldowns = s.Cooldowns,
             Hidden = hidden > 0 ? $"{hidden} more objects not drawn" : null,
         };
+        // A real arena's floor is cut into triangles here, once a plan (kept with its arena), never as a frame draws.
+        ArenaFloor.Of(view.Arena);
     }
 
     private void DrawPlan(StepView v, float left, float y, float w, float bottom, bool small)
