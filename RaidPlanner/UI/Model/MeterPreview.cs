@@ -52,6 +52,8 @@ public sealed class MeterPreview : IMeterSource
     private MeterEncounter? live;
     private double liveAt = double.NaN;
     private (MeterEncounter? Of, int Member, MeterTab Tab, IReadOnlyList<AbilityRow> Rows) abilities = (null, 0, MeterTab.Damage, Array.Empty<AbilityRow>());
+    private (MeterEncounter? Of, IReadOnlyList<MeterEvent> Events) events = (null, Array.Empty<MeterEvent>());
+    private (double At, LimitBreakGauge? Gauge) gauge = (double.NaN, null);
 
     /// <summary>A sample from now; <paramref name="clock"/> is seconds on any steady clock (the tests' own; else the system's).</summary>
     public MeterPreview(Func<double>? clock = null)
@@ -105,6 +107,75 @@ public sealed class MeterPreview : IMeterSource
                 return f;
         return null;
     }
+
+    /// <summary>
+    /// The sample's events (the Events tab), up to its second now: the tinctures at the pull and at
+    /// 2:00, a stun on an add, the limit break at 0:58, an interrupt and a cast that went off, a tank
+    /// swap and a moment the boss turned to a healer, the deaths and the wipe; an earlier pull's own
+    /// (with Odette raised). Made once a snapshot.
+    /// </summary>
+    public IReadOnlyList<MeterEvent> Events(int encounterId)
+    {
+        if (Get(encounterId) is not { } e) return Array.Empty<MeterEvent>();
+        if (ReferenceEquals(events.Of, e)) return events.Events;
+        var list = new List<MeterEvent>();
+        foreach (var ev in e.Live || e.Id == LivePull ? Script : StillScript)
+            if (ev.At <= e.Duration)
+                list.Add(ev);
+        events = (e, list);
+        return list;
+    }
+
+    /// <summary>
+    /// The limit break gauge while the sample plays: three bars, filling 350 units a second, two spent
+    /// on the limit break at 0:58; none once it's over.
+    /// </summary>
+    public LimitBreakGauge? LimitBreak
+    {
+        get
+        {
+            var t = At;
+            if (t >= Ends) return null;
+            if (gauge.At == t) return gauge.Gauge;
+            var units = t < LimitBreakAt ? t * 350 : LimitBreakAt * 350 - 20000 + (t - LimitBreakAt) * 350;
+            units = Math.Clamp(units, 0, 30000);
+            var bars = Math.Min(3, (int)(units / 10000));
+            gauge = (t, new LimitBreakGauge(bars, 3, bars >= 3 ? 0 : (int)(units - bars * 10000), 10000));
+            return gauge.Gauge;
+        }
+    }
+
+    private static MeterEvent Ev(double at, MeterEventKind kind, int id, string slot, string text, int other = 0, string otherSlot = "") =>
+        new(at, kind, id, slot, text, other, otherSlot);
+
+    /// <summary>The live pull's events, oldest first (names as the meter's own: they stay in the game).</summary>
+    private static readonly MeterEvent[] Script =
+    {
+        Ev(0.6, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
+        Ev(0.9, MeterEventKind.Potion, 3, "M2", "Tamsin used a Grade 2 Gemdraught of Dexterity"),
+        Ev(1.2, MeterEventKind.Potion, 2, "R2", "Ilya used a Grade 2 Gemdraught of Intelligence"),
+        Ev(46.2, MeterEventKind.Stun, 6, "MT", "Koko stunned Ice Sprite with Low Blow"),
+        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance (limit break 2)"),
+        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Ice Sprite's Dark Spike with Interject"),
+        Ev(100.3, MeterEventKind.TankSwap, 5, "OT", "Example Boss turned to Brann from Koko (Provoke)", 6, "MT"),
+        Ev(110.8, MeterEventKind.CastWentOff, 0, "", "Ice Sprite's Dark Spike went off: nobody interrupted it"),
+        Ev(120.4, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
+        Ev(120.9, MeterEventKind.Potion, 4, "R1", "Fenn used a Grade 2 Gemdraught of Dexterity"),
+        Ev(126.1, MeterEventKind.AggroLost, 8, "H2", "Example Boss turned to Odette for 2 s"),
+        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare (104,880)"),
+        Ev(202.0, MeterEventKind.Death, 4, "R1", "Fenn died to Line of Sight (246,300)"),
+        Ev(209.4, MeterEventKind.Death, 6, "MT", "Koko died to Starfall: the wipe"),
+    };
+
+    /// <summary>An earlier pull's events: Odette raised by Sylvie.</summary>
+    private static readonly MeterEvent[] StillScript =
+    {
+        Ev(0.8, MeterEventKind.Potion, 1, "M1", "Rook used a Grade 2 Gemdraught of Strength"),
+        Ev(58.0, MeterEventKind.LimitBreak, 1, "M1", "Rook used Bladedance (limit break 2)"),
+        Ev(84.4, MeterEventKind.Interrupt, 5, "OT", "Brann interrupted Ice Sprite's Dark Spike with Interject"),
+        Ev(171.3, MeterEventKind.Death, 8, "H2", "Odette died to Exaflare (104,880)"),
+        Ev(180.4, MeterEventKind.Raise, 8, "H2", "Odette was raised by Sylvie (Swiftcast Raise) after 0:09", 7, "H1"),
+    };
 
     /// <summary>Pull 4: the one that got furthest.</summary>
     public MeterEncounter? Best(uint content) => still[^1];
@@ -268,7 +339,14 @@ public sealed class MeterPreview : IMeterSource
             rows.Add(new MeterRow(p.Id, p.Slot, p.Name, p.Job, p.Role, p.Slot == "MT", false,
                 (long)Math.Round(dmg[i]), dmg[i] / clock, dmg[i] / active, party <= 0 ? 0 : dmg[i] / party, p.Crit, p.Dh, p.MaxHit, p.MaxHitName,
                 (long)Math.Round(heal[i]), (long)Math.Round(over), heal[i] / clock, p.Over, healed <= 0 ? 0 : heal[i] / healed, 0.2, p.Role == "healer" ? 31200 : 9800,
-                (long)Math.Round(hit[i]), hit[i] / clock, taken <= 0 ? 0 : hit[i] / taken, p.MaxTaken, deaths, dead, dead ? p.Died : null, active));
+                (long)Math.Round(hit[i]), hit[i] / clock, taken <= 0 ? 0 : hit[i] / taken, p.MaxTaken, deaths, dead, dead ? p.Died : null, active)
+            {
+                // 0.4.0's: a GCD every 2.45 s while alive, the tinctures, Brann's interrupt, the time dead (the wipe's not counted).
+                Casts = (int)(Math.Min(t, p.Died) / 2.45),
+                Potions = PotionsBy(p.Id, t),
+                Interrupts = p.Slot == "OT" && t >= 84.4 ? 1 : 0,
+                DeadSeconds = deaths > 0 ? t - p.Died : 0,
+            });
         }
         // The limit break's row is party id −1, as the meter's own (the party's total is 0).
         if (lb)
@@ -276,9 +354,23 @@ public sealed class MeterPreview : IMeterSource
                 LimitBreakDamage / party, 0, 0, LimitBreakDamage, "Bladedance", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, null, 0));
         var overAll = 0.0;
         foreach (var r in rows) overAll += r.Overheal;
+        var (casts, potions, interrupts, deadFor) = (0, 0, 0, 0.0);
+        foreach (var r in rows)
+        {
+            casts += r.Casts;
+            potions += r.Potions;
+            interrupts += r.Interrupts;
+            deadFor += r.DeadSeconds;
+        }
         var total = new MeterRow(0, string.Empty, "Party", string.Empty, string.Empty, false, false, (long)Math.Round(party), party / clock, party / clock, 1, 0.28, 0.4,
             lb ? LimitBreakDamage : 214830, lb ? "Bladedance" : "Akh Morn", (long)Math.Round(healed), (long)Math.Round(overAll), healed / clock,
-            healed + overAll <= 0 ? 0 : overAll / (healed + overAll), 1, 0.2, 31200, (long)Math.Round(taken), taken / clock, 1, 246300, counted, false, null, clock);
+            healed + overAll <= 0 ? 0 : overAll / (healed + overAll), 1, 0.2, 31200, (long)Math.Round(taken), taken / clock, 1, 246300, counted, false, null, clock)
+        {
+            Casts = casts,
+            Potions = potions,
+            Interrupts = interrupts,
+            DeadSeconds = deadFor,
+        };
         var deathsNow = new List<DeathEntry>(Deaths.Length);
         foreach (var d in Deaths)
             if (d.At <= t)
@@ -286,6 +378,16 @@ public sealed class MeterPreview : IMeterSource
         var ended = t >= Ends;
         return new MeterEncounter(LivePull, LivePull, "Example Arena", 1, 0, t, !ended, ended ? Outcome.Wipe : null, t, t < PhaseTwo ? "P1" : "P2", t < PhaseTwo ? 0 : PhaseTwo,
             rows, total, deathsNow);
+    }
+
+    /// <summary>The tinctures a player had used by second <paramref name="t"/> (the script's).</summary>
+    private static int PotionsBy(int id, double t)
+    {
+        var n = 0;
+        foreach (var ev in Script)
+            if (ev.Kind == MeterEventKind.Potion && ev.PartyId == id && ev.At <= t)
+                n++;
+        return n;
     }
 
     /// <summary>The party's damage by second <paramref name="t"/>, the limit break's included.</summary>
@@ -356,7 +458,29 @@ public sealed class MeterPreview : IMeterSource
             LimitBreakDamage, "Bladedance", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, null, 0));
         var total = new MeterRow(0, string.Empty, "Party", string.Empty, string.Empty, false, false, damage, damage / Ref, damage / Ref, 1, 0.28, 0.4,
             LimitBreakDamage, "Bladedance", 3707310, 1200000, 19410, 0.3, 1, 0.2, 40000, taken, taken / duration, 1, 104880, 1, false, null, duration);
-        var deaths = new List<DeathEntry> { Deaths[0] };
+        // Odette was raised in the earlier pulls that lasted long enough (by Sylvie, H1, nine seconds after she died).
+        var raised = duration > 181;
+        var deaths = new List<DeathEntry> { raised ? Deaths[0] with { RaisedAt = 180.4, RaisedBy = "H1" } : Deaths[0] };
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            if (r.IsLimitBreak) continue;
+            rows[i] = r with
+            {
+                Casts = (int)(duration / 2.45),
+                Potions = r.Role == "dps" ? 2 : 0,
+                Interrupts = r.Slot == "OT" ? 1 : 0,
+                RaisesGiven = raised && r.Slot == "H1" ? 1 : 0,
+                Raised = raised && r.Slot == "H2" ? 1 : 0,
+                DeadSeconds = r.Slot != "H2" ? 0 : raised ? 9.1 : duration - 171.3,
+                Dead = r.Dead && !raised,
+            };
+        }
+        total = total with
+        {
+            Casts = (int)(duration / 2.45) * 8, Potions = 8, Interrupts = 1, RaisesGiven = raised ? 1 : 0, Raised = raised ? 1 : 0,
+            DeadSeconds = raised ? 9.1 : duration - 171.3,
+        };
         return new MeterEncounter(pull, pull, "Example Arena", 1, ago, duration, false, Outcome.Wipe, duration, "P2", 150, rows, total, deaths);
     }
 }

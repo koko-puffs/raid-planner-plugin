@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.Core;
 
@@ -32,9 +33,10 @@ public sealed record DutyInfo(string Name, uint Territory, uint Content, bool Fi
 /// <summary>
 /// One player in the party, as the plan will have them: a spot (MT, OT, H1…), their job and role.
 /// Names are never kept. <paramref name="Id"/> is the recording's own number for them (1 to 8, or more in an alliance);
-/// <paramref name="MaxHp"/> their max HP as the pull began (0 unknown; since 0.3.0).
+/// <paramref name="MaxHp"/> their max HP as the pull began (0 unknown; since 0.3.0); <paramref name="Self"/> the
+/// spot of the player who recorded it (since 0.4.0: the summary's <c>slots[].self</c>, the site's personal bests).
 /// </summary>
-public sealed record PartyMember(int Id, string Slot, string Job, string Role, long MaxHp = 0);
+public sealed record PartyMember(int Id, string Slot, string Job, string Role, long MaxHp = 0, bool Self = false);
 
 /// <summary>What an enemy or other actor in the fight is, as the plan draws it.</summary>
 public enum ActorKind
@@ -56,12 +58,22 @@ public sealed record Actor(int Id, string Name, ActorKind Kind, float Hitbox, ui
 /// What the game's data says about an action: its name, cast type (its shape), its reach and width
 /// in yalms, the floor marker it shows (its omen's path, which names a cone's angle), and its cast; since
 /// 0.3.0 its ActionCategory (<paramref name="Category"/>: 9 a limit break, 15 PvP's) and base recast in
-/// seconds (0 none), for the party's own actions now listed too.
+/// seconds (0 none), for the party's own actions now listed too. Since 0.4.0 (each 0 or false when not known,
+/// and then not written): <paramref name="CooldownGroup"/> and <paramref name="CooldownGroup2"/> (the sheet's
+/// CooldownGroup and AdditionalCooldownGroup: 58 is the GCD's), <paramref name="Charges"/> (the most charges),
+/// <paramref name="AdjustedRecast"/> (the recording player's own recast for it in seconds, traits and level
+/// sync included, as the game works it out: their own non-GCD actions only; <c>rc</c>), and
+/// <paramref name="Area"/> (placed on the ground: the sheet's TargetArea).
 /// </summary>
-public sealed record ActionInfo(string Name, int CastType, float Range, float Width, string Omen, float Cast, int Category = 0, float Recast = 0);
+public sealed record ActionInfo(string Name, int CastType, float Range, float Width, string Omen, float Cast, int Category = 0, float Recast = 0,
+    int CooldownGroup = 0, int CooldownGroup2 = 0, int Charges = 0, float AdjustedRecast = 0, bool Area = false);
 
-/// <summary>What the game's data says about a status (a buff or debuff): its name and icon number.</summary>
-public sealed record StatusInfo(string Name, uint Icon);
+/// <summary>
+/// What the game's data says about a status (a buff or debuff): its name and icon number; since 0.4.0 its
+/// StatusCategory (<paramref name="Category"/>: 1 beneficial, 2 detrimental; 0 unknown) and whether it can
+/// be cleansed (<paramref name="Dispel"/>: the sheet's CanDispel).
+/// </summary>
+public sealed record StatusInfo(string Name, uint Icon, int Category = 0, bool Dispel = false);
 
 /// <summary>Something that happened, <see cref="T"/> seconds after the pull.</summary>
 public abstract record RecEvent(double T)
@@ -71,9 +83,11 @@ public abstract record RecEvent(double T)
 
 /// <summary>
 /// An enemy began a cast: the action, how long it takes, where the caster stood and faced, who it
-/// targets (a party member's or actor's id, 0 for none) and where on the ground it's aimed.
+/// targets (a party member's or actor's id, 0 for none) and where on the ground it's aimed; since 0.4.0
+/// whether it can be interrupted (<paramref name="Interruptible"/>, <c>int</c>).
 /// </summary>
-public sealed record CastEvent(double T, int Source, uint Action, float Duration, float X, float Z, float Rotation, int Target, float? TargetX, float? TargetZ)
+public sealed record CastEvent(double T, int Source, uint Action, float Duration, float X, float Z, float Rotation, int Target, float? TargetX, float? TargetZ,
+    bool Interruptible = false)
     : RecEvent(T)
 {
     public override void Write(Utf8JsonWriter w)
@@ -93,6 +107,7 @@ public sealed record CastEvent(double T, int Source, uint Action, float Duration
             w.WriteNumber("tx", Round(tx, 2));
             w.WriteNumber("tz", Round(tz, 2));
         }
+        if (Interruptible) w.WriteBoolean("int", true);
         w.WriteEndObject();
     }
 
@@ -106,10 +121,15 @@ public sealed record CastEvent(double T, int Source, uint Action, float Duration
 /// the party members it hit (their ids). Since 0.3.0, aligned with them: the damage each took
 /// (<paramref name="Damage"/>), the hit's flags on each (<paramref name="Fx"/>: 1 crit, 2 direct hit,
 /// 4 blocked, 8 parried, 16 fully resisted, 32 invulnerable, 64 instant death, 128 dodged) and each
-/// one's HP just before (<paramref name="Hp"/>, −1 unknown); null in older files.
+/// one's HP just before (<paramref name="Hp"/>, −1 unknown); null in older files. Since 0.4.0 also, aligned:
+/// each one's barrier before it as a % of their max HP (<paramref name="Shield"/>, <c>sh</c>, −1 unknown) and
+/// where each stood as the effect arrived (<paramref name="Px"/>, <paramref name="Pz"/>, NaN unknown, written
+/// as null), and the flags 256 knocked back or drawn in, 512 partly absorbed, 1024 a status resisted (no
+/// longer 16).
 /// </summary>
 public sealed record HitEvent(double T, int Source, uint Action, float X, float Z, float Rotation, float HitX, float HitZ, IReadOnlyList<int> Targets,
-    IReadOnlyList<long>? Damage = null, IReadOnlyList<int>? Fx = null, IReadOnlyList<long>? Hp = null)
+    IReadOnlyList<long>? Damage = null, IReadOnlyList<int>? Fx = null, IReadOnlyList<long>? Hp = null, IReadOnlyList<int>? Shield = null,
+    IReadOnlyList<float>? Px = null, IReadOnlyList<float>? Pz = null)
     : RecEvent(T)
 {
     public override void Write(Utf8JsonWriter w)
@@ -145,6 +165,106 @@ public sealed record HitEvent(double T, int Source, uint Action, float X, float 
             foreach (var h in Hp) w.WriteNumberValue(h);
             w.WriteEndArray();
         }
+        if (Shield != null && Shield.Count == Targets.Count)
+        {
+            w.WriteStartArray("sh");
+            foreach (var h in Shield) w.WriteNumberValue(h);
+            w.WriteEndArray();
+        }
+        if (Px != null && Pz != null && Px.Count == Targets.Count && Pz.Count == Targets.Count)
+        {
+            Place(w, "px", Px);
+            Place(w, "pz", Pz);
+        }
+        w.WriteEndObject();
+    }
+
+    private static void Place(Utf8JsonWriter w, string name, IReadOnlyList<float> values)
+    {
+        w.WriteStartArray(name);
+        foreach (var v in values)
+        {
+            if (float.IsFinite(v)) w.WriteNumberValue(CastEvent.Round(v, 2));
+            else w.WriteNullValue();
+        }
+        w.WriteEndArray();
+    }
+}
+
+/// <summary>
+/// An enemy's cast stopped before its end (since 0.4.0): the game said so (actor control 15) while the
+/// recorder held the cast and before its end less a quarter second (the game sends it on some casts that
+/// finished). <see cref="Interrupted"/> when the game said interrupted (else cancelled); <see cref="By"/>
+/// and <see cref="With"/> the party member and action credited (0 none: <see cref="CastWatch"/>).
+/// </summary>
+public sealed record CancelEvent(double T, int Source, uint Action, bool Interrupted, int By = 0, uint With = 0) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "cancel");
+        w.WriteNumber("src", Source);
+        w.WriteNumber("action", Action);
+        if (Interrupted) w.WriteBoolean("int", true);
+        if (By != 0) w.WriteNumber("by", By);
+        if (With != 0) w.WriteNumber("with", With);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>
+/// A dead party member alive again (since 0.4.0), at the frame their HP went above 0 (they accepted):
+/// <see cref="By"/> the raiser (0 not known), <see cref="At"/> when the raise landed (null not known),
+/// <see cref="Lb"/> the healers' limit break 3.
+/// </summary>
+public sealed record RaiseEvent(double T, int Who, int By, double? At = null, bool Lb = false) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "raise");
+        w.WriteNumber("who", Who);
+        w.WriteNumber("by", By);
+        if (At is { } at && double.IsFinite(at)) w.WriteNumber("at", CastEvent.Round(at, 2));
+        if (Lb) w.WriteBoolean("lb", true);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>A targetable enemy's target changed (since 0.4.0): <see cref="On"/> a party id, an actor's, or 0 for none.</summary>
+public sealed record AggroEvent(double T, int Actor, int On) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "aggro");
+        w.WriteNumber("actor", Actor);
+        w.WriteNumber("on", On);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>
+/// The head signs (the party's target markers) as they now are (since 0.4.0): by the game's index
+/// (0–16; assumed attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8
+/// [verify]) the party id or actor id marked. One missing isn't placed.
+/// </summary>
+public sealed record SignsEvent(double T, IReadOnlyDictionary<int, int> Marks) : RecEvent(T)
+{
+    public const int Count = 17;
+
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "signs");
+        w.WriteStartObject("marks");
+        foreach (var (i, on) in Marks.OrderBy(kv => kv.Key))
+            w.WriteNumber(i.ToString(CultureInfo.InvariantCulture), on);
+        w.WriteEndObject();
         w.WriteEndObject();
     }
 }
@@ -356,6 +476,7 @@ public sealed class Recording
             w.WriteString("job", p.Job);
             w.WriteString("role", p.Role);
             if (p.MaxHp > 0) w.WriteNumber("maxHp", p.MaxHp);
+            if (p.Self) w.WriteBoolean("self", true);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -386,6 +507,11 @@ public sealed class Recording
             w.WriteNumber("cast", CastEvent.Round(a.Cast, 2));
             if (a.Category > 0) w.WriteNumber("cat", a.Category);
             if (a.Recast > 0) w.WriteNumber("recast", CastEvent.Round(a.Recast, 2));
+            if (a.CooldownGroup > 0) w.WriteNumber("cdg", a.CooldownGroup);
+            if (a.CooldownGroup2 > 0) w.WriteNumber("cdg2", a.CooldownGroup2);
+            if (a.Charges > 1) w.WriteNumber("charges", a.Charges);
+            if (a.AdjustedRecast > 0) w.WriteNumber("rc", CastEvent.Round(a.AdjustedRecast, 2));
+            if (a.Area) w.WriteBoolean("area", true);
             w.WriteEndObject();
         }
         w.WriteEndObject();
@@ -396,6 +522,8 @@ public sealed class Recording
             w.WriteStartObject(id.ToString(CultureInfo.InvariantCulture));
             w.WriteString("name", st.Name);
             w.WriteNumber("icon", st.Icon);
+            if (st.Category > 0) w.WriteNumber("cat", st.Category);
+            if (st.Dispel) w.WriteBoolean("dispel", true);
             w.WriteEndObject();
         }
         w.WriteEndObject();
@@ -507,7 +635,7 @@ public sealed class Recording
                 d["field"] is JsonValue fv && fv.TryGetValue<bool>(out var field) && field);
         if (o["party"] is JsonArray party)
             foreach (var p in party.OfType<JsonObject>())
-                r.Party.Add(new PartyMember(Int(p["id"]) ?? 0, Str(p["slot"]) ?? "", Str(p["job"]) ?? "", Str(p["role"]) ?? "dps", Hp(p["maxHp"]) ?? 0));
+                r.Party.Add(new PartyMember(Int(p["id"]) ?? 0, Str(p["slot"]) ?? "", Str(p["job"]) ?? "", Str(p["role"]) ?? "dps", Hp(p["maxHp"]) ?? 0, Bool(p["self"])));
         if (o["actors"] is JsonArray actors)
             foreach (var a in actors.OfType<JsonObject>())
                 r.Actors.Add(new Actor(Int(a["id"]) ?? 0, Str(a["name"]) ?? "", Enum.TryParse<ActorKind>(Str(a["kind"]), true, out var k) ? k : ActorKind.Add,
@@ -516,11 +644,13 @@ public sealed class Recording
             foreach (var (key, value) in actions)
                 if (uint.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && value is JsonObject a)
                     r.Actions[id] = new ActionInfo(Str(a["name"]) ?? "", Int(a["castType"]) ?? 0, (float)(Num(a["range"]) ?? 0), (float)(Num(a["width"]) ?? 0),
-                        Str(a["omen"]) ?? "", (float)(Num(a["cast"]) ?? 0), Math.Max(0, Int(a["cat"]) ?? 0), (float)Math.Max(0, Num(a["recast"]) ?? 0));
+                        Str(a["omen"]) ?? "", (float)(Num(a["cast"]) ?? 0), Math.Max(0, Int(a["cat"]) ?? 0), (float)Math.Max(0, Num(a["recast"]) ?? 0),
+                        Math.Clamp(Int(a["cdg"]) ?? 0, 0, 255), Math.Clamp(Int(a["cdg2"]) ?? 0, 0, 255), Math.Clamp(Int(a["charges"]) ?? 0, 0, 255),
+                        (float)Math.Max(0, Num(a["rc"]) ?? 0), Bool(a["area"]));
         if (o["statuses"] is JsonObject statuses)
             foreach (var (key, value) in statuses)
                 if (uint.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && value is JsonObject st)
-                    r.Statuses[id] = new StatusInfo(Str(st["name"]) ?? "", UInt(st["icon"]) ?? 0);
+                    r.Statuses[id] = new StatusInfo(Str(st["name"]) ?? "", UInt(st["icon"]) ?? 0, Math.Clamp(Int(st["cat"]) ?? 0, 0, 255), Bool(st["dispel"]));
         if (o["events"] is JsonArray events)
             foreach (var e in events.OfType<JsonObject>())
                 if (ReadEvent(e) is { } ev) r.Events.Add(ev);
@@ -549,7 +679,7 @@ public sealed class Recording
         {
             case "cast":
                 return new CastEvent(t, Int(e["src"]) ?? 0, (UInt(e["action"]) ?? 0), (float)(Num(e["dur"]) ?? 0), (float)(Num(e["x"]) ?? 0),
-                    (float)(Num(e["z"]) ?? 0), (float)(Num(e["rot"]) ?? 0), Int(e["tgt"]) ?? 0, (float?)Num(e["tx"]), (float?)Num(e["tz"]));
+                    (float)(Num(e["z"]) ?? 0), (float)(Num(e["rot"]) ?? 0), Int(e["tgt"]) ?? 0, (float?)Num(e["tx"]), (float?)Num(e["tz"]), Bool(e["int"]));
             case "hit":
                 return ReadHit(e, t);
             case "marker":
@@ -574,6 +704,19 @@ public sealed class Recording
                     foreach (var (key, value) in m)
                         if (value is JsonArray xz && xz.Count >= 2) marks[key] = ((float)(Num(xz[0]) ?? 0), (float)(Num(xz[1]) ?? 0));
                 return new WaymarksEvent(t, marks);
+            case "cancel":
+                return new CancelEvent(t, Int(e["src"]) ?? 0, UInt(e["action"]) ?? 0, Bool(e["int"]), Int(e["by"]) ?? 0, UInt(e["with"]) ?? 0);
+            case "raise":
+                return new RaiseEvent(t, Int(e["who"]) ?? 0, Int(e["by"]) ?? 0, Num(e["at"]), Bool(e["lb"]));
+            case "aggro":
+                return new AggroEvent(t, Int(e["actor"]) ?? 0, Int(e["on"]) ?? 0);
+            case "signs":
+                var signs = new Dictionary<int, int>();
+                if (e["marks"] is JsonObject sm)
+                    foreach (var (key, value) in sm)
+                        if (int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var i) && i < SignsEvent.Count && Int(value) is { } marked && marked != 0)
+                            signs[i] = marked;
+                return new SignsEvent(t, signs);
             default:
                 return null;
         }
@@ -591,15 +734,23 @@ public sealed class Recording
         var dmg = Aligned("dmg", x => Hp(x) ?? 0);
         var fx = Aligned("fx", x => Int(x) ?? 0);
         var hp = Aligned("hp", x => Num(x) is { } d && d >= -1 && d <= long.MaxValue ? (long)d : -1);
+        var sh = Aligned("sh", x => Int(x) is { } v && v is >= 0 and <= 100 ? v : -1);
+        var px = Aligned("px", x => Num(x) is { } d ? (float)d : float.NaN);
+        var pz = Aligned("pz", x => Num(x) is { } d ? (float)d : float.NaN);
+        if (px == null || pz == null) px = pz = null;
         var keep = Enumerable.Range(0, raw.Count).Where(i => raw[i] != 0).ToList();
         return new HitEvent(t, Int(e["src"]) ?? 0, (UInt(e["action"]) ?? 0), (float)(Num(e["x"]) ?? 0), (float)(Num(e["z"]) ?? 0),
             (float)(Num(e["rot"]) ?? 0), (float)(Num(e["hx"]) ?? 0), (float)(Num(e["hz"]) ?? 0),
             keep.Select(i => raw[i]).ToList(), dmg == null ? null : keep.Select(i => dmg[i]).ToList(),
-            fx == null ? null : keep.Select(i => fx[i]).ToList(), hp == null ? null : keep.Select(i => hp[i]).ToList());
+            fx == null ? null : keep.Select(i => fx[i]).ToList(), hp == null ? null : keep.Select(i => hp[i]).ToList(),
+            sh == null ? null : keep.Select(i => sh[i]).ToList(), px == null ? null : keep.Select(i => px[i]).ToList(),
+            pz == null ? null : keep.Select(i => pz![i]).ToList());
     }
 
     /// <summary>An amount of HP (or damage): a whole number from 0 up, or null.</summary>
     private static long? Hp(JsonNode? n) => Num(n) is { } d && d >= 0 && d <= long.MaxValue ? (long)d : null;
+
+    private static bool Bool(JsonNode? n) => n is JsonValue v && v.TryGetValue<bool>(out var b) && b;
 
     private static string? Str(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
 

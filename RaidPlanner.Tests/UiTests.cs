@@ -572,12 +572,15 @@ public class MeterLayoutTests
     }
 
     [Fact]
-    public void The_tab_menu_lists_the_four_tabs_in_the_tab_rows_order()
+    public void The_tab_menu_lists_the_five_tabs_in_the_tab_rows_order()
     {
-        Assert.Equal(new[] { MeterTab.Damage, MeterTab.Healing, MeterTab.Taken, MeterTab.Deaths }, MeterLayout.TabOrder);
+        Assert.Equal(new[] { MeterTab.Damage, MeterTab.Healing, MeterTab.Taken, MeterTab.Deaths, MeterTab.Events }, MeterLayout.TabOrder);
         Assert.Equal(Enum.GetValues<MeterTab>(), MeterLayout.TabOrder);
-        Assert.Equal(new[] { "Damage", "Healing", "Taken", "Deaths" }, MeterLayout.TabOrder.Select(MeterLayout.TabWord));
+        Assert.Equal(new[] { "Damage", "Healing", "Taken", "Deaths", "Events" }, MeterLayout.TabOrder.Select(MeterLayout.TabWord));
         Assert.Equal("Damage", MeterLayout.TabWord((MeterTab)9));
+        // A tab a newer version saved is Damage here; the ones this version has stay.
+        Assert.Equal(MeterTab.Damage, MeterLayout.Known((MeterTab)9));
+        Assert.Equal(MeterTab.Events, MeterLayout.Known(MeterTab.Events));
     }
 }
 

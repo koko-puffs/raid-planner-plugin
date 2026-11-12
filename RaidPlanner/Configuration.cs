@@ -24,6 +24,12 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Keep where the party stands (off: only the enemies and the mechanics, to place the party yourself).</summary>
     public bool RecordParty { get; set; } = true;
 
+    /// <summary>
+    /// Settings → Recording → Smoother replays (0.4.0; off): where everyone stands kept four times a second, not two
+    /// (bigger files: about 30 KB more a minute of an eight-player pull; sending thins them back to two when it must).
+    /// </summary>
+    public bool SmoothReplays { get; set; }
+
     /// <summary>How many pulls are kept; the oldest go past it.</summary>
     public int Keep { get; set; } = 20;
 
@@ -120,6 +126,46 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>Which corner the anchor is (moved to the other's place when Grows is changed).</summary>
     public MeterGrows MeterAnchorFor { get; set; } = MeterGrows.Down;
+
+    /// <summary>Where the meter shows the limit break gauge (added in 0.4.0): in its head, in its foot, or not at all.</summary>
+    public GaugePlace MeterGauge { get; set; } = GaugePlace.Foot;
+
+    // The party cooldown tracker (0.4.0; Settings → Cooldowns, /raidplan cooldowns).
+
+    /// <summary>The tracker's window: shown, where, lock, click-through, grows, anchor, compact, background, width. Off at first.</summary>
+    public OverlaySettings Cooldowns { get; set; } = new() { Show = false, Background = 0.6f };
+
+    /// <summary>The cooldowns you turned on or off (by <see cref="CooldownSpec.Key"/>); the rest are as <see cref="CooldownCatalog"/> has them.</summary>
+    public Dictionary<string, bool> CooldownPicks { get; set; } = new();
+
+    /// <summary>Your own cooldowns in the tracker too (the game's own timers).</summary>
+    public bool CooldownsMine { get; set; } = true;
+
+    /// <summary>Those ready aren't listed (only what's recharging).</summary>
+    public bool CooldownsHideReady { get; set; }
+
+    /// <summary>The limit break gauge as the tracker's last row (when the party has one).</summary>
+    public bool CooldownsGauge { get; set; } = true;
+
+    // The on-screen callouts (0.4.0; Settings → Plan window, /raidplan callouts).
+
+    /// <summary>The callouts' window: shown (while the plan follows a pull), lock, click-through, grows, anchor, compact, background, width. On at first.</summary>
+    public OverlaySettings CalloutOverlay { get; set; } = new() { Show = true, Everywhere = true, Background = 0.45f };
+
+    /// <summary>How far ahead the callouts look (seconds).</summary>
+    public int CalloutAhead { get; set; } = 15;
+
+    /// <summary>How many steps they show at most.</summary>
+    public int CalloutCount { get; set; } = 3;
+
+    /// <summary>A sound a few seconds before each step (the game's own &lt;se.N&gt;).</summary>
+    public bool CalloutSound { get; set; }
+
+    /// <summary>Which of the game's sound effects (1–16, as &lt;se.1&gt; to &lt;se.16&gt; in a macro).</summary>
+    public int CalloutSoundId { get; set; } = 2;
+
+    /// <summary>How many seconds before a step its sound plays.</summary>
+    public int CalloutSoundLead { get; set; } = 3;
 
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();

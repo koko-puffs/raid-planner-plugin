@@ -36,7 +36,8 @@ public enum Face
 /// not here is drawn at the nearest one:
 /// Geist 400 at 11, 12, 13, 14; 500 at 12, 13, 14; 600 at 7, 8, 10, 13, 14, 15;
 /// Geist Mono 500 at 9, 10, 11, 12, 13; 600 at 10, 11, 12, 13, 15, 16, 18, 30;
-/// Archivo Expanded ExtraBold at 13, 16, 17, 22.
+/// Archivo Expanded ExtraBold at 13, 16, 17, 22 and 30 (the on-screen callouts' first step, since
+/// 0.4.0: latin only, with no extra language's glyphs, so a callout in Chinese or Korean is drawn at 22).
 ///
 /// Sizes are CSS sizes (the em). ImGui sizes a font by its line (ascent to descent), so each face is
 /// loaded at its em times its line ratio, and 14px Geist here is as tall as 14px in the browser.
@@ -77,7 +78,7 @@ public sealed class Fonts : IDisposable
         (Face.Mono, 9), (Face.Mono, 10), (Face.Mono, 11), (Face.Mono, 12), (Face.Mono, 13),
         (Face.MonoSemibold, 10), (Face.MonoSemibold, 11), (Face.MonoSemibold, 12), (Face.MonoSemibold, 13), (Face.MonoSemibold, 15), (Face.MonoSemibold, 16),
         (Face.MonoSemibold, 18), (Face.MonoSemibold, 30),
-        (Face.Callout, 13), (Face.Callout, 16), (Face.Callout, 17), (Face.Callout, 22),
+        (Face.Callout, 13), (Face.Callout, 16), (Face.Callout, 17), (Face.Callout, 22), (Face.Callout, 30),
     };
 
     /// <summary>Each (face, size) wanted, to its font; faces built alike (a Japanese client's) share one.</summary>

@@ -112,9 +112,21 @@ public static class PullStats
     /// killed them outright, and (for the last only: a tick never starts it) a damage tick on one of them
     /// or one credited to one of them, a tick shared out included (one nobody had a DoT for isn't).
     /// </summary>
-    public static Tally Totals(Recording r, Func<uint, bool>? isDot, out (double First, double Last) fought)
+    public static Tally Totals(Recording r, Func<uint, bool>? isDot, out (double First, double Last) fought) => Totals(r, isDot, out fought, null);
+
+    /// <summary>
+    /// <see cref="Totals(Recording, Func{uint, bool}?, out (double First, double Last))"/>, telling <paramref name="onDamage"/> of
+    /// each share of damage credited to a member (party id, time, amount; the limit break's not): what the summary's
+    /// damage by phase (<c>ph</c>) is made of, so it adds up to the same totals.
+    /// </summary>
+    public static Tally Totals(Recording r, Func<uint, bool>? isDot, out (double First, double Last) fought, Action<int, double, long>? onDamage)
     {
         var tally = new Tally();
+        void Dealt(int member, double t, uint action, long amount, FxFlags flags, bool tick = false, uint status = 0, bool estimated = false)
+        {
+            tally.Damage(member, t, action, amount, flags, tick, status, estimated);
+            if ((flags & FxFlags.LimitBreak) == 0 && amount > 0) onDamage?.Invoke(member, t, amount);
+        }
         double first = double.NaN, last = double.NaN;
         void Fought(double t, bool tick)
         {
@@ -135,7 +147,7 @@ public static class PullStats
                     case FxKind.Damage:
                         // On the party (a cost of one's own) it isn't the party's damage (the parser doesn't keep it).
                         if (party.Contains(f.Recipient)) break;
-                        tally.Damage(f.Origin, f.T, f.Action, f.Amount, flags);
+                        Dealt(f.Origin, f.T, f.Action, f.Amount, flags);
                         Fought(f.T, false);
                         break;
                     case FxKind.Heal:
@@ -180,7 +192,7 @@ public static class PullStats
                 if (tick.Heal) continue;
                 if (party.Contains(tick.Source))
                 {
-                    tally.Damage(tick.Source, tick.T, 0, tick.Amount, FxFlags.None, true, tick.Status);
+                    Dealt(tick.Source, tick.T, 0, tick.Amount, FxFlags.None, true, tick.Status);
                     Fought(tick.T, true);
                 }
                 else if (tick.Source == 0 && dots.TryGetValue(tick.On, out var on))
@@ -191,7 +203,7 @@ public static class PullStats
                     if (sharers.Count == 0) continue;
                     var each = tick.Amount / sharers.Count;
                     for (var i = 0; i < sharers.Count; i++)
-                        tally.Damage(sharers[i], tick.T, 0, i == 0 ? tick.Amount - each * (sharers.Count - 1) : each, FxFlags.None, true, tick.Status, true);
+                        Dealt(sharers[i], tick.T, 0, i == 0 ? tick.Amount - each * (sharers.Count - 1) : each, FxFlags.None, true, tick.Status, true);
                     Fought(tick.T, true);
                 }
             }
@@ -261,12 +273,23 @@ public static class PullStats
     /// latest hits go first, then the latest debuffs.
     /// </summary>
     /// <param name="failKind">A status's kind (<see cref="CombatLists.FailKind"/>); by default from its name in the recording.</param>
-    public static JsonObject Stats(Recording r, Func<uint, int>? failKind = null, Func<uint, bool>? isDot = null)
+    /// <param name="phaseStarts">When each phase began (the summary's <c>phases</c>), for <c>ph</c>; by default <see cref="PhaseStarts"/>.</param>
+    public static JsonObject Stats(Recording r, Func<uint, int>? failKind = null, Func<uint, bool>? isDot = null, IReadOnlyList<double>? phaseStarts = null)
     {
         failKind ??= id => r.Statuses.TryGetValue(id, out var s) ? CombatLists.FailKind(s.Name) : CombatLists.NotAFail;
         var slots = r.Party.Take(MaxSlots).ToList();
         var bit = slots.Select((p, i) => (p.Id, i)).GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().i);
-        var tally = Totals(r, isDot, out var fought);
+        // Each spot's damage by phase (pets and DoTs in, the limit break out), as it's added up.
+        var starts = (phaseStarts is { Count: > 0 } ? phaseStarts : PhaseStarts(r)).Take(PullSummary.MaxPhases).ToList();
+        var byPhase = new long[starts.Count, slots.Count];
+        void InPhase(int member, double t, long amount)
+        {
+            if (!bit.TryGetValue(member, out var b)) return;
+            var i = starts.Count - 1;
+            while (i > 0 && starts[i] > t) i--;
+            byPhase[i, b] += amount;
+        }
+        var tally = Totals(r, isDot, out var fought, InPhase);
         var length = Length(r, fought);
         var wipe = WipeDeaths(r);
 
@@ -317,11 +340,12 @@ public static class PullStats
         if (hits.Count > MaxHits) hits.RemoveRange(MaxHits, hits.Count - MaxHits);
         if (debuffs.Count > MaxDebuffs) debuffs.RemoveRange(MaxDebuffs, debuffs.Count - MaxDebuffs);
 
+        var extra = Extras(r, wipe);
         var slotsJson = new JsonArray();
         foreach (var p in slots)
         {
             var t = tally.Has(p.Id) ? tally.Of(p.Id) : new MemberTotals();
-            slotsJson.Add(new JsonObject
+            var slot = new JsonObject
             {
                 ["slot"] = p.Slot,
                 ["job"] = p.Job,
@@ -335,11 +359,33 @@ public static class PullStats
                 ["deaths"] = r.Events.OfType<DeathEvent>().Count(d => d.Who == p.Id && !wipe.Contains(d)),
                 ["dd"] = dd.TryGetValue(p.Id, out var ddn) ? ddn : 0,
                 ["vuln"] = vuln.TryGetValue(p.Id, out var vn) ? vn : 0,
-            });
+            };
+            // Since 0.4.0, each only when not 0.
+            if (p.Self) slot["self"] = true;
+            if (extra.Of(p.Id) is var e && e.Gcds > 0) slot["gcds"] = e.Gcds;
+            if (e.Pots > 0) slot["pots"] = e.Pots;
+            if (e.Raises > 0) slot["raises"] = e.Raises;
+            if (e.Raised > 0) slot["raised"] = e.Raised;
+            if (e.Dead > 0) slot["dead"] = Math.Round(e.Dead, 1, MidpointRounding.AwayFromZero);
+            if (e.Ints > 0) slot["ints"] = e.Ints;
+            slotsJson.Add(slot);
         }
+        // The damage by phase, with the phase's start (whole seconds, as `phases`), when the recording has amounts.
+        JsonArray? ph = null;
+        if (r.Combat != null)
+        {
+            ph = new JsonArray();
+            for (var i = 0; i < starts.Count; i++)
+            {
+                var row = new JsonArray((long)Math.Round(double.IsFinite(starts[i]) ? Math.Max(0, starts[i]) : 0, MidpointRounding.AwayFromZero));
+                for (var b = 0; b < slots.Count; b++) row.Add(byPhase[i, b]);
+                ph.Add(row);
+            }
+        }
+        var x = extra.X;
 
-        // The first so many hits and debuffs, with the names they use.
-        JsonObject Make(int hitCount, int debuffCount)
+        // The first so many hits and debuffs, with the names they use; the damage by phase and the extras unless dropped.
+        JsonObject Make(int hitCount, int debuffCount, bool withPh = true, bool withX = true)
         {
             var names = new JsonObject();
             foreach (var h in hits.Take(hitCount))
@@ -359,6 +405,8 @@ public static class PullStats
             };
             // The fight's length the numbers are over (the meter's), when there was damage to measure it by.
             if (length is { } len) o["len"] = len;
+            if (withPh && ph != null) o["ph"] = ph.DeepClone();
+            if (withX && x.Count > 0) o["x"] = x.DeepClone();
             return o;
         }
 
@@ -376,11 +424,121 @@ public static class PullStats
             return lo;
         }
 
+        // Past the size: the latest hits first, then the latest debuffs, then the damage by phase, then the extras.
         var stats = Make(hits.Count, debuffs.Count);
         if (Size(stats) <= MaxBytes) return stats;
         if (Size(Make(0, debuffs.Count)) <= MaxBytes)
             return Make(Most(hits.Count, n => Size(Make(n, debuffs.Count)) <= MaxBytes), debuffs.Count);
-        return Make(0, Most(debuffs.Count, n => Size(Make(0, n)) <= MaxBytes));
+        if (Size(Make(0, 0)) <= MaxBytes)
+            return Make(0, Most(debuffs.Count, n => Size(Make(0, n)) <= MaxBytes));
+        if (Size(Make(0, 0, false)) <= MaxBytes) return Make(0, 0, false);
+        return Make(0, 0, false, false);
+    }
+
+    /// <summary>Since 0.4.0: a spot's counts for the summary (each 0 when the recording hasn't the data).</summary>
+    public readonly record struct SlotExtras(int Gcds, int Pots, int Raises, int Raised, double Dead, int Ints);
+
+    /// <summary>The 0.4.0 numbers of a pull: each member's (<see cref="SlotExtras"/>) and the summary's <c>x</c>.</summary>
+    public sealed class PullExtras
+    {
+        public readonly Dictionary<int, SlotExtras> Members = new();
+        public readonly JsonObject X = new();
+
+        public SlotExtras Of(int member) => Members.TryGetValue(member, out var e) ? e : default;
+    }
+
+    /// <summary>
+    /// What 0.4.0 adds to the summary: each member's GCDs used (actions in the GCD's cooldown group, their pets' not), items
+    /// (pre-pull ones too), raises given and taken, seconds dead (from each death not in the wipe to their raise, or the
+    /// end), interrupts credited; and <c>x</c>: enemy casts interrupted of those that could be (<c>int</c>), tank swaps on
+    /// the bosses (<c>swaps</c>, <see cref="TankSwaps"/>), the limit breaks used (<c>lbUses</c>, the first 10) and the
+    /// countdown's end (<c>cd</c>).
+    /// </summary>
+    public static PullExtras Extras(Recording r, HashSet<DeathEvent>? wipe = null)
+    {
+        wipe ??= WipeDeaths(r);
+        var ex = new PullExtras();
+        var gcds = new Dictionary<int, int>();
+        var pots = new Dictionary<int, int>();
+        void Add(Dictionary<int, int> d, int k) => d[k] = (d.TryGetValue(k, out var n) ? n : 0) + 1;
+        if (r.Combat is { } c)
+        {
+            foreach (var u in c.Uses)
+            {
+                var f = (UseFlags)u.Flags;
+                if ((f & UseFlags.Item) != 0) Add(pots, u.Source);
+                else if ((f & UseFlags.Pet) == 0 && r.Actions.TryGetValue(u.Action, out var a) && CombatLists.IsGcd(a.CooldownGroup, a.CooldownGroup2)) Add(gcds, u.Source);
+            }
+            foreach (var u in c.Pre)
+                if (((UseFlags)u.Flags & UseFlags.Item) != 0) Add(pots, u.Source);
+        }
+        var raises = r.Events.OfType<RaiseEvent>().OrderBy(e => e.T).ToList();
+        var cancels = r.Events.OfType<CancelEvent>().ToList();
+        foreach (var p in r.Party)
+        {
+            var dead = 0.0;
+            foreach (var d in r.Events.OfType<DeathEvent>().Where(d => d.Who == p.Id && !wipe.Contains(d)))
+            {
+                var back = raises.FirstOrDefault(x => x.Who == p.Id && x.T >= d.T);
+                dead += Math.Max(0, (back?.T ?? r.Duration) - d.T);
+            }
+            ex.Members[p.Id] = new SlotExtras(gcds.TryGetValue(p.Id, out var g) ? g : 0, pots.TryGetValue(p.Id, out var pt) ? pt : 0,
+                raises.Count(x => x.By == p.Id), raises.Count(x => x.Who == p.Id), dead, cancels.Count(x => x.Interrupted && x.By == p.Id));
+        }
+        var interruptible = r.Events.OfType<CastEvent>().Count(x => x.Interruptible);
+        var interrupted = cancels.Count(x => x.Interrupted);
+        if (interruptible > 0 || interrupted > 0) ex.X["int"] = new JsonArray(interrupted, interruptible);
+        if (r.Events.OfType<AggroEvent>().Any()) ex.X["swaps"] = TankSwaps(r);
+        var lbs = new List<(long Ds, uint Action)>();
+        if (r.Combat is { HasUses: true } cu)
+        {
+            foreach (var u in cu.Uses.Where(u => ((UseFlags)u.Flags & UseFlags.LimitBreak) != 0).OrderBy(u => u.T)) lbs.Add((Ds(u.T), u.Action));
+        }
+        else if (r.Combat is { } cf)
+        {
+            // Before the uses: the limit break's hits, one per action a second apart.
+            var last = (T: double.NegativeInfinity, A: 0u);
+            foreach (var f in cf.Fx.Where(f => (f.Kind & (int)FxFlags.LimitBreak) != 0).OrderBy(f => f.T))
+            {
+                if (f.Action == last.A && f.T - last.T < 1) continue;
+                last = (f.T, f.Action);
+                lbs.Add((Ds(f.T), f.Action));
+            }
+        }
+        if (lbs.Count > 0) ex.X["lbUses"] = new JsonArray(lbs.Take(10).Select(l => (JsonNode)new JsonArray(l.Ds, (long)l.Action)).ToArray());
+        if (r.Combat?.Countdown is { } cd) ex.X["cd"] = CastEvent.Round(cd.End, 2);
+        return ex;
+    }
+
+    /// <summary>A target held this long or more is a span that counts (a tank swap, aggro lost: the site's rule).</summary>
+    public const double AggroSpan = 1.0;
+
+    /// <summary>
+    /// The bosses' tank swaps (the site's rule): each boss's target as the <c>aggro</c> events say, in spans; those of at least
+    /// <see cref="AggroSpan"/> on a tank and not inside one of its casts aimed at them (a tankbuster on the other tank isn't a
+    /// swap); one tank's span followed by another tank's is a swap.
+    /// </summary>
+    public static int TankSwaps(Recording r)
+    {
+        var tanks = r.Party.Where(p => p.Role == "tank").Select(p => p.Id).ToHashSet();
+        var bosses = r.Actors.Where(a => a.Kind == ActorKind.Boss).Select(a => a.Id).ToHashSet();
+        var swaps = 0;
+        foreach (var g in r.Events.OfType<AggroEvent>().Where(e => bosses.Contains(e.Actor)).GroupBy(e => e.Actor))
+        {
+            var list = g.OrderBy(e => e.T).ToList();
+            var casts = r.Events.OfType<CastEvent>().Where(c => c.Source == g.Key && c.Target != 0).ToList();
+            var held = 0;
+            for (var i = 0; i < list.Count; i++)
+            {
+                var (start, on) = (list[i].T, list[i].On);
+                var end = i + 1 < list.Count ? list[i + 1].T : r.Duration;
+                if (!tanks.Contains(on) || end - start < AggroSpan) continue;
+                if (casts.Any(c => c.Target == on && start >= c.T - 0.1 && end <= c.T + c.Duration + 1.0)) continue;
+                if (held != 0 && held != on) swaps++;
+                held = on;
+            }
+        }
+        return swaps;
     }
 
     private static string Key(uint id) => id.ToString(CultureInfo.InvariantCulture);

@@ -43,7 +43,7 @@ public sealed class GameData
         {
             var omen = row.Omen.ValueNullable is { } o ? o.Path.ExtractText() : string.Empty;
             info = new ActionInfo(row.Name.ExtractText(), row.CastType, row.EffectRange, row.XAxisModifier, omen, row.Cast100ms / 10f,
-                (int)row.ActionCategory.RowId, row.Recast100ms / 10f);
+                (int)row.ActionCategory.RowId, row.Recast100ms / 10f, row.CooldownGroup, row.AdditionalCooldownGroup, row.MaxCharges, 0, row.TargetArea);
         }
         actions[id] = info;
         return info;
@@ -51,6 +51,54 @@ public sealed class GameData
 
     /// <summary>An action's ActionCategory row (9 a limit break, 15 PvP's; 0 unknown): the combat parser's question.</summary>
     public int ActionCategory(uint id) => Action(id)?.Category ?? 0;
+
+    /// <summary>Is an action placed on the ground (the sheet's TargetArea: Sacred Soil, Asylum, Earthly Star, Doton…)? Since 0.4.0.</summary>
+    public bool IsArea(uint id) => Action(id)?.Area ?? false;
+
+    /// <summary>Is an action on the GCD (its cooldown group, or its additional one, is 58)? Since 0.4.0.</summary>
+    public bool IsGcd(uint id) => Action(id) is { } a && CombatLists.IsGcd(a.CooldownGroup, a.CooldownGroup2);
+
+    private readonly Dictionary<uint, ItemInfo?> items = new();
+
+    /// <summary>
+    /// An item by the id the game sent in an action message (a high-quality one's is the Item sheet's row + 1,000,000 [verify]):
+    /// its name, icon and quality; null for one the sheet doesn't have. Since 0.4.0.
+    /// </summary>
+    public ItemInfo? Item(uint id)
+    {
+        if (items.TryGetValue(id, out var known)) return known;
+        var hq = id > CombatLists.HqOffset;
+        var row = hq ? id - CombatLists.HqOffset : id;
+        ItemInfo? info = null;
+        if (Services.Data.GetExcelSheet<Item>().TryGetRow(row, out var it))
+            info = new ItemInfo(it.Name.ExtractText(), it.Icon, hq);
+        if (items.Count > 512) items.Clear();
+        items[id] = info;
+        return info;
+    }
+
+    /// <summary>An item's name for the meter ("Item 1234" for one the sheet doesn't name; " (HQ)" after a high-quality one's).</summary>
+    public string ItemName(uint id) => Item(id) is { Name.Length: > 0 } i ? i.Hq ? $"{i.Name} (HQ)" : i.Name : $"Item {id}";
+
+    /// <summary>
+    /// The recording player's own recast for one of their actions (seconds) and its most charges, as the game works them out
+    /// (ActionManager: their traits at the synced level [verify: milliseconds; charges at level 0 = the current]); null when
+    /// the game has no answer. On the framework thread. Since 0.4.0.
+    /// </summary>
+    public unsafe (float Recast, int Charges)? OwnRecast(uint id)
+    {
+        try
+        {
+            var ms = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id, true);
+            var charges = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetMaxCharges(id, 0);
+            if (ms <= 0 || ms > 3_600_000) return null;
+            return (ms / 1000f, charges);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>An action's name for the meter ("Action 1234" for one the sheet doesn't name).</summary>
     public string ActionName(uint id) => Action(id) is { Name.Length: > 0 } a ? a.Name : $"Action {id}";
@@ -60,18 +108,87 @@ public sealed class GameData
 
     private readonly Lazy<(Dictionary<uint, int> Fails, HashSet<uint> Dots, HashSet<uint> Shields)> lists = new(ReadLists);
 
+    private readonly Lazy<Named> named = new(ReadNamed);
+
     /// <summary>The status lists made on a worker as the plugin loads, so the first fight doesn't wait for them.</summary>
-    public GameData() => System.Threading.Tasks.Task.Run(() =>
+    public GameData()
     {
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                _ = lists.Value;
+                _ = named.Value;
+            }
+            catch (Exception)
+            {
+                // ReadLists and ReadNamed say themselves what went wrong (and never throw).
+            }
+        });
+        Kinds = new CombatKinds
+        {
+            Interrupt = id => named.Value.Interrupts.Contains(id),
+            RaiseAction = id => named.Value.Raises.Contains(id),
+            RaiseStatus = id => named.Value.RaiseStatuses.Contains(id),
+            Weakness = id => named.Value.Weakness.TryGetValue(id, out var w) ? w : 0,
+            Control = id => named.Value.Control.Contains(id),
+            KnockbackImmunity = id => named.Value.KnockbackImmunity.Contains(id),
+            Provoke = id => named.Value.Provoke.Contains(id),
+            Shirk = id => named.Value.Shirk.Contains(id),
+            Gcd = IsGcd,
+        };
+    }
+
+    /// <summary>
+    /// Which actions and statuses are interrupts, raises, control and the rest (<see cref="CombatKinds"/>), by their English
+    /// names (<see cref="CombatLists"/>): every row with each name on the Action and Status sheets read in English. The id sets
+    /// are made once on a worker and then only read; <see cref="CombatKinds.Gcd"/> reads the Action sheet (the framework thread).
+    /// Since 0.4.0.
+    /// </summary>
+    public CombatKinds Kinds { get; }
+
+    private sealed record Named(HashSet<uint> Interrupts, HashSet<uint> Raises, HashSet<uint> Provoke, HashSet<uint> Shirk, HashSet<uint> RaiseStatuses,
+        Dictionary<uint, int> Weakness, HashSet<uint> Control, HashSet<uint> KnockbackImmunity);
+
+    private static Named ReadNamed()
+    {
+        var n = new Named(new(), new(), new(), new(), new(), new(), new(), new());
+        static HashSet<string> Set(IReadOnlyList<string> names) => new(names, StringComparer.OrdinalIgnoreCase);
+        var interrupts = Set(CombatLists.InterruptNames);
+        var raises = Set(CombatLists.RaiseActionNames);
+        var provoke = Set(CombatLists.ProvokeNames);
+        var shirk = Set(CombatLists.ShirkNames);
+        var raiseStatus = Set(CombatLists.RaiseStatusNames);
+        var control = Set(CombatLists.ControlNames);
+        var kb = Set(CombatLists.KnockbackImmunityNames);
         try
         {
-            _ = lists.Value;
+            foreach (var row in Services.Data.GetExcelSheet<Action>(ClientLanguage.English))
+            {
+                var name = row.Name.ExtractText().Trim();
+                if (name.Length == 0) continue;
+                if (interrupts.Contains(name)) n.Interrupts.Add(row.RowId);
+                if (raises.Contains(name)) n.Raises.Add(row.RowId);
+                if (provoke.Contains(name)) n.Provoke.Add(row.RowId);
+                if (shirk.Contains(name)) n.Shirk.Add(row.RowId);
+            }
+            foreach (var row in Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Status>(ClientLanguage.English))
+            {
+                var name = row.Name.ExtractText().Trim();
+                if (name.Length == 0) continue;
+                if (raiseStatus.Contains(name)) n.RaiseStatuses.Add(row.RowId);
+                if (control.Contains(name)) n.Control.Add(row.RowId);
+                if (kb.Contains(name)) n.KnockbackImmunity.Add(row.RowId);
+                if (name.Equals("Weakness", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 1;
+                else if (name.Equals("Brink of Death", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 2;
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // ReadLists says itself what went wrong (and never throws).
+            Services.Log.Warning(ex, "Raid Planner couldn't read the game's actions and statuses in English");
         }
-    });
+        return n;
+    }
 
     /// <summary>
     /// The statuses the meter and the summary pick out, by their English names on the Status sheet
@@ -124,7 +241,7 @@ public sealed class GameData
         if (statuses.TryGetValue(id, out var known)) return known;
         StatusInfo? info = null;
         if (Services.Data.GetExcelSheet<Lumina.Excel.Sheets.Status>().TryGetRow(id, out var row))
-            info = new StatusInfo(row.Name.ExtractText(), row.Icon);
+            info = new StatusInfo(row.Name.ExtractText(), row.Icon, row.StatusCategory, row.CanDispel);
         statuses[id] = info;
         return info;
     }

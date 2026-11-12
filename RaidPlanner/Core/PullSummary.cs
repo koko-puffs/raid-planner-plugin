@@ -67,7 +67,7 @@ public static class PullSummary
             ["phases"] = new JsonArray((phaseStarts is { Count: > 0 } ? phaseStarts : PullStats.PhaseStarts(r))
                 .Take(MaxPhases)
                 .Select(t => (JsonNode)(int)Math.Round(double.IsFinite(t) ? Math.Max(0, t) : 0, MidpointRounding.AwayFromZero)).ToArray()),
-            ["stats"] = PullStats.Stats(r, failKind, isDot),
+            ["stats"] = PullStats.Stats(r, failKind, isDot, phaseStarts),
         };
     }
 }

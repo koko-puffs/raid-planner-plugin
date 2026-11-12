@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.Game;
@@ -21,6 +22,11 @@ namespace RaidPlanner.Game;
 /// It turns itself off rather than show nonsense: when the parser has dropped three effects that make
 /// no sense (<see cref="CombatParser.Anomalies"/>), the game has moved something it reads; the session
 /// says so (<see cref="MeterSession.Problem"/>) until the plugin is updated.
+///
+/// Since 0.4.0 it also tells the session the limit break gauge each frame, which party members carry
+/// Weakness or Brink of Death (during an encounter), and, four times a second with the targetability,
+/// the enemies' casts (whether they can be interrupted) and the bosses' targets (whether they're casting at
+/// them); and every cast the game says stopped (<see cref="FightRecorder.CastStopped"/>).
 /// </summary>
 public sealed unsafe class CombatMeter : IDisposable
 {
@@ -49,7 +55,8 @@ public sealed unsafe class CombatMeter : IDisposable
         this.config = config;
         this.data = data;
         this.recorder = recorder;
-        Session = new MeterSession(data.ActionName, data.StatusName);
+        Session = new MeterSession(data.ActionName, data.StatusName, data.ItemName, data.Kinds);
+        recorder.CastStopped += OnCastStopped;
         Services.Framework.Update += OnUpdate;
         Services.DutyState.DutyWiped += OnWiped;
         Services.DutyState.DutyCompleted += OnCompleted;
@@ -69,6 +76,19 @@ public sealed unsafe class CombatMeter : IDisposable
     private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Session.Said(Core.Outcome.Wipe));
 
     private void OnCompleted(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Session.Said(Core.Outcome.Clear));
+
+    private void OnCastStopped(uint entity, uint action, bool interrupted)
+    {
+        if (disposed || !listening) return;
+        try
+        {
+            Session.Cancelled(recorder.Now, entity, action, interrupted);
+        }
+        catch (Exception ex)
+        {
+            Failed(ex);
+        }
+    }
 
     private void OnTerritoryChanged(uint territory) => Guarded(() =>
     {
@@ -145,15 +165,18 @@ public sealed unsafe class CombatMeter : IDisposable
         {
             if (m.EntityId is 0 or InvalidId || count >= party.Length) continue;
             var (name, job, role) = Who(m.EntityId, m);
-            var inCombat = InCombat(m.EntityId);
+            var (inCombat, weak) = Read(m.EntityId, Session.InEncounter);
             anyInCombat |= inCombat;
-            party[count++] = new PartyState(m.EntityId, name, job, role, m.CurrentHP, m.MaxHP, inCombat, m.EntityId == me.EntityId);
+            party[count++] = new PartyState(m.EntityId, name, job, role, m.CurrentHP, m.MaxHP, inCombat, m.EntityId == me.EntityId, weak);
         }
         if (count == 0)
         {
             var (name, job, role) = Who(me.EntityId, null);
-            party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true);
+            var (_, weak) = Read(me.EntityId, Session.InEncounter);
+            party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true, weak);
         }
+        var lb = LimitBreakController.Instance();
+        if (lb != null) Session.Gauge(lb->CurrentUnits, lb->BarCount, lb->BarUnits);
         var t = recorder.Now;
         Session.Frame(t, party.AsSpan(0, count), anyInCombat);
 
@@ -181,13 +204,25 @@ public sealed unsafe class CombatMeter : IDisposable
         return (name, job, role);
     }
 
-    /// <summary>A party member's in-combat flag, from the game's own look-up (false when they're out of range).</summary>
-    private static bool InCombat(uint entityId)
+    /// <summary>
+    /// A party member's in-combat flag, from the game's own look-up (false when they're out of range), and (during an encounter)
+    /// Weakness (1) or Brink of Death (2) on them from their status list.
+    /// </summary>
+    private (bool InCombat, byte Weakness) Read(uint entityId, bool statuses)
     {
         var manager = CharacterManager.Instance();
-        if (manager == null) return false;
+        if (manager == null) return (false, 0);
         var bc = manager->LookupBattleCharaByEntityId(entityId);
-        return bc != null && ((Character*)bc)->CharacterData.InCombat;
+        if (bc == null) return (false, 0);
+        byte weak = 0;
+        if (statuses)
+        {
+            var list = bc->StatusManager.Status;
+            for (var i = 0; i < list.Length; i++)
+                if (list[i].StatusId != 0 && data.Kinds.Weakness(list[i].StatusId) is var w and > 0)
+                    weak = (byte)Math.Max(weak, w);
+        }
+        return (((Character*)bc)->CharacterData.InCombat, weak);
     }
 
     private string Place(uint territory)
@@ -206,15 +241,37 @@ public sealed unsafe class CombatMeter : IDisposable
     private void ReportTargets()
     {
         var all = InDuty && !data.IsFieldZone(Services.ClientState.TerritoryType);
+        var t = recorder.Now;
+        var biggest = 0u;
+        bosses.Clear();
         foreach (var obj in Services.Objects)
         {
             if (obj is not IBattleNpc npc || npc.BattleNpcKind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) continue;
             if (npc.OwnerId is not (0 or InvalidId) || npc.EntityId is 0 or InvalidId) continue;
             if (!all && !Session.Engaged(npc.EntityId)) continue;
-            Session.Targetable(npc.EntityId, npc.IsTargetable && !npc.IsDead);
+            var targetable = npc.IsTargetable && !npc.IsDead;
+            Session.Targetable(npc.EntityId, targetable);
+            if (!targetable) continue;
+            // Its cast (since 0.4.0), and, for the bosses below, whom it's on.
+            var bc = (BattleChara*)npc.Address;
+            var cast = bc == null ? null : bc->GetCastInfo();
+            uint castAt = 0;
+            if (cast != null && cast->IsCasting && cast->ActionType == 1 && cast->ActionId != 0)
+            {
+                Session.EnemyCast(t - cast->CurrentCastTime, npc.EntityId, cast->ActionId, cast->TotalCastTime, cast->Interruptible);
+                castAt = (uint)cast->TargetId.ObjectId;
+            }
+            biggest = Math.Max(biggest, npc.MaxHp);
+            bosses.Add((npc.EntityId, npc.MaxHp, (uint)npc.TargetObjectId, castAt));
         }
         Session.EndTargets();
+        // The bosses (as the recording sorts them: half the biggest's HP or more): whom each is on.
+        foreach (var (id, hp, on, castAt) in bosses)
+            if ((ulong)hp * 2 >= biggest)
+                Session.Aggro(t, id, on is InvalidId ? 0 : on, on != 0 && on == castAt);
     }
+
+    private readonly List<(uint Id, uint MaxHp, uint On, uint CastAt)> bosses = new();
 
     private void Detach()
     {
@@ -235,6 +292,7 @@ public sealed unsafe class CombatMeter : IDisposable
             Services.DutyState.DutyWiped -= OnWiped;
             Services.DutyState.DutyCompleted -= OnCompleted;
             Services.ClientState.TerritoryChanged -= OnTerritoryChanged;
+            recorder.CastStopped -= OnCastStopped;
         }
         finally
         {

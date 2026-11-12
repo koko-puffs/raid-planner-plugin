@@ -78,6 +78,11 @@ public enum Icon
     PanelRight,
     RefreshCw,
     Maximize,
+    Zap,
+    ArrowLeftRight,
+    Copy,
+    Volume,
+    Hourglass,
 }
 
 /// <summary>
@@ -196,6 +201,16 @@ public static class Icons
         [Icon.RefreshCw] = (new[] { "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5" }, false),
         [Icon.Maximize] = (new[] { "M15 3h6v6", "M9 21H3v-6", "M21 3l-7 7", "M3 21l7-7" }, false),
         [Icon.Inbox] = (new[] { "M22 12h-6l-2 3h-4l-2-3H2", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }, false),
+        // 0.4.0: the Events tab's marks, Copy as text, the callouts' sound, the cooldown tracker.
+        [Icon.Zap] = (new[] { "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" }, false),
+        [Icon.ArrowLeftRight] = (new[] { "M8 3 4 7l4 4", "M4 7h16", "m16 21 4-4-4-4", "M20 17H4" }, false),
+        [Icon.Copy] = (new[] { Rect(8, 8, 14, 14, 2), "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }, false),
+        [Icon.Volume] = (new[]
+        {
+            "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z",
+            "M16 9a5 5 0 0 1 0 6", "M19.364 18.364a9 9 0 0 0 0-12.728",
+        }, false),
+        [Icon.Hourglass] = (new[] { "M5 22h14", "M5 2h14", "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22", "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

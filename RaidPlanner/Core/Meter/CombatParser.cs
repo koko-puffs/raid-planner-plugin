@@ -27,6 +27,11 @@ namespace RaidPlanner.Core.Meter;
 ///   <see cref="EndStatuses"/>; every frame of a pull, in the same reads the recording's <c>combat.st</c>
 ///   rows are made from, so the meter, the summary and the site share a tick alike; four times a second
 ///   otherwise). A HoT's tick that names no one is nobody's.
+/// - Since 0.4.0 every action (and item) a party member or their pet uses is handed on as a
+///   <see cref="PartyUse"/> whatever it did (auto-attacks, ActionCategory 1, left out: they're the
+///   effects' already), with what its effects said (an interrupt, a status resisted, a provoke, a
+///   revive, all missed); an item (the message's action type 2) is only that, never an effect. One
+///   action resolved in two messages (the same global sequence) is one use.
 /// - Nonsense (a single non-limit-break hit or heal over <see cref="Absurd"/>) is dropped and counted
 ///   in <see cref="Anomalies"/>: the game has moved something the parser reads. A heal landing on an
 ///   enemy is dropped (never the party's healing) but isn't nonsense: an enemy that absorbs an element
@@ -48,7 +53,15 @@ public sealed class CombatParser
     private readonly Func<uint, int> category;
     private readonly Func<uint, bool> isShield;
     private readonly Func<uint, bool> isDot;
+    private readonly Func<uint, bool> isArea;
     private readonly List<ICombatSink> sinks = new();
+
+    /// <summary>The last few uses' (caster, global sequence), so an action that came in two messages is one use.</summary>
+    private readonly (uint Caster, uint Sequence)[] usedSeq = new (uint, uint)[32];
+    private int usedNext;
+
+    /// <summary>The message's action type for an item.</summary>
+    public const byte ItemType = 2;
     private readonly uint[] party = new uint[MostParty];
     private int partyCount;
 
@@ -69,11 +82,13 @@ public sealed class CombatParser
     /// <param name="category">An action's ActionCategory row (limit breaks are 9 and 15).</param>
     /// <param name="isShield">Is a status a barrier (<see cref="CombatLists.ShieldNames"/>)?</param>
     /// <param name="isDot">Is a status one of the jobs' DoTs (<see cref="CombatLists.DotNames"/>)?</param>
-    public CombatParser(Func<uint, int>? category = null, Func<uint, bool>? isShield = null, Func<uint, bool>? isDot = null)
+    /// <param name="isArea">Is an action placed on the ground (the Action sheet's TargetArea: Sacred Soil, Asylum…)?</param>
+    public CombatParser(Func<uint, int>? category = null, Func<uint, bool>? isShield = null, Func<uint, bool>? isDot = null, Func<uint, bool>? isArea = null)
     {
         this.category = category ?? (_ => 0);
         this.isShield = isShield ?? (_ => false);
         this.isDot = isDot ?? (_ => false);
+        this.isArea = isArea ?? (_ => false);
     }
 
     /// <summary>Effects that made no sense and were dropped (see the class's notes).</summary>
@@ -206,13 +221,20 @@ public sealed class CombatParser
         return false;
     }
 
-    /// <summary>An action went off (only actions, type 1, are read).</summary>
+    /// <summary>An action went off (actions, type 1; a party member's item, type 2, is only a use).</summary>
     public void Action(EffectBatch b)
     {
-        if (sinks.Count == 0 || b.ActionType != 1 || b.Action == 0) return;
+        if (sinks.Count == 0 || b.Action == 0) return;
         var member = MemberOf(b.Caster, b.CasterOwner);
+        if (b.ActionType == ItemType)
+        {
+            if (member != 0) Use(b, member, UseFlags.Item);
+            return;
+        }
+        if (b.ActionType != 1) return;
         var pet = member != 0 && member != b.Caster;
-        var lb = member != 0 && CombatLists.IsLimitBreak(category(b.Action));
+        var cat = category(b.Action);
+        var lb = member != 0 && CombatLists.IsLimitBreak(cat);
         if (member != 0)
             foreach (var s in sinks)
                 s.Used(b.T, member, b.Caster, b.Action);
@@ -247,6 +269,60 @@ public sealed class CombatParser
                 else if (recipientParty) OnParty(b, d, origin, recipient, hp, max);
             }
         }
+        // The use after its effects, so an encounter its first hit starts has begun when the use is told.
+        if (member != 0 && !CombatLists.IsAutoAttack(cat)) Use(b, member, (pet ? UseFlags.Pet : UseFlags.None) | (lb ? UseFlags.LimitBreak : UseFlags.None));
+    }
+
+    /// <summary>
+    /// A party member's use of an action or item, with what its effects said (<see cref="UseFlags"/>):
+    /// handed on once per (caster, global sequence).
+    /// </summary>
+    private void Use(EffectBatch b, uint member, UseFlags flags)
+    {
+        if (b.Sequence != 0)
+        {
+            foreach (var (caster, seq) in usedSeq)
+                if (caster == b.Caster && seq == b.Sequence)
+                    return;
+            usedSeq[usedNext] = (b.Caster, b.Sequence);
+            usedNext = (usedNext + 1) % usedSeq.Length;
+        }
+        if (b.Count == 0) flags |= UseFlags.NoTarget;
+        var allMissed = b.Count > 0;
+        for (var i = 0; i < b.Count; i++)
+        {
+            var any = false;
+            var onlyMissed = true;
+            foreach (var e in b.EffectsOf(i))
+            {
+                if (e.Type == 0) continue;
+                switch (e.Type)
+                {
+                    case Effects.Interrupt:
+                        flags |= UseFlags.Interrupted;
+                        break;
+                    case Effects.FullResistStatus:
+                        flags |= UseFlags.StatusResisted;
+                        break;
+                    case Effects.ThreatPosition:
+                        flags |= UseFlags.Threat;
+                        break;
+                    case Effects.ReviveLb:
+                        flags |= UseFlags.Revive;
+                        break;
+                }
+                // What went to the caster (a self-buff) or came from the target says nothing of whether it hit.
+                if ((e.Param4 & 0xA0) != 0) continue;
+                any = true;
+                if (e.Type is not (Effects.Miss or Effects.FullResist or Effects.Invulnerable)) onlyMissed = false;
+            }
+            if (!any || !onlyMissed) allMissed = false;
+        }
+        if (allMissed) flags |= UseFlags.Missed;
+        var ground = b.HasGround && isArea(b.Action);
+        var u = new PartyUse(b.T, member, b.Caster, b.Action, b.ActionType, b.Count > 0 ? b.Targets[0] : 0, b.Count, flags, ground,
+            ground ? b.GroundX : 0, ground ? b.GroundZ : 0);
+        foreach (var s in sinks) s.Use(u);
     }
 
     private void FromParty(EffectBatch b, in Decoded d, uint from, uint origin, uint recipient, bool recipientParty, bool recipientHostile,
@@ -269,7 +345,7 @@ public sealed class CombatParser
                 }
                 if (d.Crit) flags |= FxFlags.Crit;
                 if (d.DirectHit) flags |= FxFlags.DirectHit;
-                Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, FxKind.Damage, flags, d.Amount, -1, -1, 0, false, recipientHostile));
+                Emit(new PartyEffect(b.T, b.Action, from, origin, recipient, FxKind.Damage, flags, d.Amount, -1, -1, 0, false, recipientHostile, d.Bonus));
                 return;
             case EffectKind.Heal:
                 // A heal that big can't be right (as a hit that big).

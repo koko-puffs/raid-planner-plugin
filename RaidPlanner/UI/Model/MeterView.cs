@@ -31,6 +31,13 @@ public static class MeterView
         return list;
     }
 
+    private static readonly string[] SpotOrderOf = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
+
+    /// <summary>The party's rows in spot order, MT to R2 (the rest after them in the order they came), the limit break left out: the Events tab's table.</summary>
+    public static List<MeterRow> InSpotOrder(IReadOnlyList<MeterRow> rows) =>
+        rows.Where(r => !r.IsLimitBreak).Select((r, i) => (r, i))
+            .OrderBy(p => Array.IndexOf(SpotOrderOf, p.r.Slot) is var k and >= 0 ? k : 99).ThenBy(p => p.i).Select(p => p.r).ToList();
+
     /// <summary>The limit break's row, when it was used.</summary>
     public static MeterRow? LimitBreak(IReadOnlyList<MeterRow> rows) => rows.FirstOrDefault(r => r.IsLimitBreak);
 

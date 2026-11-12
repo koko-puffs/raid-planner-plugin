@@ -145,13 +145,16 @@ public struct MeterStack
 /// </summary>
 public static class MeterLayout
 {
-    /// <summary>The four tabs in the menu's order (compact's dropdown), as the tab row has them.</summary>
-    public static readonly MeterTab[] TabOrder = { MeterTab.Damage, MeterTab.Healing, MeterTab.Taken, MeterTab.Deaths };
+    /// <summary>The five tabs in the menu's order (compact's dropdown), as the tab row has them (Events since 0.4.0).</summary>
+    public static readonly MeterTab[] TabOrder = { MeterTab.Damage, MeterTab.Healing, MeterTab.Taken, MeterTab.Deaths, MeterTab.Events };
 
-    private static readonly string[] Words = { "Damage", "Healing", "Taken", "Deaths" };
+    private static readonly string[] Words = { "Damage", "Healing", "Taken", "Deaths", "Events" };
 
-    /// <summary>A tab's word: Damage, Healing, Taken, Deaths.</summary>
-    public static string TabWord(MeterTab tab) => (int)tab is >= 0 and < 4 ? Words[(int)tab] : Words[0];
+    /// <summary>A tab's word: Damage, Healing, Taken, Deaths, Events (an unknown one, saved by a newer version, is Damage).</summary>
+    public static string TabWord(MeterTab tab) => (int)tab >= 0 && (int)tab < Words.Length ? Words[(int)tab] : Words[0];
+
+    /// <summary>A tab as saved: one this version doesn't have (a newer version's) is Damage.</summary>
+    public static MeterTab Known(MeterTab tab) => (int)tab >= 0 && (int)tab < Words.Length ? tab : MeterTab.Damage;
 
     /// <summary>The point that stays put for a window at <paramref name="pos"/> this size: its top-left growing down, its bottom-left growing up.</summary>
     public static Vector2 Corner(Vector2 pos, Vector2 size, MeterGrows grows) => grows == MeterGrows.Up ? new Vector2(pos.X, pos.Y + size.Y) : pos;

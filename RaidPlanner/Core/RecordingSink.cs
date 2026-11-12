@@ -9,7 +9,8 @@ namespace RaidPlanner.Core;
 /// on an enemy in the recording from no one the game named; another player's on an enemy isn't kept),
 /// each tick with the HP before it that the game side read (a HoT's target's, a party member's; −1
 /// otherwise). The game side (<c>Game/FightRecorder</c>) registers it with the parser while a pull is
-/// recorded, next to the meter's session; game-free, so the tests feed it as the game does.
+/// recorded, next to the meter's session; game-free, so the tests feed it as the game does. Since 0.4.0
+/// also every action and item the party uses (<c>combat.use</c>, <c>combat.area</c>) and a damage effect's bonus %.
 /// </summary>
 public sealed class RecordingSink : ICombatSink
 {
@@ -33,7 +34,17 @@ public sealed class RecordingSink : ICombatSink
     {
         if (builder() is not { } b || b.PartyId(e.Member) is not { } origin) return;
         var kind = (int)e.Kind | (int)e.Flags;
-        b.CombatFx(e.T - pullStart(), e.Action, origin, b.Who(e.Recipient), e.Amount, kind, e.Kind == FxKind.Heal ? e.HpBefore : -1);
+        b.CombatFx(e.T - pullStart(), e.Action, origin, b.Who(e.Recipient), e.Amount, kind, e.Kind == FxKind.Heal ? e.HpBefore : -1,
+            e.Kind == FxKind.Damage ? e.Bonus : 0);
+    }
+
+    /// <summary>A party member's action or item (since 0.4.0): a <c>use</c> row, and an <c>area</c> row for one placed on the ground.</summary>
+    public void Use(in PartyUse u)
+    {
+        if (builder() is not { } b || b.PartyId(u.Member) is not { } src) return;
+        var t = u.T - pullStart();
+        b.PartyUse(t, src, u.Action, u.Target == 0 ? 0 : b.Who(u.Target), u.Targets, (int)u.Flags);
+        if (u.Ground) b.Area(t, src, u.Action, u.X, u.Z);
     }
 
     public void Taken(in TakenHit e)

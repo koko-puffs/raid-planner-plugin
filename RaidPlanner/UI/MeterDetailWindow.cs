@@ -34,6 +34,9 @@ public sealed class MeterDetailWindow : Window
     /// <summary>The numbers' source last drawn: when it changes (the meter's sample starts or ends) the picks made in the other are let go.</summary>
     private IMeterSource? lastSource;
 
+    /// <summary>When the fight was copied as text (the button says so for a moment).</summary>
+    private DateTime copiedAt;
+
     public MeterDetailWindow(Configuration config, Fonts fonts)
         : base("Raid Planner meter###RaidPlannerMeterDetail")
     {
@@ -41,8 +44,8 @@ public sealed class MeterDetailWindow : Window
         this.fonts = fonts;
         Size = new Vector2(1180, 560);
         SizeCondition = ImGuiCond.FirstUseEver;
-        // At least as wide as the tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100.
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(840, 360), MaximumSize = new Vector2(2400, 1600) };
+        // At least as wide as the five tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100.
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(980, 360), MaximumSize = new Vector2(2400, 1600) };
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse;
     }
 
@@ -55,7 +58,7 @@ public sealed class MeterDetailWindow : Window
     /// <summary>Opens on a tab, a fight (null: the current), a player and a death.</summary>
     public void Show(MeterTab on, int? fightId, int? partyId, int? deathIndex)
     {
-        tab = on;
+        tab = MeterLayout.Known(on);
         fight = fightId;
         player = partyId;
         death = deathIndex;
@@ -122,12 +125,14 @@ public sealed class MeterDetailWindow : Window
         var inner = w - S(36);
         var y = top.Y + S(12);
 
-        // The tabs, with icons and the deaths counted.
+        // The tabs, with icons and the deaths and events counted.
         var deaths = e != null ? MeterView.Deaths(e).Count : 0;
+        var events = e != null && m != null ? m.Events(e.Id) : Array.Empty<MeterEvent>();
         var tabs = new[]
         {
             new TabSpec("Damage", Icon.Sword), new TabSpec("Healing", Icon.Heart), new TabSpec("Taken", Icon.Shield),
             new TabSpec("Deaths", Icon.Skull, deaths > 0 ? deaths.ToString(System.Globalization.CultureInfo.InvariantCulture) : null),
+            new TabSpec("Events", Icon.List, events.Count > 0 ? events.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) : null),
         };
         tab = (MeterTab)Kit.Tabs("##detail-tab", new Vector2(left, y), tabs, (int)tab, TabSize.Md);
 
@@ -141,6 +146,16 @@ public sealed class MeterDetailWindow : Window
         {
             IsOpen = false;
             ShowSmall?.Invoke();
+        }
+        // Copy as text: the fight shown as a mini-parse for chat (it says Copied for a moment).
+        var copied = DateTime.UtcNow - copiedAt < TimeSpan.FromSeconds(2.5);
+        x -= S(8) + S(HSm);
+        if (Kit.IconButton("##detail-copy", new Vector2(x, cy - S(HSm) / 2), copied ? Icon.Check : Icon.Copy,
+                copied ? "Copied to the clipboard" : "Copy as text: the fight, its length, each player's ENCDPS, share and deaths, a line each (for chat)", Btn.Quiet, BtnSize.Sm,
+                e == null) && e != null)
+        {
+            ImGui.SetClipboardText(MeterText.Parse(e, config.MeterJobsOnly));
+            copiedAt = DateTime.UtcNow;
         }
         var rw = Kit.SegmentedWidth(Ranks);
         x -= S(12) + rw;
@@ -200,6 +215,14 @@ public sealed class MeterDetailWindow : Window
             var recapX = left + listW + S(18);
             DrawDeaths(dl, e, new Vector2(left, y), listW, bottom - y, new Vector2(recapX, y), left + inner - recapX);
         }
+        else if (tab == MeterTab.Events)
+        {
+            // Each player's events counted beside the fight's events, oldest first.
+            var leftW = MathF.Round(MathF.Min(MathF.Max(inner * 0.6f, S(600)), inner - S(18) - S(300)));
+            DrawTable(dl, m!, e, new Vector2(left, y), leftW, bottom - y);
+            var rightX = left + leftW + S(18);
+            DrawEventLog(dl, e, events, new Vector2(rightX, y), left + inner - rightX, bottom - y);
+        }
         else
         {
             // The table beside the picked player by ability when there's room for both (the table's
@@ -219,7 +242,8 @@ public sealed class MeterDetailWindow : Window
         {
             MeterTab.Healing => "Healing is what the heals put back: the heal less the overheal. Shields aren't healing, so a scholar reads low here, as in ACT.",
             MeterTab.Taken => "Everything enemies and the floor did to each of you, bleeds and DoTs included: what the game took off your HP.",
-            MeterTab.Deaths => "The wipe isn't anyone's death: the deaths in a wipe's last six seconds aren't counted against anyone.",
+            MeterTab.Deaths => "The wipe isn't anyone's death: the deaths in a wipe's last six seconds aren't counted against anyone. A raise is the dead member's HP coming back; who raised them is whose Raise was on them.",
+            MeterTab.Events => "Casts are the GCDs used. Interrupts are the enemy casts stopped, credited to whoever's interrupt hit it in the second before (the game doesn't say who). Time dead leaves out the wipe.",
             _ => "Crit and DH are the share of hits. DPS is each player's damage over their own time, from their first hit to their last: it's higher than ENCDPS for anyone who stopped.",
         };
         Txt.Flow(new Vector2(left, bottom + S(10)), inner, new[] { Run.Note(note) }, 19.5f, out _);
@@ -240,6 +264,7 @@ public sealed class MeterDetailWindow : Window
             new("%", 42, r => Format.Share(r.HealingShare)),
             new("Crit", 44, r => Format.Share(r.HealCritRate)),
             new("Max heal", 68, r => Format.Thousands(r.MaxHeal)),
+            new("Raises", 46, r => MeterText.Count(r.RaisesGiven)),
         },
         MeterTab.Taken => new Col[]
         {
@@ -248,6 +273,16 @@ public sealed class MeterDetailWindow : Window
             new("%", 42, r => Format.Share(r.TakenShare)),
             new("Max hit", 68, r => Format.Thousands(r.MaxTaken)),
             new("Deaths", 40, r => r.Deaths.ToString(System.Globalization.CultureInfo.InvariantCulture), Red: r => r.Deaths > 0),
+            new("Time dead", 62, r => MeterText.Dead(r.DeadSeconds), Red: r => r.DeadSeconds > 0),
+        },
+        MeterTab.Events => new Col[]
+        {
+            new("Casts", 46, r => MeterText.Count(r.Casts), true),
+            new("Potions", 50, r => MeterText.Count(r.Potions)),
+            new("Interrupts", 66, r => MeterText.Count(r.Interrupts)),
+            new("Raises", 46, r => MeterText.Count(r.RaisesGiven)),
+            new("Raised", 46, r => MeterText.Count(r.Raised)),
+            new("Time dead", 62, r => MeterText.Dead(r.DeadSeconds), Red: r => r.DeadSeconds > 0),
         },
         _ => new Col[]
         {
@@ -352,7 +387,8 @@ public sealed class MeterDetailWindow : Window
         if (!ReferenceEquals(table.Of, e) || table.Tab != tab || table.Rank != rank)
         {
             var cols = Columns(e);
-            var rows = MeterView.Ranked(e.Rows, tab, rank);
+            // The events' counts in spot order (there's no one number to rank them by); the rest biggest first.
+            var rows = tab == MeterTab.Events ? MeterView.InSpotOrder(e.Rows) : MeterView.Ranked(e.Rows, tab, rank);
             if (tab == MeterTab.Damage && MeterView.LimitBreak(e.Rows) is { } lb) rows.Add(lb);
             var cells = new string[rows.Count][];
             for (var i = 0; i < rows.Count; i++)
@@ -514,6 +550,95 @@ public sealed class MeterDetailWindow : Window
     private static string CountOf(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{Format.Thousands(n)} {many}";
 
     // ---------------------------------------------------------------------------------------------
+    // The events.
+
+    /// <summary>
+    /// The fight's events (`.ab`'s slab), oldest first, scrolling: a 34px row each, the time in mono, the
+    /// kind's mark in its colour, the member's spot, what happened, its kind in faint mono capitals on
+    /// the right; a death's row in its red. Pressed, a death opens its recap (Deaths) and a member's
+    /// event picks them in the table. Only the rows in view are drawn.
+    /// </summary>
+    private void DrawEventLog(ImDrawListPtr dl, MeterEncounter e, IReadOnlyList<MeterEvent> events, Vector2 at, float w, float h)
+    {
+        var r = S(Palette.RadiusLg);
+        dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.Slab), r);
+        var x = at.X + S(18);
+        var y = at.Y + S(12);
+        Txt.Line(dl, new Vector2(x, y), "Events", Face.SansSemibold, 15, Palette.White, 15 * 1.25f);
+        var sub = events.Count == 0 ? "None yet: deaths, raises, interrupts, potions, limit breaks and tank swaps show here" : MeterText.Counts(events, 4);
+        Txt.Line(dl, new Vector2(x, y + S(15 * 1.25f)), Txt.Fit(sub, Face.Sans, 13, w - S(36)), Face.Sans, 13, Palette.Muted, 19.5f);
+        var listTop = at.Y + S(12) + S(38) + S(10);
+        Kit.Rule(dl, at.X + S(8), at.X + w - S(8), listTop - 1);
+        var listH = at.Y + h - S(4) - listTop;
+        if (listH > S(20) && events.Count > 0)
+        {
+            ImGui.SetCursorScreenPos(new Vector2(at.X + 1, listTop));
+            var open = ImGui.BeginChild("##detail-events", new Vector2(w - 2, listH), false, ImGuiWindowFlags.None);
+            Frame.Open.Push(false);
+            try
+            {
+                if (open) EventRows(e, events, w - 2, listH);
+            }
+            finally
+            {
+                if (Frame.Open.Count > 0) Frame.Open.Pop();
+                ImGui.EndChild();
+            }
+        }
+        dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), r, ImDrawFlags.None, 1f);
+    }
+
+    private void EventRows(MeterEncounter e, IReadOnlyList<MeterEvent> events, float w, float viewH)
+    {
+        var dl = ImGui.GetWindowDrawList();
+        var rowH = S(34);
+        var start = ImGui.GetCursorScreenPos() + new Vector2(S(6), S(2));
+        var rw = ImGui.GetContentRegionAvail().X - S(12);
+        var scroll = ImGui.GetScrollY();
+        var first = Math.Max(0, (int)(scroll / rowH) - 1);
+        var last = Math.Min(events.Count, first + (int)(viewH / rowH) + 3);
+        for (var i = first; i < last; i++)
+        {
+            var ev = events[i];
+            var min = start + new Vector2(0, rowH * i);
+            var max = min + new Vector2(rw, rowH);
+            var picked = ev.PartyId != 0 && ev.PartyId == player;
+            var (clicked, hovered, _) = Kit.Hit("##dev" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), min, max - min);
+            if (picked || hovered) dl.AddRectFilled(min, max, Palette.U32(picked ? Palette.Rgba(255, 255, 255, 0.05f) : Palette.Hover), S(Palette.RadiusSm));
+            if (clicked)
+            {
+                if (ev.PartyId > 0) player = ev.PartyId;
+                if (ev.Kind == MeterEventKind.Death)
+                    for (var d = 0; d < e.Deaths.Count; d++)
+                        if (e.Deaths[d].PartyId == ev.PartyId && Math.Abs(e.Deaths[d].At - ev.At) < 1)
+                        {
+                            death = d;
+                            tab = MeterTab.Deaths;
+                        }
+            }
+            var x = min.X + S(10);
+            Txt.LineRight(dl, x + S(40), min.Y, Format.Clock(ev.At), Face.Mono, 12, Palette.Muted, 34);
+            x += S(40) + S(12);
+            Icons.Draw(dl, MeterWindow.EventIcon(ev.Kind), new Vector2(x, min.Y + (rowH - S(15)) / 2), S(15), MeterWindow.ToneColor(MeterText.Tone(ev.Kind)));
+            x += S(15) + S(10);
+            if (ev.Slot.Length > 0)
+            {
+                Kit.Spot(dl, new Vector2(x + S(9), min.Y + rowH / 2), 18, ev.Slot, Palette.SpotColor(ev.Slot));
+                x += S(18) + S(8);
+            }
+            var kind = Txt.Caps(MeterText.KindWord(ev.Kind));
+            var kw = Txt.SpacedWidth(kind, Face.Mono, 9, 0.08f);
+            Txt.Spaced(dl, new Vector2(max.X - S(10) - kw, min.Y + (rowH - Txt.Natural(Face.Mono, 9)) / 2), kind, Face.Mono, 9, Palette.Faint, 0.08f);
+            var room = max.X - S(10) - kw - S(12) - x;
+            if (room > S(20))
+                Txt.Line(dl, new Vector2(x, min.Y), Txt.Fit(ev.Text, Face.Sans, 13, room), Face.Sans, 13, ev.Kind == MeterEventKind.Death ? Palette.DangerName : Palette.Text, 34);
+            if (hovered && Txt.Width(ev.Text, Face.Sans, 13) > room) Kit.Tooltip(ev.Text);
+        }
+        ImGui.SetCursorScreenPos(start);
+        ImGui.Dummy(new Vector2(rw, rowH * events.Count + S(4)));
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Deaths and the recap.
 
     /// <summary>Where a death is in the fight's own list (the index the small meter opens a recap by).</summary>
@@ -551,7 +676,7 @@ public sealed class MeterDetailWindow : Window
             var name = config.MeterJobsOnly ? d.Slot : d.Name;
             var color = d.PartOfWipe ? Palette.Muted : Palette.White;
             Txt.Line(dl, new Vector2(x, y + S(6)), Txt.Fit(name, Face.SansMedium, 14, w * 0.4f), Face.SansMedium, 14, color, 18);
-            var sub = d.PartOfWipe ? $"The wipe · {d.KilledBy}" : $"{d.KilledBy} · {Format.Thousands(d.Amount)} · {Format.Thousands(d.Overkill)} over";
+            var sub = d.PartOfWipe ? $"The wipe · {d.KilledBy}" : MeterText.DeathLine(d);
             Txt.Line(dl, new Vector2(x, y + S(24)), Txt.Fit(sub, Face.Sans, 12, max.X - S(80) - x), Face.Sans, 12, Palette.Muted, 16);
             Txt.LineRight(dl, max.X - S(12), y, Format.Clock(d.At), Face.MonoSemibold, 12, d.PartOfWipe ? Palette.Muted : Palette.Danger, 46);
             y += rowH;
@@ -582,7 +707,15 @@ public sealed class MeterDetailWindow : Window
         var th = Kit.Callout(dl, new Vector2(tx, y), $"{who} died at {Format.Clock(d.At)}", 17, inner - S(38), 1, 1.05f);
         Txt.Line(dl, new Vector2(tx, y + th + S(4)), Txt.Fit($"{d.KilledBy} · {Format.Thousands(d.Amount)} · {Format.Thousands(d.Overkill)} over what was left", Face.Sans, 13, inner - S(38)),
             Face.Sans, 13, Palette.Muted, 19.5f);
-        y += MathF.Max(S(38), th + S(4) + S(19.5f)) + S(10);
+        var headH = th + S(4) + S(19.5f);
+        // Since 0.4.0: Weakness on as they died, and the raise (when, by whom, how long they were down).
+        if (MeterText.AfterDeath(d) is { } after)
+        {
+            Txt.Line(dl, new Vector2(tx, y + headH), Txt.Fit(after, Face.SansMedium, 13, inner - S(38)), Face.SansMedium, 13,
+                d.RaisedAt != null ? Palette.Ready : Palette.Muted, 19.5f);
+            headH += S(19.5f);
+        }
+        y += MathF.Max(S(38), headH) + S(10);
 
         // Heads.
         var left = at.X + S(6) + S(14);

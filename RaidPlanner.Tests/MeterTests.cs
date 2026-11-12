@@ -31,7 +31,7 @@ public class EffectDecodingTests
     [InlineData(11, 0, 0, 0, 0, 0, 500, EffectKind.Mp, 500L, false, false)]
     [InlineData(50, 0, 0, 0, 0, 0, 1, EffectKind.ReviveLb, 0L, false, false)]
     [InlineData(51, 0, 0, 0, 0, 0, 0, EffectKind.InstantDeath, 0L, false, false)]
-    [InlineData(24, 0, 0, 0, 0, 0, 1, EffectKind.None, 0L, false, false)]
+    [InlineData(24, 0, 0, 0, 0, 0, 1, EffectKind.Threat, 0L, false, false)]
     [InlineData(0, 0, 0, 0, 0, 0, 0, EffectKind.None, 0L, false, false)]
     public void Decodes(byte type, byte p0, byte p1, byte p2, byte p3, byte p4, ushort value, EffectKind kind, long amount, bool crit, bool dh)
     {

@@ -173,8 +173,8 @@ public class NewRecordingTests
     {
         var r = RecordingTests.SampleBuilder(true, out var phase);
         Assert.Equal(2, phase);
-        // Vulnerability on two, Doom on two and off again (the party's own buff isn't kept).
-        Assert.Equal(6, r.Events.OfType<StatusEvent>().Count());
+        // Vulnerability on two, Doom on two and off again (the party's own buff isn't kept); since 0.4.0 H2's Weakness once raised.
+        Assert.Equal(7, r.Events.OfType<StatusEvent>().Count());
         var deaths = r.Events.OfType<DeathEvent>().ToList();
         Assert.Equal(2, deaths.Count);
         Assert.Equal(4, deaths[0].Who);
@@ -183,8 +183,8 @@ public class NewRecordingTests
         Assert.Equal(100u, deaths[1].By);
         // The boss targetable at the pull, gone at 41, back at 50 (9 s: a phase).
         Assert.Equal(3, r.Events.OfType<TargetEvent>().Count());
-        // The timeline only reads casts and hits (the second raidwide is its own line).
-        Assert.Equal(7, r.MechanicCount);
+        // The timeline only reads casts and hits (the second raidwide is its own line; since 0.4.0 the interruptible cast).
+        Assert.Equal(8, r.MechanicCount);
     }
 }
 

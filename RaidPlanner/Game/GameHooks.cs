@@ -27,6 +27,12 @@ namespace RaidPlanner.Game;
 /// per message), and most messages stop at the first question (the party's? landing on the party?).
 /// HP is read only where it's wanted: a party member's (hits and heals on them), anyone the party
 /// heals, a lifesteal's caster.
+///
+/// Since 0.4.0 also: a party member's item (the message's action type 2: a potion) for the parser only;
+/// the header's global sequence and, for a ground-placed action, where it was put; a party target's
+/// barrier and place read with their HP; and the actor-control message that says a cast was stopped
+/// (category 15: cancelled, or interrupted). Every detour calls the game's function first and never
+/// lets anything it does throw back into the game.
 /// </summary>
 public sealed unsafe class GameHooks : IDisposable
 {
@@ -40,6 +46,12 @@ public sealed unsafe class GameHooks : IDisposable
     private const uint TickDamage = 3;
 
     private const uint TickHeal = 4;
+
+    /// <summary>The actor-control category that says a cast stopped (BossMod's CancelCast; its second argument the action type, third the action, fourth 1 if interrupted).</summary>
+    private const uint CancelCast = 15;
+
+    /// <summary>An item (the effect's action type): a party member's potion.</summary>
+    private const byte ActionTypeItem = 2;
 
     /// <summary>An action, not an item or a mount (the effect's action type).</summary>
     private const byte ActionTypeAction = 1;
@@ -177,16 +189,27 @@ public sealed unsafe class GameHooks : IDisposable
         effects!.Original(casterEntityId, casterPtr, targetPos, header, targetEffects, targetEntityIds);
         try
         {
-            if (header == null || header->ActionType != ActionTypeAction || header->ActionId == 0) return;
+            if (header == null || header->ActionId == 0) return;
+            var type = header->ActionType;
+            if (type != ActionTypeAction && type != ActionTypeItem) return;
             var count = targetEntityIds == null ? 0 : Math.Min((int)header->NumTargets, EffectBatch.MaxTargets);
             for (var i = 0; i < count; i++) targetIds[i] = (uint)targetEntityIds[i].ObjectId;
             var recording = recorder.Listening;
             var parser = recorder.Combat;
             var owner = OwnerOf(casterEntityId, casterPtr);
             var concerns = parser.Concerns(casterEntityId, owner, targetIds.AsSpan(0, count));
+            // An item is only read as a party member's use (never an enemy's hit).
+            if (type == ActionTypeItem && (!concerns || parser.MemberOf(casterEntityId, owner) == 0)) return;
             if (!concerns && !recording) return;
 
-            batch.Begin(recorder.Now, casterEntityId, owner, header->ActionId, header->ActionType);
+            batch.Begin(recorder.Now, casterEntityId, owner, header->ActionId, type);
+            batch.Sequence = header->GlobalSequence;
+            if (targetPos != null && float.IsFinite(targetPos->X) && float.IsFinite(targetPos->Z))
+            {
+                batch.HasGround = true;
+                batch.GroundX = targetPos->X;
+                batch.GroundZ = targetPos->Z;
+            }
             var wantsCaster = false;
             for (var i = 0; i < count; i++)
             {
@@ -216,7 +239,7 @@ public sealed unsafe class GameHooks : IDisposable
             }
             if (concerns) parser.Action(batch);
 
-            if (!recording) return;
+            if (!recording || type != ActionTypeAction) return;
             var at = targetPos != null ? *targetPos : Vector3.Zero;
             // The action's own direction, as the server sent it (0 to 65535 for -pi to pi, BossMod's
             // reading): not the caster's facing by the time the message is handled (a boss can turn
@@ -249,7 +272,7 @@ public sealed unsafe class GameHooks : IDisposable
     /// <summary>
     /// A target's HP, max HP and whether it's an enemy (a combatant battle NPC no one owns that the game
     /// calls hostile: a FATE's escort or a quest's ally is a combatant too, and the party may heal it), into
-    /// the buffer.
+    /// the buffer; since 0.4.0 its barrier (% of max HP) and where it stands.
     /// </summary>
     private void ReadTarget(int k, uint entityId)
     {
@@ -258,6 +281,9 @@ public sealed unsafe class GameHooks : IDisposable
         var c = (Character*)bc;
         batch.Hp[k] = c->CharacterData.Health;
         batch.MaxHp[k] = c->CharacterData.MaxHealth;
+        batch.Shield[k] = c->CharacterData.ShieldValue;
+        batch.X[k] = c->GameObject.Position.X;
+        batch.Z[k] = c->GameObject.Position.Z;
         batch.Hostile[k] = c->GameObject.ObjectKind == ObjectKind.BattleNpc
             && (SubKind)c->GameObject.SubKind is SubKind.Combatant or SubKind.BNpcPart
             && c->GameObject.OwnerId is 0 or InvalidId
@@ -272,6 +298,8 @@ public sealed unsafe class GameHooks : IDisposable
         {
             if (category == HeadMarker) recorder.OnMarker(entityId, arg1);
             else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4, arg5);
+            // A cast stopped: only an action's ([verify] that arg4 == 1 is "interrupted").
+            else if (category == CancelCast && arg2 == ActionTypeAction && arg3 != 0) recorder.OnCancel(entityId, arg3, arg4 == 1);
         }
         catch (Exception ex)
         {
