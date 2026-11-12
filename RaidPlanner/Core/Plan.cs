@@ -119,10 +119,28 @@ public sealed record PlanArena(string Shape, float Aspect, IReadOnlyList<float[]
     public string Grid { get; init; } = "none";
 }
 
+/// <summary>
+/// A cooldown planned in a step (since 0.5.0; the site's <c>phase.cooldowns</c>, SPEC5 §3.1): who (<paramref name="Spot"/>: MT, OT,
+/// H1, H2, M1, M2, R1, R2, or P1 to P24 in an alliance's plan), the game's Action row (<paramref name="Action"/>, 0 when it isn't
+/// known), its English name as the site shows it, when (<paramref name="At"/>: seconds after the step's own time, −60 to 600; negative
+/// is before it) and a short note ("for Akh Morn").
+/// </summary>
+public sealed record PlanCooldown(string Id, string Spot, uint Action, string Name, double At, string? Note)
+{
+    /// <summary>When, as the site writes it: "+3 s", "−2.5 s", or empty at the step's own time (made once: windows draw it each frame).</summary>
+    public string AtWords { get; } = PlanJson.AtWords(At);
+}
+
 /// <summary>A step of a plan (a phase on the site): its name, time ("1:24"), notes and board; its id on the site, when it has one.</summary>
 public sealed record PlanStep(string Name, string Time, string Notes, IReadOnlyList<BoardObj> Objects, PlanArena? Arena)
 {
     public string? Id { get; init; }
+
+    /// <summary>The cooldowns planned in it (since 0.5.0), in the order they go (by <c>at</c>, then the spots' order); none in older plans.</summary>
+    public IReadOnlyList<PlanCooldown> Cooldowns { get; init; } = Array.Empty<PlanCooldown>();
+
+    /// <summary>One spot's cooldowns in the step, in the order they go.</summary>
+    public IEnumerable<PlanCooldown> CooldownsFor(string? spot) => spot == null ? Enumerable.Empty<PlanCooldown>() : Cooldowns.Where(c => c.Spot == spot);
 
     /// <summary>The step in the words a raid lead says on voice ("Out, then in"), when it has them (the site's <c>phase.callout</c>).</summary>
     public string? Callout { get; init; }
@@ -165,6 +183,15 @@ public static class PlanJson
     public const int MaxNotes = 4000;
     public const int MaxCallout = 200;
     public const int MaxPenPoints = 256;
+
+    /// <summary>A step's most planned cooldowns (the site's <c>MAX_COOLDOWNS</c>).</summary>
+    public const int MaxCooldowns = 24;
+
+    /// <summary>How far before (−) or after a step's time a cooldown can be planned, seconds (the site's <c>AT_MIN</c>, <c>AT_MAX</c>).</summary>
+    public const double AtMin = -60, AtMax = 600;
+
+    /// <summary>A cooldown's name's and note's most characters (the site's).</summary>
+    public const int MaxCooldownName = 80, MaxCooldownNote = 60;
 
     /// <summary>Board units objects are kept within (the board is ±500; a little past it is still drawn at the edge).</summary>
     private const float Far = 5000;
@@ -244,7 +271,71 @@ public static class PlanJson
         {
             Id = string.IsNullOrEmpty(id) ? null : id,
             Callout = string.IsNullOrEmpty(callout) ? null : callout,
+            Cooldowns = Cooldowns(p["cooldowns"]),
         };
+    }
+
+    /// <summary>The spots a cooldown can be for: a light party's eight, or an alliance's P1 to P24 (the site's <c>isCooldownSpot</c>).</summary>
+    private static readonly System.Text.RegularExpressions.Regex CooldownSpot =
+        new(@"^(?:MT|OT|H[12]|M[12]|R[12]|P(?:[1-9]|1\d|2[0-4]))$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Where a spot sorts: the light party's order, then P1 to P24 by number (the site's <c>spotRank</c>).</summary>
+    public static int SpotRank(string spot)
+    {
+        var i = Array.IndexOf(LightParty, spot);
+        if (i >= 0) return i;
+        return spot.Length > 1 && spot[0] == 'P' && int.TryParse(spot.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? LightParty.Length + n : 99;
+    }
+
+    private static readonly string[] LightParty = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
+
+    /// <summary>
+    /// A step's planned cooldowns (since 0.5.0), leniently, as the site normalizes them (model/cooldowns.ts
+    /// <c>normalizeCooldowns</c>, field by field): an entry needs a spot it knows and a name; the action a whole number (0 when it
+    /// isn't a number above 0), <c>at</c> to a tenth within −60 … 600 (0 when it isn't a number), rounded as the site's
+    /// <c>Math.round</c> does (halves up), the name and note one line each (80 and 60 at most). At most 24, in the order they go
+    /// (by <c>at</c>, then spot).
+    /// </summary>
+    private static IReadOnlyList<PlanCooldown> Cooldowns(JsonNode? n)
+    {
+        if (n is not JsonArray arr) return Array.Empty<PlanCooldown>();
+        var list = new List<PlanCooldown>();
+        foreach (var e in arr)
+        {
+            if (list.Count >= MaxCooldowns) break;
+            if (e is not JsonObject c) continue;
+            var spot = Str(c["spot"], 64)?.Trim().ToUpperInvariant() ?? string.Empty;
+            var name = OneLine(Str(c["name"], MaxCooldownName * 4), MaxCooldownName);
+            if (!CooldownSpot.IsMatch(spot) || name.Length == 0) continue;
+            // Not a number (or missing): 0, as the site keeps it (the site's own plans are normalized as they're saved).
+            var action = Num(c["action"]) is { } a && a > 0 ? (uint)Math.Min(0x7fffffff, JsRound(a)) : 0u;
+            var at = Num(c["at"]) is { } t ? JsRound(Math.Clamp(t, AtMin, AtMax) * 10) / 10 : 0;
+            var id = Str(c["id"], 64) ?? string.Empty;
+            list.Add(new PlanCooldown(id, spot, action, name, at == 0 ? 0 : at,
+                OneLine(Str(c["note"], MaxCooldownNote * 4), MaxCooldownNote) is { Length: > 0 } note ? note : null));
+        }
+        // In the order they go: by when, then the spots' order (a stable sort keeps the plan's own order otherwise).
+        return list.Select((c, i) => (c, i)).OrderBy(x => x.c.At).ThenBy(x => SpotRank(x.c.Spot)).ThenBy(x => x.i).Select(x => x.c).ToList();
+    }
+
+    /// <summary>JavaScript's <c>Math.round</c>: the nearest whole number, halves up (−2.5 to −2), as the site rounds.</summary>
+    private static double JsRound(double x) => Math.Floor(x + 0.5);
+
+    /// <summary>Text as one line: its spaces squeezed, trimmed, at most <paramref name="max"/> characters.</summary>
+    private static string OneLine(string? s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        var squeezed = System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim();
+        return squeezed.Length <= max ? squeezed : squeezed[..max].TrimEnd();
+    }
+
+    /// <summary>A planned cooldown's time as the site writes it (<c>atWords</c>): "+3 s", "−2.5 s", or empty for 0.</summary>
+    public static string AtWords(double at)
+    {
+        if (at == 0 || !double.IsFinite(at)) return string.Empty;
+        var n = Math.Abs(at);
+        var num = n == Math.Floor(n) ? n.ToString("0", CultureInfo.InvariantCulture) : n.ToString("0.0", CultureInfo.InvariantCulture);
+        return (at < 0 ? "\u2212" : "+") + num + " s";
     }
 
     private static BoardObj? Obj(JsonObject o)

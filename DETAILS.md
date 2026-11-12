@@ -33,6 +33,43 @@ kill's combat ends, and then it's a clear. A pull shorter than 10 seconds, or wi
 it (a named enemy cast, or a hit that isn't an auto-attack: a trash pack that only swung at the
 tank isn't), isn't kept (the window says so). Pulls are numbered from 1 each time you enter a zone.
 
+**Who the party is** (since 0.5.0, `Game/PartyMembers.cs`, the rule in `Core/PartyPick.cs`, tested
+with fakes): one place reads it, and the recorder (its party, the parser's "is this the party's",
+whether the fight goes on, whether everyone's down), the meter, the cooldown tracker, the plan window,
+Home and the roster all ask it. The game's party list (Dalamud's `IPartyList`) when it has anyone: a
+normal party, and any party in a duty (cross-world ones included); a member in another zone (the game
+gives them no entity id) keeps their place by content id, for the spots, Home's count and the roster,
+but nothing can be credited to them. Else, outside a duty, **the
+cross-world party's group you're in**: the game keeps a cross-world party only in
+`InfoProxyCrossRealm` there, and the party list is empty (before 0.5.0 only you were counted, so a
+friend's damage on a target dummy was dropped). In a cross-world alliance only your own group counts
+(the light party, as the party list has it in a duty): the group the game says is yours, or the one
+you're found in (by entity id or content id). The group isn't used when you aren't in it, it has only
+you, or it has more than 8 or the groups number more than 6 (a misread). Someone the game gave no
+entity id for is looked for near you by their content id (the object table's characters), else kept
+by name and job only (no damage can be credited to them until they're found). Else just you. The
+members are read at most four times a second; their HP (the party list's at any distance; a
+cross-world member's from their character, when near), whether they're near and in combat, once a
+frame however many ask. A member whose HP isn't known (a cross-world member who isn't near) is left out
+of "everyone's down", the recorder's and the meter's alike (only those whose HP is known count), and the
+meter keeps them as they were last seen (alive when never seen; a new zone forgets), so walking away from a dead friend and back isn't
+a raise and a second death. Your spot (the plan window's reticle, the callouts' "You:" line) is worked
+out from the same party once a second. The cross-world read [verify: the groups, your group's index, the members'
+entity ids as the object table has them] is guarded: a read that throws stops it for a minute (logged
+once), and with Diagnostics on each change of who the party is goes to the file (`party-read`).
+
+**Your gear** (since 0.5.0, `Game/GearReader.cs`): as a recorded pull starts (not one only followed),
+each item in the game's equipped-items container (Dalamud's `IGameInventory`, `EquippedItems`: the item's base row,
+its high-quality flag; its name and item level from the Item sheet; the soul crystal too) and your
+attributes then (`PlayerState.Attributes` by the game's attribute ids: STR, DEX, VIT, INT, MND,
+critical hit, direct hit, determination, skill and spell speed, tenacity, piety) [verify: the
+container's places, the attributes' indices]. The average item level is worked out as the character
+window does [verify]: the 12 places that count (not the waist's nor the soul crystal), an empty one 0,
+a two-handed main hand counted again in the off hand's place, over 12, rounded down; it's the items'
+own, before any level sync, while the attributes are as the game had them (synced). A read that
+throws gives no gear (logged); the pull is recorded as ever. With Diagnostics on, what was read goes
+to the file (`gear`).
+
 Unloading the plugin mid-pull (an update, a reload), or while one is held, keeps what was
 recorded; the hooks are let go of first. A frame that can't be read is skipped (logged at most
 every 10 seconds) and never stops the pull from ending.
@@ -136,7 +173,8 @@ the fight, and a helper whose attack everyone dodged must not be lost. The site 
 recordings made before (its `fightOf`). When the pull ends they're sorted: the targetable
 ones with the most HP (and any with half as much or more) are bosses, the other targetable ones
 adds, and those never targetable helpers (only their attacks are kept, not where they stood).
-The party is the party list (just you alone), each given a spot from their job's role
+The party is `PartyMembers`' (the party list, or since 0.5.0 a cross-world party's group outside a
+duty; just you alone: above), each given a spot from their job's role
 (`Core/Roles.cs`): tanks MT then OT, healers H1 then H2, melee M1 then M2, ranged R1 then R2, in
 the list's order; a fourth melee takes a free ranged spot (and the other way round), past eight
 P9, P10…
@@ -291,6 +329,16 @@ optional; `combat.v` stays 1):
   `use`, `tick`. A combat block read from an older file (none of the new tables) is written back
   without them (`CombatLog.Extended`), so it never seems to say its party used nothing.
 
+Since 0.5.0 (round six, SPEC5 §3.6; still version 1, one new optional top-level key): `gear`, the
+recording player's as the pull began (above), left out when it couldn't be read:
+`{ "job", "ilvl", "items": [{ "slot", "id", "hq", "name" }], "stats": { "str", "dex", "vit", "int",
+"mnd", "crit", "dh", "det", "sks", "sps", "ten", "pie" } }`. `slot` is the equipped-items container's
+place (0 main hand, 1 off hand, 2 head, 3 body, 4 hands, 6 legs, 7 feet, 8 ears, 9 neck, 10 wrists, 11
+and 12 rings, 13 the soul crystal), `id` the Item sheet's row, `name` the item's in the client's
+language; a stat is written only when above 0. Read back leniently (`Gear.Read`): an item with a place
+outside 0–13 (or a second at a place), no id, or a stat not a whole number above 0 or not one of the
+twelve keys is left out; `gear` that isn't an object reads as none.
+
 `Recording.Parse` reads all of it back leniently: a hit's lists not as long as its targets, or a
 combat table whose columns aren't all arrays of the same length, are left out; an optional column not
 as long as its table reads as its default; a value that isn't a number reads as 0; a delta below 0 as 0.
@@ -304,8 +352,16 @@ grows while it's on). While on, the raw values behind each reading that hasn't b
 `21:03:04.123 | zone 1122 <duty or place> | pull 3 @ 12.50 | <kind> | <numbers>` (`no pull` outside one).
 The kinds:
 
-- `party` (a pull's start): you, and each member's entity id, **name**, job and number in the recording,
-  so the ids in other lines can be read.
+- `party` (a pull's start): you, where the party was read from (since 0.5.0: `list`, `cross-world` or
+  `alone`), and each member's entity id, **name**, job and number in the recording, so the ids in other
+  lines can be read.
+- `party-read` (since 0.5.0; each change of who the party is, and once as Diagnostics is turned on):
+  where from, what the cross-world party read said (in one, an alliance, your group's index, how many
+  groups and members) and why it wasn't used when it wasn't, then each member's entity id, **name**, job
+  id, level, whether a content id was read (`cid`, never the id itself) and whether they're near. A
+  cross-world read that threw says so (`cross-world read failed`).
+- `gear` (since 0.5.0, a recorded pull's start): your job, average item level, whether the main hand was
+  taken as two-handed, each item's place and row (`hq`), and the attributes read.
 - `cancel-cast`: actor control 15 as sent: the actor, party or not, its arguments 1–6 (2 the action type,
   3 the action, 4 interrupted?).
 - `party-hit`: each of the party's damage effects (autos left out): action, caster, target, the effect's
@@ -466,7 +522,9 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   last death when the recording ran on 20 s or less past it; those of a second or more on a tank and not
   inside one of their casts aimed at that tank, from half a second before it to a second and a half after
   its end; one tank's after another's is a swap: `PullStats.TankSwaps`), `lbUses` (`[deciseconds,
-  action]`, the first 10) and `cd` (the countdown's `end`). Over the size: `ph` goes first, from its latest
+  action]`, the first 10), `cd` (the countdown's `end`) and, since 0.5.0, `ilvl` (the recording player's
+  average item level as the pull began, `gear.ilvl`; only when the gear was read, for the fight page's Personal
+  bests; it goes with `x` when that's trimmed). Over the size: `ph` goes first, from its latest
   phases (a fight with dozens of phases; `phases` keeps every start, so a phase kept still has its end
   there), then the latest hits, then the latest debuffs, then `x`. The hits (who failed what) are what
   Progress is about; with 50 phases, `ph` left room for only about 20 of them.
@@ -491,7 +549,9 @@ the recording, its summary and the meter's numbers there (`align.raidrec.json`, 
 `align.meter.json`) for the site's `alignment.spec.ts`, which checks the meter's, Review's and
 Progress's numbers against each other (amounts exactly, the length to the hundredth, rates to a
 billionth). Write them again when the summary, the file or the meter changes (as `RP_FIXTURE_OUT`
-writes the shared `sample.raidrec.json`).
+writes the shared `sample.raidrec.json`). Since 0.5.0 both recordings carry the BLM's `gear`
+(`RecordingTests.SampleGear`: 7.0's Dark Horse Champion's set, the items' ids, names and item levels
+the Item sheet's, the attributes made up but of a level-100 caster's size).
 
 No names. The
 summary is made on the worker that writes the pull, so it's there whatever happens to the file.
@@ -505,9 +565,9 @@ game closes isn't sent.
 _Send my party to my roster_ (Settings → Plans) sends `rp_plugin_roster` your party's names by spot
 (`PartyRoster`: the recording's spots from `Core/Roles.cs`, the eight only, names cut to 40), which
 replaces your roster on the site. It's the only call with names in it, and only when you press it.
-It's refused with fewer than 2 names ("Your party can't be read here; try in the duty."): outside a
-duty a cross-world party isn't in the game's party list, and sending what's read (just you) would
-wipe the roster on the site down to one name.
+It's refused with fewer than 2 names ("Your party can't be read here; try in the duty."): sending what's
+read (just you) would wipe the roster on the site down to one name. Since 0.5.0 the party is
+`PartyMembers`' (above), so a cross-world party outside a duty can be sent too.
 
 ## Plans (`Game/PlanService.cs`, `Core/Plan.cs`, `Core/CueFollower.cs`, `UI/PlanWindow.cs`, `UI/PlanBoard.cs`)
 
@@ -544,6 +604,20 @@ window's big words and the chat line, `PlanStep.Big` falling back to the step's 
 arena's `yalms`, `edge` (wall, death, drop) and `grid`, and a list entry's `steps` when the site
 sends one. The phase a step is in ("P2") comes from the steps' names as the site's timeline reads
 them (`PlanJson.Phases`: "P2 · …" or "Phase 2: …" starts one; the steps before the first are P1).
+
+**Planned cooldowns** (since 0.5.0; SPEC5 §3.1, the site's `phase.cooldowns`, written in Edit from
+model/mitigation.ts): who uses which mitigation, shield or big heal in a step, and when. Each entry is
+`{ id, spot, action, name, at?, note? }`: the spot (MT, OT, H1, H2, M1, M2, R1, R2, or P1 to P24 in an
+alliance's plan), the Action row (0 not known), its English name, `at` seconds after the step's own time
+(−60 to 600; negative is before it) and a short note. Read as the site normalizes them (`PlanStep.Cooldowns`,
+field by field as model/cooldowns.ts `normalizeCooldowns`): an entry needs a spot it knows and a name; the
+action a whole number (0 when it isn't a number above 0), `at` to a tenth within −60 … 600 (0 when it isn't
+a number), both rounded as the site's `Math.round` (halves up), name and note one line (80 and 60 at most);
+at most 24 a step; in the order they go (by `at`, then the spots' order). An older plan, or a step without the key, has none. `rp_plugin_plan` sends them (and
+each step's `callout`, which it never sent before: the site's migration
+`20261112105739_rp_plugin_plan_cooldowns.sql`, applied on 12 November 2026). Placed on the plan's clock (`UI/Model/PlannedUses.cs`): a step's time is its earliest cue's (as
+the callouts time a step), plus `at`; a step with no cue has no time, so its cooldowns are only listed in
+the window, never marked or said.
 
 **Following a pull** (`CueFollower`, while a pull is recorded or followed and the plan is for this
 duty): a pull starting goes back to the first step. A cast beginning (from the recorder's cast
@@ -602,8 +676,14 @@ and it makes no window sounds. Under the header the step's callout big (Archivo 
 22px in capitals, lines 1.02 apart, three at most), its name under it (13px, muted) when the
 callout isn't just the name; while a pull moves it, a slim cast bar "Following the pull" with the
 pull's clock and "next in 16 s", filling to the next step by the plan's own clock
-(`PlanService.PlanClock`, the follower's time once a cue has matched; `StepProgress`); then the
-board, a square as big as leaves three lines for the notes (110 at the least); the notes (13px,
+(`PlanService.PlanClock`, the follower's time once a cue has matched; `StepProgress`); since 0.5.0 the
+step's planned cooldowns, a row each (20 tall): the spot in its role's colour (the board's spot, 16),
+the action (SansSemibold 13), its note muted after it and its time off the step's in mono on the right
+("−3 s", "+4 s"; none at the step's own time), yours (your spot now) washed in ember and in white;
+four rows at most (past that the fourth says "+3 more"), fewer when the window is short (as many as
+leave the board its 110 above the footer, the last "+N more"), each row's tooltip all of it ("MT ·
+Reprisal −3 s · for Akh Morn"), the "more" row's every one; at its smallest, or with room for under two
+rows, one line instead, yours ("You: Reprisal −3 s") or how many ("4 cooldowns planned"); then the board, a square as big as leaves three lines for the notes (110 at the least); the notes (13px,
 "- " lines as "• ", wrapped once per width, only the lines in view drawn), fading at the foot when
 there's more, with the scrollbar; and at the foot 32px square previous and next round the count in
 mono. Another plan on its way runs a slim cast bar under the header and keeps the old step until
@@ -645,7 +725,7 @@ chevrons out or in), knock-ups, side knockbacks, rotations, checkerboards, line 
 and the green shadow behind it), pen strokes, tethers and arrows over a dark line, lines (dashed
 when set), text with a dark edge; enemies as the Boss's shield and face in their colour (a boss with
 its hitbox ring, its back quarter dashed, and its facing triangle); players as spots on a dark halo,
-you (your spot in the party now, from the party list and `Core/Roles.cs`) ringed white under the
+you (your spot in the party now, from `PartyMembers` and `Core/Roles.cs`, read once a second) ringed white under the
 reticle; waymarks as their lettered circle or numbered square; head markers (limit cut dots,
 PlayStation shapes, signs). At most 160 objects (players, waymarks and enemies kept first; the
 tooltip over the board says how many weren't drawn), in the site's layers, clipped to the board.
@@ -815,8 +895,10 @@ MP (never healing), 14 and 15 a status put on, 51 instant death. An effect comes
 or from the target when it says so (retaliation: Vengeance's damage back at the boss is the tank's,
 flagged reflected), and lands on the target, or on the caster when it says so (lifesteal: Bloodbath's
 heal is its user's). A pet's or summon's action is its owner's (the owner from the game), flagged; an
-action whose ActionCategory is 9 or 15 is a limit break, flagged. The party is the party list's
-entity ids (just you alone), read four times a second. Damage between party members isn't kept,
+action whose ActionCategory is 9 or 15 is a limit break, flagged. The party is `PartyMembers`' entity
+ids (the party list's; since 0.5.0, outside a duty, a cross-world party's group: above, What's
+recorded; just you alone), read four times a second: **cross-world parties count in the meter
+everywhere** (before 0.5.0, outside a duty only your own numbers were). Damage between party members isn't kept,
 nor anything between two others; a barrier (a status named on `CombatLists.ShieldNames`, found on the
 English Status sheet) is a shield put on, never healing. A tick (actor control 23) goes to the party
 member the game names (a pet's owner); a damage tick that names no one, on an enemy, is shared
@@ -913,8 +995,9 @@ why (`IMeterSource.Problem`): the game has moved something it reads.
 
 **The game side** (`Game/CombatMeter.cs`): with _Show the meter_ on (in duties, or everywhere), it
 listens to the parser and asks the recorder to keep the hooks on; each frame it tells the session the
-zone, the recorder's pull, the party (names read once each and kept only in the plugin; HP from the
-party list; in combat from the game's own look-up) and whether anyone's in combat. Since 0.4.0 also
+zone, the recorder's pull, the party (`PartyMembers`', since 0.5.0 a cross-world party's group too;
+names read once each and kept only in the plugin; HP from the party list, or a cross-world member's
+character when near; in combat from the game's own look-up) and whether anyone's in combat. Since 0.4.0 also
 each frame the limit break gauge (`LimitBreakController`) and, during an encounter, which party members
 carry Weakness or Brink of Death (their status lists); four times a second with the targetability, the
 enemies' casts (and whether they can be interrupted) and the bosses' targets (the enemies with half the
@@ -1162,7 +1245,7 @@ _Yours too_ (on) lists your own.
   member's level now (the party list's, synced; yours your character's) isn't listed. While the tracker is shown where it may be, it listens to the recorder's combat parser
   (`ICombatSink.Used`: every action a party member or their pet uses, as the game's message has it,
   zero targets too) and asks the recorder to keep its hooks on (`FightRecorder.HooksWanted`). The
-  party is the party list's, read four times a second, its spots by `Core/Roles`. A new zone forgets
+  party is `PartyMembers`' (the party list, or since 0.5.0 a cross-world party's group), read four times a second, its spots by `Core/Roles`. A new zone forgets
   every use, and so does the duty starting again after a wipe (`DutyRecommenced`: the game resets
   recasts then).
 - **Your own** are the game's timers each frame (`ActionManager`): the recast timer of the action's
@@ -1178,6 +1261,15 @@ _Yours too_ (on) lists your own.
   learned as their recast. A use within a second of their last of the same cooldown is the same one
   seen twice (a pet's echo). One they haven't used since the tracker began is taken to be ready, and
   its tooltip says so; a learned or base recast says it's an estimate.
+- **Planned soon** (since 0.5.0): while your plan follows a pull (its clock running), a row whose
+  member the plan has use that cooldown in the next 15 seconds (or did in the last 2:
+  `PlannedUses.Next`, the soonest) is outlined in ember (1px, 4px corners) with "planned in 8 s"
+  ("planned now" at its time) in ember mono before its time, and its tooltip adds "Planned: Reprisal at
+  3:02, for Akh Morn." The plan's entry is the row's cooldown when its action is the row's, or one of the
+  cooldown's rows on the sheet, or its English name is one of the cooldown's (`CooldownView.Matches`).
+  Such a row is listed even when ready with _Hide those ready_ on. Only tracked cooldowns (the catalogue,
+  as picked) are marked: a planned Rampart, which the tracker doesn't follow, isn't. The sample marks
+  the MT's Reprisal every half a minute.
 
 **The on-screen callouts** (`CalloutWindow`; Settings → Plan window → On-screen callouts;
 `/raidplan callouts`; on at first). While your plan follows a pull (`PlanService.Following`, its
@@ -1194,7 +1286,12 @@ right-aligned in a 70px column before it (54 compact), white, ember in its last 
 lead, else 3) and as "NOW"; the step's name under it (12px, muted) when the callout isn't just the
 name; a slim cast bar under them filling as it comes (over the time looked ahead). The next ones
 under it at 17px (16 compact) on one line each in the text colour, their countdowns in mono 16 (13)
-muted. 12px down and 14 in; 12 between the first and the next, 8 between the rest.
+muted. 12px down and 14 in; 12 between the first and the next, 8 between the rest. Since 0.5.0, under
+the first step's name, your spot's planned cooldowns in it (`CalloutLine.You`, `PlannedUses.YouLine`;
+your spot is `PartyMembers.YourSpot`, read once a second): "You:" in ember and what to use in white
+(SansSemibold 13, cut to the width): "You: Reprisal", several joined ("You: Rampart, Reprisal +4 s"),
+each with its time off the step's when it has one; none when the step has nothing for you. The sample
+says one ("You: Reprisal −3 s").
 
 - **The sound** (_A sound before each step_, off at first): _How early_ (3 s, 1 to 10) before each
   step goes off, one of the game's own sound effects, _Which sound_ (`<se.1>` to `<se.16>`, 2 at
@@ -1224,12 +1321,14 @@ RaidPlanner/
   Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), the
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
               plans (Plan, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
-              the roster and the diagnostics file (DiagnosticsLog); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
+              the roster and the diagnostics file (DiagnosticsLog), who the party is (PartyPick),
+              the gear (Recording: Gear); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
               phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
               which is which (CombatLists, CombatKinds), who interrupted, the moments before a pull
               and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
-              in the game (PlanService), summaries and the roster (Uploads)
+              in the game (PlanService), summaries and the roster (Uploads), the party (PartyMembers)
+              and your gear (GearReader)
   UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
               (PlanBoard, BoardArt), MeterWindow and MeterDetailWindow, the overlays (OverlayWindow:
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
@@ -1237,7 +1336,8 @@ RaidPlanner/
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
-              the callouts' timeline (CalloutTimeline), the overlays' settings (Overlay),
+              the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
+              (PlannedUses), the overlays' settings (Overlay),
               /raidplan's words (Commands), SVG
               paths, dashes), tested
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
@@ -1322,11 +1422,48 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   the hook's target position for ground actions; a damage effect's `Param2` matching the battle log's
   bonus %; the enemies' `TargetObjectId` as their target; the countdown agent's first reading (its
   length rounded up).
+- The 0.5.0 readings want checking in the game (Diagnostics' `party-read` and `gear` lines show them):
+  `InfoProxyCrossRealm` outside a duty in a cross-world party (`IsInCrossRealmParty`, `GroupCount`,
+  `LocalPlayerGroupIndex`, each group's `GroupMemberCount` and members), the members' `EntityId` matching
+  their characters' in the object table (and filled for a member in another zone), the party list really
+  being empty then (and filled again in a duty, so the cross-world read isn't used there), a friend's
+  damage on a target dummy showing in the meter, and a cross-world alliance's groups (yours chosen); the
+  equipped-items container's places (0 main hand … 13 soul crystal) as Dalamud's `IGameInventory` gives
+  them, its items' base rows and HQ flag, `PlayerState.Attributes` indexed by the game's attribute ids (and the values the character
+  window shows, synced in a synced duty), and the average item level as the character window works it
+  out (a two-handed weapon counted twice). And the windows: the plan window's cooldown rows, the
+  callouts' "You:" line and the tracker's ember outline, against a real plan with cooldowns.
 - Summaries waiting to be sent are lost when the game closes.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
 
 ## Release notes
+
+### 0.5.0
+
+- **Cross-world parties count in the meter everywhere.** Outside a duty the game keeps a cross-world
+  party apart from its party list, which is then empty, so the meter (and the cooldown tracker, the plan
+  window's spot, Home and _Send my party to my roster_) counted only you: a friend hitting the same target
+  dummy didn't show. Now one place reads the party (`Game/PartyMembers.cs`): the party list, else the
+  cross-world party's group you're in (in an alliance, your own group), else just you, and everything
+  uses it, the recorder's "is this the party's" test too. The cross-world read is guarded and, with
+  Diagnostics on, logged (`party-read`). A member out of sight (whose HP the game doesn't give) is kept
+  as they were last seen, so they're never taken for dead, nor raised and killed again.
+- **Your gear in the recording.** A recorded pull keeps your job, average item level, each equipped item
+  (its row, HQ and name) and your attributes as it began (`gear`), for the site's "Your gear" card and
+  the item level beside your personal bests. The pull's summary carries the average item level too
+  (`x.ilvl`, only when the gear was read), for the fight page. Diagnostics logs what was read (`gear`).
+- **Planned cooldowns from your plan** (made in the site's editor: who uses which mitigation, shield or
+  big heal in a step, and when):
+  - the plan window lists the step's, yours washed in ember;
+  - the on-screen callouts say yours under the coming step ("You: Reprisal −3 s");
+  - the cooldown tracker outlines a cooldown the plan has its member use in the next 15 seconds in ember,
+    with "planned in 8 s" (shown even with _Hide those ready_ on).
+  They're read as the site reads them (an entry with a value that isn't a number keeps it as 0, as the
+  site shows it). They need the site's update to `rp_plugin_plan` (it now sends each step's `cooldowns`, and its
+  `callout`, which it never sent before, so the plan window's big words and the chat line now use a
+  step's callout rather than its name).
+- The cooldown tracker's and the callouts' samples show a planned cooldown.
 
 ### 0.4.0
 

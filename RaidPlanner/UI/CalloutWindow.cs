@@ -41,6 +41,9 @@ public sealed class CalloutWindow : OverlayWindow
 
     private bool Compact => Settings.Compact;
 
+    /// <summary>Your spot now (set by the plugin; since 0.5.0, for your planned cooldowns under the first step: "You: Reprisal").</summary>
+    public Func<string?>? YourSpot { get; set; }
+
     /// <summary>A new pull: every step's sound can play again.</summary>
     public void NewPull() => sounds.Reset();
 
@@ -57,7 +60,7 @@ public sealed class CalloutWindow : OverlayWindow
         var cp = read is { } r && ReferenceEquals(r.Plan, plan) ? r : read = new CalloutPlan(plan);
         if (Config.CalloutSound && sounds.Due(plan, cp.Times, clock, Math.Clamp(Config.CalloutSoundLead, 1, 10)) != null) Play(Config.CalloutSoundId);
         // Into the list kept here: nothing made each frame but the lines.
-        CalloutTimeline.Upcoming(cp, clock, ahead, count, lines);
+        CalloutTimeline.Upcoming(cp, clock, ahead, count, lines, YourSpot?.Invoke());
         return lines.Count > 0;
     }
 
@@ -92,6 +95,7 @@ public sealed class CalloutWindow : OverlayWindow
             var tw = S(TextWidth(widthCss, first));
             h += Kit.CalloutHeight(l.Big, px, tw, first ? 2 : 1, 1.02f) / S(1);
             if (first && l.Name != null) h += 4 + 12 * 1.3f;
+            if (first && l.You != null) h += 5 + YouPx * 1.3f;
             if (first) h += 8 + 3;
             h += i < lines.Count - 1 ? (first ? 12 : 8) : 0;
         }
@@ -137,6 +141,13 @@ public sealed class CalloutWindow : OverlayWindow
                     Txt.Line(dl, new Vector2(tx, y), Txt.Fit(l.Name, Face.Sans, 12, tw), Face.Sans, 12, Palette.Muted, 12 * 1.3f);
                     y += S(12 * 1.3f);
                 }
+                // Your planned cooldowns in it (since 0.5.0): "You:" in ember, what to use in white.
+                if (l.You != null)
+                {
+                    y += S(5);
+                    YouLine(dl, new Vector2(tx, y), l.You, tw);
+                    y += S(YouPx * 1.3f);
+                }
                 // A slim cast bar running to it over the time looked ahead.
                 y += S(8);
                 var fraction = l.Now ? 1 : (float)Math.Clamp(1 - l.In / ahead, 0, 1);
@@ -145,6 +156,33 @@ public sealed class CalloutWindow : OverlayWindow
             }
             if (i < lines.Count - 1) y += S(first ? 12 : 8);
         }
+    }
+
+    /// <summary>"You: …" is SansSemibold 13 (the plan's own words: a face built with every language's glyphs).</summary>
+    private const int YouPx = 13;
+
+    private string? youOf;
+    private string youRest = string.Empty;
+
+    /// <summary>"You: Reprisal": the "You:" in ember, the rest in white, cut to the width.</summary>
+    private void YouLine(ImDrawListPtr dl, Vector2 at, string text, float width)
+    {
+        const string Lead = "You:";
+        var px = YouPx;
+        if (!text.StartsWith(Lead, StringComparison.Ordinal))
+        {
+            Txt.Line(dl, at, Txt.Fit(text, Face.SansSemibold, px, width), Face.SansSemibold, px, Palette.White, px * 1.3f);
+            return;
+        }
+        var lw = Txt.Line(dl, at, Lead, Face.SansSemibold, px, Palette.Ember, px * 1.3f);
+        // The rest cut off once a line, not each frame.
+        if (!ReferenceEquals(youOf, text))
+        {
+            youOf = text;
+            youRest = text[Lead.Length..];
+        }
+        var rest = youRest;
+        Txt.Line(dl, at + new Vector2(lw, 0), Txt.Fit(rest, Face.SansSemibold, px, MathF.Max(0, width - lw)), Face.SansSemibold, px, Palette.White, px * 1.3f);
     }
 
     private string Countdown(CalloutLine l)

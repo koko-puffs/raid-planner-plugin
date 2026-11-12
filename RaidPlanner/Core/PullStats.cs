@@ -519,6 +519,8 @@ public static class PullStats
         }
         if (lbs.Count > 0) ex.X["lbUses"] = new JsonArray(lbs.Take(10).Select(l => (JsonNode)new JsonArray(l.Ds, (long)l.Action)).ToArray());
         if (r.Combat?.Countdown is { } cd) ex.X["cd"] = CastEvent.Round(cd.End, 2);
+        // Since 0.5.0: the recording player's average item level as the pull began, only when their gear was read (the fight page's Personal bests).
+        if (r.Gear is { ItemLevel: > 0 } gear) ex.X["ilvl"] = gear.ItemLevel;
         return ex;
     }
 

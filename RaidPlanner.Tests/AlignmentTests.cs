@@ -204,6 +204,8 @@ public class AlignmentTests
         b.SetParty(party);
         // The BLM recorded it.
         b.SetSelf(Entity(Blm));
+        // Their gear (since 0.5.0), as the sample's.
+        b.SetGear(RecordingTests.SampleGear);
         parser.SetParty(party.Select(p => (uint)p.Key).ToArray());
         session.Place(1, 99998, "Alignment Arena (Savage)");
 

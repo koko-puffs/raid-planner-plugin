@@ -121,13 +121,14 @@ public sealed class Uploads : IDisposable
             return;
         }
         var party = new List<(string Name, byte Role)>();
-        foreach (var m in Services.Party)
+        // The party (since 0.5.0 a cross-world party's group too, outside a duty: PartyMembers).
+        foreach (var m in PartyMembers.Read())
         {
-            if (m.EntityId == 0) continue;
-            party.Add((m.Name.TextValue, data.Job(m.ClassJob.RowId).Role));
+            if (m.Name.Length == 0) continue;
+            party.Add((m.Name, data.Job(m.ClassJob).Role));
         }
-        // Never just you: outside a duty a cross-world party isn't in the game's list, and sending
-        // what's read would replace the roster on the site with one name.
+        // Never just you: sending what's read (when the party can't be read) would replace the roster
+        // on the site with one name.
         var roster = PartyRoster.Build(party);
         if (PartyRoster.WhyNot(roster.Count) is { } why)
         {

@@ -106,6 +106,9 @@ public sealed class Plugin : IDalamudPlugin
             recorder.HooksWanted = () => cooldowns.WantsHooks;
             cooldownWindow.InDuty = () => recorder.DutyHere != null;
             cooldownWindow.Gauge = () => meter.Source.LimitBreak;
+            // Since 0.5.0: the plan's cooldowns, while it follows a pull (the tracker's "planned in 8 s"; the callouts' "You: Reprisal").
+            cooldownWindow.PlanNow = () => plans.Plan is { } p && plans.PlanClock is { } c ? (p, c) : null;
+            calloutWindow.YourSpot = () => PartyMembers.YourSpot(data);
             // Each pull, every step's callout sound can play again.
             recorder.PullStarted += OnPullStarted;
             window.CooldownsSampleOn = () => cooldownWindow.Previewing;

@@ -37,6 +37,8 @@ namespace RaidPlanner.Game;
 /// Since 0.4.0, every frame of a pull also: each targetable enemy's target, the party's MP and barriers,
 /// the limit break gauge; once a second the recording player's target's enmity list and the head signs;
 /// whether an enemy's cast can be interrupted; and from the hooks a cast stopped (<see cref="OnCancel"/>).
+/// Since 0.5.0 the party is <see cref="PartyMembers"/>'s (a cross-world party's group counts outside a duty), and a pull
+/// recorded keeps your gear and attributes as it begins (<see cref="GearReader"/>).
 /// Out of a pull in a duty it records, the hooks stay on and the party's uses of the last 30 seconds
 /// and the countdown are kept (<see cref="PrePull"/>, <see cref="CountdownWatch"/>) for the pull's start.
 /// With Settings → Recording → Diagnostics on (<see cref="Diagnostics"/>), the raw values behind the readings
@@ -165,6 +167,7 @@ public sealed unsafe class FightRecorder : IDisposable
         Combat = new CombatParser(data.ActionCategory, data.IsShield, data.IsDot, data.IsArea);
         sink = new RecordingSink(() => Current, () => pullStart);
         Diagnostics = new DiagnosticsLog(store.Folder) { Context = DiagnosticsContext };
+        PartyMembers.Diagnostics = Diagnostics;
         diagSink = new DiagnosticsSink(this);
         hooks = new GameHooks(this);
         Services.Framework.Update += OnUpdate;
@@ -341,8 +344,8 @@ public sealed unsafe class FightRecorder : IDisposable
     private static bool FightGoesOn()
     {
         if (Services.Condition[ConditionFlag.InCombat]) return true;
-        foreach (var m in Services.Party)
-            if (m.EntityId != 0 && m.GameObject is ICharacter c && (c.StatusFlags & StatusFlags.InCombat) != 0)
+        foreach (var m in PartyMembers.Read())
+            if (m.InCombat)
                 return true;
         return false;
     }
@@ -448,14 +451,14 @@ public sealed unsafe class FightRecorder : IDisposable
         }
     }
 
-    /// <summary>The party by entity ids (just you when alone), for the parser: whose effects are the party's.</summary>
+    /// <summary>
+    /// The party by entity ids (just you when alone; since 0.5.0 a cross-world party's group too: <see cref="PartyMembers"/>),
+    /// for the parser: whose effects are the party's.
+    /// </summary>
     private void RefreshParty()
     {
         nextParty = Now + 0.25;
-        var n = 0;
-        foreach (var m in Services.Party)
-            if (m.EntityId is not (0 or InvalidId) && n < partyBuffer.Length)
-                partyBuffer[n++] = m.EntityId;
+        var n = PartyMembers.Ids(partyBuffer);
         if (n == 0 && Services.Objects.LocalPlayer is { } me) partyBuffer[n++] = me.EntityId;
         Combat.SetParty(partyBuffer.AsSpan(0, n));
     }
@@ -560,6 +563,8 @@ public sealed unsafe class FightRecorder : IDisposable
         };
         current.SetParty(Party());
         if (Services.Objects.LocalPlayer is { } self) current.SetSelf(self.EntityId);
+        // Your gear and attributes as the pull begins (since 0.5.0; guarded: none when it can't be read; a pull only followed keeps nothing).
+        if (!follow) current.SetGear(GearReader.Read(data, Diagnostics));
         partyTouched.Clear();
         partyTouching.Clear();
         casting.Clear();
@@ -596,24 +601,25 @@ public sealed unsafe class FightRecorder : IDisposable
     private static bool PartyDown()
     {
         var any = false;
-        foreach (var m in Services.Party)
+        foreach (var m in PartyMembers.Read())
         {
-            if (m.EntityId == 0) continue;
+            // Only those whose HP is known (the party list's, or near).
+            if (m.EntityId is 0 or InvalidId || m.MaxHp == 0) continue;
             any = true;
-            if (m.CurrentHP > 0) return false;
+            if (m.Hp > 0) return false;
         }
         return any ? true : Services.Objects.LocalPlayer is { IsDead: true };
     }
 
-    /// <summary>The party as the game lists it (just you when you're alone).</summary>
+    /// <summary>The party (<see cref="PartyMembers"/>: the party list, a cross-world party's group, or just you), those with a known entity id.</summary>
     private List<Partier> Party()
     {
         var list = new List<Partier>();
-        foreach (var m in Services.Party)
+        foreach (var m in PartyMembers.Read())
         {
-            if (m.EntityId == 0) continue;
-            var (job, role) = data.Job(m.ClassJob.RowId);
-            list.Add(new Partier(m.EntityId, job, role, m.MaxHP));
+            if (m.EntityId is 0 or InvalidId) continue;
+            var (job, role) = data.Job(m.ClassJob);
+            list.Add(new Partier(m.EntityId, job, role, m.MaxHp));
         }
         if (list.Count == 0 && Services.Objects.LocalPlayer is { } me)
         {
@@ -1053,9 +1059,10 @@ public sealed unsafe class FightRecorder : IDisposable
     private void DiagnoseParty(RecordingBuilder b)
     {
         var text = new System.Text.StringBuilder();
-        foreach (var m in Services.Party)
+        text.Append(' ').Append(PartyMembers.From switch { PartyFrom.List => "list", PartyFrom.CrossWorld => "cross-world", _ => "alone" });
+        foreach (var m in PartyMembers.Read())
             if (m.EntityId is not (0 or InvalidId))
-                text.Append(System.FormattableString.Invariant($" [{m.EntityId:X8} {m.Name.TextValue} {data.Job(m.ClassJob.RowId).Item1} #{b.PartyId(m.EntityId) ?? 0}]"));
+                text.Append(System.FormattableString.Invariant($" [{m.EntityId:X8} {m.Name} {data.Job(m.ClassJob).Item1} #{b.PartyId(m.EntityId) ?? 0}]"));
         if (text.Length == 0 && Services.Objects.LocalPlayer is { } me)
             text.Append(System.FormattableString.Invariant($" [{me.EntityId:X8} {me.Name.TextValue} #{b.PartyId(me.EntityId) ?? 0}]"));
         Diagnostics.Write("party", $"you {Services.Objects.LocalPlayer?.EntityId ?? 0:X8}{text}");
@@ -1279,6 +1286,7 @@ public sealed unsafe class FightRecorder : IDisposable
             Guarded(() => Services.ClientState.TerritoryChanged -= OnTerritoryChanged);
             Guarded(() => Combat.Remove(prePull));
             Guarded(() => Combat.Remove(diagSink));
+            Guarded(PartyMembers.Reset);
         }
         finally
         {

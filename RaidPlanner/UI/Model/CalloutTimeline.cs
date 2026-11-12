@@ -7,7 +7,8 @@ namespace RaidPlanner.UI.Model;
 /// <summary>A step on the on-screen callouts: its number (from 0), its big words, its name under them (when they aren't just the name), when it goes off and how soon.</summary>
 /// <param name="At">When its first mechanic goes off, in the plan's own time (its cues' times).</param>
 /// <param name="In">Seconds until then (negative once it has).</param>
-public readonly record struct CalloutLine(int Step, string Big, string? Name, double At, double In)
+/// <param name="You">Since 0.5.0: your spot's planned cooldowns in the step ("You: Reprisal"), or null.</param>
+public readonly record struct CalloutLine(int Step, string Big, string? Name, double At, double In, string? You = null)
 {
     /// <summary>It's going off now (its time has come): shown as "Now" for <see cref="CalloutTimeline.NowFor"/>.</summary>
     public bool Now => In <= 0;
@@ -52,6 +53,22 @@ public sealed class CalloutPlan
 
     /// <summary>The timed steps, soonest first (ties by their number).</summary>
     public int[] Order { get; }
+
+    private string? youSpot;
+    private readonly Dictionary<int, string?> you = new();
+
+    /// <summary>A step's line for your spot (<see cref="PlannedUses.YouLine"/>), made once a step and spot.</summary>
+    public string? You(int step, string? spot)
+    {
+        if (spot == null || step < 0 || step >= Plan.Steps.Count) return null;
+        if (spot != youSpot)
+        {
+            youSpot = spot;
+            you.Clear();
+        }
+        if (!you.TryGetValue(step, out var line)) you[step] = line = PlannedUses.YouLine(Plan.Steps[step], spot);
+        return line;
+    }
 }
 
 /// <summary>
@@ -98,8 +115,11 @@ public static class CalloutTimeline
         return list;
     }
 
-    /// <summary>As above, into <paramref name="into"/> (cleared first), from a plan read once: nothing made but the lines, each frame.</summary>
-    public static void Upcoming(CalloutPlan plan, double clock, double ahead, int count, List<CalloutLine> into)
+    /// <summary>
+    /// As above, into <paramref name="into"/> (cleared first), from a plan read once: nothing made but the lines, each frame. With
+    /// <paramref name="spot"/> (yours), the first line carries your planned cooldowns in its step (<see cref="CalloutLine.You"/>).
+    /// </summary>
+    public static void Upcoming(CalloutPlan plan, double clock, double ahead, int count, List<CalloutLine> into, string? spot = null)
     {
         into.Clear();
         if (count <= 0 || !double.IsFinite(clock)) return;
@@ -109,7 +129,7 @@ public static class CalloutTimeline
             var d = plan.Times[s] - clock;
             if (d < -NowFor || d > ahead) continue;
             var (big, name) = plan.Words[s];
-            into.Add(new CalloutLine(s, big, name, plan.Times[s], d));
+            into.Add(new CalloutLine(s, big, name, plan.Times[s], d, into.Count == 0 ? plan.You(s, spot) : null));
         }
     }
 
@@ -191,6 +211,9 @@ public static class CalloutSample
         ("Tank swap", null, 27), ("Exaflares: middle, step through the first", "Exaflares", 36), ("Raidwide: mitigate", "Starfall", 44),
     };
 
+    /// <summary>The sample's own planned cooldowns, by step (since 0.5.0): what "You: …" says under the first.</summary>
+    private static readonly string?[] You = { null, null, null, "You: Shirk", null, "You: Reprisal \u22123 s" };
+
     /// <summary>How long the sample runs before it starts again (seconds).</summary>
     public const double Loop = 50;
 
@@ -203,7 +226,7 @@ public static class CalloutSample
         {
             var d = Steps[i].At - clock;
             if (d < -CalloutTimeline.NowFor || d > ahead) continue;
-            list.Add(new CalloutLine(i, Steps[i].Big, Steps[i].Name, Steps[i].At, d));
+            list.Add(new CalloutLine(i, Steps[i].Big, Steps[i].Name, Steps[i].At, d, list.Count == 0 ? You[i] : null));
         }
         return list;
     }

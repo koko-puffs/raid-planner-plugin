@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using RaidPlanner.Core;
 
 namespace RaidPlanner.UI.Model;
 
@@ -351,6 +352,9 @@ public sealed record CooldownLine(CooldownMember Who, CooldownSpec Spec, Cooldow
 {
     public bool Ready => ReadyIn <= 0;
 
+    /// <summary>The plan has this member use it soon (since 0.5.0): the use and how long until it (≤ 0: now), or null.</summary>
+    public (PlannedUse Use, double In)? Planned { get; init; }
+
     /// <summary>How far the recharge has come (0–1; 1 ready).</summary>
     public float Fill => Ready ? 1 : Recast > 0 ? (float)Math.Clamp(1 - ReadyIn / Recast, 0, 1) : 0;
 }
@@ -371,8 +375,13 @@ public static class CooldownView
     /// the others' the book's. Without <paramref name="you"/>, yours are left out; with
     /// <paramref name="hideReady"/>, those ready are. One a member's level (synced) doesn't have yet isn't listed.
     /// </summary>
+    /// <remarks>
+    /// Since 0.5.0, with <paramref name="planned"/> (while your plan follows a pull), a row the plan has its member use soon carries
+    /// it (<see cref="CooldownLine.Planned"/>), and is listed even when ready with <paramref name="hideReady"/>.
+    /// </remarks>
     public static List<CooldownLine> Lines(IReadOnlyList<CooldownMember> party, Func<string, CooldownAction?> action, IReadOnlyDictionary<string, bool>? picks,
-        CooldownBook book, Func<string, OwnCooldown?> own, double now, bool you = true, bool hideReady = false)
+        CooldownBook book, Func<string, OwnCooldown?> own, double now, bool you = true, bool hideReady = false,
+        Func<CooldownMember, CooldownSpec, CooldownAction, (PlannedUse Use, double In)?>? planned = null)
     {
         var lines = new List<CooldownLine>();
         foreach (var spec in CooldownCatalog.All)
@@ -400,7 +409,8 @@ public static class CooldownView
                     var s = book.State(m.Id, spec.Key, now, a.Recast, a.Charges);
                     line = new CooldownLine(m, spec, a, s.ReadyIn, s.NextIn, s.Charges, s.MaxCharges, s.Recast, false, s.Learned, s.Seen);
                 }
-                if (hideReady && line.Ready) continue;
+                if (planned?.Invoke(m, spec, a) is { } p) line = line with { Planned = p };
+                if (hideReady && line.Ready && line.Planned == null) continue;
                 lines.Add(line);
             }
         }
@@ -412,6 +422,19 @@ public static class CooldownView
             return c != 0 ? c : SpotOrder(x.Who.Slot).CompareTo(SpotOrder(y.Who.Slot));
         });
         return lines;
+    }
+
+    /// <summary>
+    /// Is a planned cooldown this tracked one (since 0.5.0): its action is the row's, or one of the cooldown's rows
+    /// (<paramref name="keyOf"/>: the Action sheet's ids to the tracker's keys), or its English name is one of the cooldown's.
+    /// </summary>
+    public static bool Matches(PlanCooldown c, CooldownSpec spec, CooldownAction a, Func<uint, string?>? keyOf = null)
+    {
+        if (c.Action != 0 && (c.Action == a.Id || string.Equals(keyOf?.Invoke(c.Action), spec.Key, StringComparison.OrdinalIgnoreCase))) return true;
+        foreach (var n in spec.Names)
+            if (string.Equals(n, c.Name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     /// <summary>The time to ready as the tracker writes it: "Ready", "42" (seconds, rounded up), "1:05".</summary>
@@ -435,7 +458,8 @@ public static class CooldownView
             : !line.Seen ? "not used since the tracker began watching, so taken to be ready"
             : line.Learned ? $"a {Format.Clock(line.Recast)} recast learned from their own uses"
             : $"the game's base recast ({Format.Clock(line.Recast)}) from their last use: an estimate until they use it twice";
-        return $"{line.Action.Name} · {who}. {char.ToUpperInvariant(how[0])}{how[1..]}.";
+        var tip = $"{line.Action.Name} · {who}. {char.ToUpperInvariant(how[0])}{how[1..]}.";
+        return line.Planned is { } p ? $"{tip} {PlannedUses.Tip(p.Use)}" : tip;
     }
 }
 
@@ -480,7 +504,14 @@ public static class CooldownSample
                 var readyIn = Math.Max(0, a.Recast - into);
                 i++;
                 var line = new CooldownLine(m, spec, a, readyIn, readyIn, readyIn > 0 ? 0 : 1, 1, a.Recast, m.IsYou, false, true);
-                if (hideReady && line.Ready) continue;
+                // Since 0.5.0: the plan has the MT's Reprisal coming every half a minute ("planned in 8 s").
+                if (spec.Key == "Reprisal" && m.Slot == "MT")
+                {
+                    var plannedIn = 12 - (t % 30 + 30) % 30;
+                    if (plannedIn >= -PlannedUses.NowFor)
+                        line = line with { Planned = (new PlannedUse(0, new PlanCooldown("sample", "MT", 0, "Reprisal", 0, "for Starfall"), t + plannedIn), plannedIn) };
+                }
+                if (hideReady && line.Ready && line.Planned == null) continue;
                 lines.Add(line);
             }
         }
