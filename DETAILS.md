@@ -516,7 +516,9 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   last death when the recording ran on 20 s or less past it; those of a second or more on a tank and not
   inside one of their casts aimed at that tank, from half a second before it to a second and a half after
   its end; one tank's after another's is a swap: `PullStats.TankSwaps`), `lbUses` (`[deciseconds,
-  action]`, the first 10) and `cd` (the countdown's `end`). Over the size: `ph` goes first, from its latest
+  action]`, the first 10), `cd` (the countdown's `end`) and, since 0.5.0, `ilvl` (the recording player's
+  average item level as the pull began, `gear.ilvl`; only when the gear was read, for the fight page's Personal
+  bests; it goes with `x` when that's trimmed). Over the size: `ph` goes first, from its latest
   phases (a fight with dozens of phases; `phases` keeps every start, so a phase kept still has its end
   there), then the latest hits, then the latest debuffs, then `x`. The hits (who failed what) are what
   Progress is about; with 50 phases, `ph` left room for only about 20 of them.
@@ -1441,7 +1443,8 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   Diagnostics on, logged (`party-read`).
 - **Your gear in the recording.** A recorded pull keeps your job, average item level, each equipped item
   (its row, HQ and name) and your attributes as it began (`gear`), for the site's "Your gear" card and
-  the item level beside your personal bests. Diagnostics logs what was read (`gear`).
+  the item level beside your personal bests. The pull's summary carries the average item level too
+  (`x.ilvl`, only when the gear was read), for the fight page. Diagnostics logs what was read (`gear`).
 - **Planned cooldowns from your plan** (made in the site's editor: who uses which mitigation, shield or
   big heal in a step, and when):
   - the plan window lists the step's, yours washed in ember;
