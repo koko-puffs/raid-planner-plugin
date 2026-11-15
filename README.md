@@ -1,7 +1,7 @@
-# Raid Planner (Dalamud plugin)
+# Raid Codex (Dalamud plugin)
 
 Record the fights you're in, then make them into plans on
-[Koko's Raid Planner](https://www.kokos-tools.com/raid-planner).
+[Koko's Raid Codex](https://www.kokos-tools.com/raid-codex).
 
 > **Status: new and untested in the game.** It compiles against Dalamud 15 (API 15) and its
 > recording, file and site-link code is unit-tested, as is the site's side that turns a pull into
@@ -18,10 +18,10 @@ Record the fights you're in, then make them into plans on
   and potion your party used (the moments before the pull too), raises, interrupts and stuns, whom the
   boss was on and its enmity list, MP, barriers and the limit break gauge, for the site's replay,
   timelines and events; and your own gear and stats as the pull began. Names are never kept, only jobs.
-- **Sends a pull to the Raid Planner** with one press, once you've linked your account. It waits
-  on the planner's front page under _From the game_; _Make a plan_ turns it into steps, one for
+- **Sends a pull to the Raid Codex** with one press, once you've linked your account. It waits
+  on the Raid Codex's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
-- **Or saves it as a file** to import on the site yourself (Import, on the planner's front page).
+- **Or saves it as a file** to import on the site yourself (Import, on the Raid Codex's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
 - **Shows your plan in the duty.** A small window with the step's callout, its board and its notes,
   which moves along with the pull by itself, and who uses which cooldown in it. Each step said in chat
@@ -44,14 +44,14 @@ Record the fights you're in, then make them into plans on
 1. In game, `/xlsettings` → **Experimental** → **Custom Plugin Repositories** → add
    `https://www.kokos-tools.com/dalamud/repo.json` (Koko's repository: already there if you use
    Housing Studio) → tick it → **Save and Close**.
-2. `/xlplugins` → **All Plugins** → **Raid Planner** → **Install**.
-3. `/raidplan` opens it.
+2. `/xlplugins` → **All Plugins** → **Raid Codex** → **Install**.
+3. `/raidcodex` opens it (`/raidplan`, from when it was Raid Planner, still works).
 
 ## Using it
 
 1. Go into a duty and fight. The server info bar shows **● Rec 2:31** while a pull is recorded.
-2. `/raidplan`: the latest pull is at the top. **Send to Raid Planner** (link your account first:
-   Settings → Account, with a token from the site's Settings → Raid Planner → In-game plugin), or
+2. `/raidcodex`: the latest pull is at the top. **Send to Raid Codex** (link your account first:
+   Settings → Account, with a token from the site's Settings → Raid Codex → In-game plugin), or
    **Save as file**.
 3. On the site: _From the game_ → **Make a plan**. Pick where the party goes (where they stood,
    standard spots, or nowhere), check the arena, choose the steps, and it opens in the editor.
@@ -59,13 +59,13 @@ Record the fights you're in, then make them into plans on
 In a duty you've made a plan for, its window opens by itself. Move it where you like and lock it
 there; its list button picks any of your plans.
 
-`/raidplan stop` ends the pull being recorded (and keeps it). `/raidplan settings` opens Settings.
-`/raidplan plan` shows the plan window; `/raidplan next` and `/raidplan prev` move its step.
-`/raidplan meter` shows or hides the meter; `/raidplan meter unlock` gives it the mouse back;
-`/raidplan meter preview` shows a sample fight in it.
-`/raidplan cooldowns` shows or hides the cooldown tracker, `/raidplan callouts` the on-screen
+`/raidcodex stop` ends the pull being recorded (and keeps it). `/raidcodex settings` opens Settings.
+`/raidcodex plan` shows the plan window; `/raidcodex next` and `/raidcodex prev` move its step.
+`/raidcodex meter` shows or hides the meter; `/raidcodex meter unlock` gives it the mouse back;
+`/raidcodex meter preview` shows a sample fight in it.
+`/raidcodex cooldowns` shows or hides the cooldown tracker, `/raidcodex callouts` the on-screen
 callouts (`unlock`, `preview` or `settings` after either).
-`/raidplan send last` sends the newest pull.
+`/raidcodex send last` sends the newest pull.
 
 ### Settings
 
@@ -76,7 +76,7 @@ callouts (`unlock`, `preview` or `settings` after either).
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
   working out your own strats. _Smoother replays_ (off) keeps their places four times a second.
 - **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.
-- **Send each pull**: off. On, each pull is sent to the Raid Planner by itself.
+- **Send each pull**: off. On, each pull is sent to the Raid Codex by itself.
 - **Track my progress**: on. How far each pull got, who died to what, the boss's HP left and each
   spot's damage, healing and fails (spots and jobs, no names).
 - **Show it in the server info bar**: on.

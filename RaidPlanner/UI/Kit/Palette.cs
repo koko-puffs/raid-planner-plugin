@@ -4,7 +4,7 @@ using Dalamud.Bindings.ImGui;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// Ready Check's tokens, as the planner has them (the site's src/features/raid-planner/styles/ready.css,
+/// Ready Check's tokens, as the Raid Codex has them (the site's src/features/raid-codex/styles/ready.css,
 /// the mock-ups' assets/rp.css), each named for its CSS variable. Basalt grounds and hairlines of
 /// white; ember is the telegraph (what's live, where you are, the one thing a screen is for);
 /// ready green and danger red say how something went; the board's colours (roles, intents) are only

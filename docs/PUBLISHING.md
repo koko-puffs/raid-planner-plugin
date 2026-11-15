@@ -1,4 +1,4 @@
-# Publishing the Raid Planner plugin
+# Publishing the Raid Codex plugin
 
 How to turn this folder into its own repository, release it, and let players install it from a
 custom plugin repository.
@@ -73,8 +73,8 @@ Players (and you, for testing):
    `https://www.kokos-tools.com/dalamud/repo.json` → press **+**
    → make sure it's ticked (enabled) → **Save and Close**. (If you added this plugin's own
    `raw.githubusercontent.com/…/repo.json` earlier, remove that one, or Dalamud lists the plugin twice.)
-3. `/xlplugins` → **All Plugins** → search **Raid Planner** → **Install**.
-4. `/raidplan` opens it.
+3. `/xlplugins` → **All Plugins** → search **Raid Codex** → **Install**.
+4. `/raidcodex` opens it (`/raidplan` still works).
 
 For testing a build before releasing: Dalamud Settings → Experimental → **Dev Plugin Locations**, add
 the full path to `RaidPlanner/bin/x64/Debug/RaidPlanner.dll`, then enable it under Dev Tools →

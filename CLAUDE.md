@@ -15,5 +15,5 @@
 - DETAILS.md is the full reference: what's recorded and how, the file, the window, the code's
   layout, and the release notes. Update it when you change how something works.
 - The recording's format is shared with the site (kokos-tools,
-  `src/features/raid-planner/model/recording.ts`): change both together, and the site's test
+  `src/features/raid-codex/model/recording.ts`): change both together, and the site's test
   fixture (`model/__fixtures__/sample.raidrec.json`, written from `RecordingTests.Sample`).

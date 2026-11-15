@@ -12,7 +12,7 @@ public sealed record Partier(ulong Key, string Job, byte Role, long MaxHp = 0);
 /// The plan's spots for a party: tanks MT then OT, healers H1 then H2, melee M1 then M2, ranged R1
 /// then R2, in the party list's order; a fourth melee takes a free ranged spot (and the other way
 /// round), and anyone past the eight is P9, P10… So a light party is MT, H1 and two of the DPS
-/// spots, as the planner's own plans have it.
+/// spots, as the Raid Codex's own plans have it.
 /// </summary>
 public static class Roles
 {

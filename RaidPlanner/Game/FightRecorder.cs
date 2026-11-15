@@ -250,7 +250,7 @@ public sealed unsafe class FightRecorder : IDisposable
     {
         if (DateTime.UtcNow - listenerFailedAt < TimeSpan.FromSeconds(10)) return;
         listenerFailedAt = DateTime.UtcNow;
-        Services.Log.Error(ex, "Raid Planner's plan couldn't follow the pull");
+        Services.Log.Error(ex, "Raid Codex's plan couldn't follow the pull");
     }
 
     private void Tell(Action? listeners)
@@ -275,7 +275,7 @@ public sealed unsafe class FightRecorder : IDisposable
     private static bool InDuty =>
         Services.Condition[ConditionFlag.BoundByDuty] || Services.Condition[ConditionFlag.BoundByDuty56] || Services.Condition[ConditionFlag.BoundByDuty95];
 
-    /// <summary>Ends the pull being recorded now and keeps it (the window's Stop, /raidplan stop).</summary>
+    /// <summary>Ends the pull being recorded now and keeps it (the window's Stop, /raidcodex stop).</summary>
     public void Stop()
     {
         if (Recording) stopAsked = true;
@@ -300,7 +300,7 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't handle a game event");
+            Services.Log.Error(ex, "Raid Codex couldn't handle a game event");
         }
     }
 
@@ -373,7 +373,7 @@ public sealed unsafe class FightRecorder : IDisposable
             // A frame that can't be read is lost, not the pull, nor the game (and said once in a while, not every frame).
             if (DateTime.UtcNow - tickFailedAt > TimeSpan.FromSeconds(10))
             {
-                Services.Log.Error(ex, "Raid Planner couldn't read this frame");
+                Services.Log.Error(ex, "Raid Codex couldn't read this frame");
                 tickFailedAt = DateTime.UtcNow;
             }
         }
@@ -396,7 +396,7 @@ public sealed unsafe class FightRecorder : IDisposable
         {
             if (DateTime.UtcNow - tickFailedAt > TimeSpan.FromSeconds(10))
             {
-                Services.Log.Error(ex, "Raid Planner couldn't set its hooks");
+                Services.Log.Error(ex, "Raid Codex couldn't set its hooks");
                 tickFailedAt = DateTime.UtcNow;
             }
         }
@@ -501,7 +501,7 @@ public sealed unsafe class FightRecorder : IDisposable
             // A frame that can't be read is lost, never the end of the pull.
             if (DateTime.UtcNow - sampleFailedAt > TimeSpan.FromSeconds(10))
             {
-                Services.Log.Error(ex, "Raid Planner couldn't read this frame");
+                Services.Log.Error(ex, "Raid Codex couldn't read this frame");
                 sampleFailedAt = DateTime.UtcNow;
             }
         }
@@ -690,7 +690,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Services.Log.Warning(ex, "Raid Planner couldn't sum the pull up");
+                    Services.Log.Warning(ex, "Raid Codex couldn't sum the pull up");
                 }
                 if (disposed) return;
                 Services.Framework.RunOnFrameworkThread(() => Guarded(() =>
@@ -703,7 +703,7 @@ public sealed unsafe class FightRecorder : IDisposable
             }
             catch (Exception ex)
             {
-                Services.Log.Error(ex, "Raid Planner couldn't save the pull");
+                Services.Log.Error(ex, "Raid Codex couldn't save the pull");
                 if (!disposed) Services.Framework.RunOnFrameworkThread(() => NotKept = ("The pull couldn't be saved (see /xllog).", DateTime.UtcNow));
             }
         }));
@@ -1323,7 +1323,7 @@ public sealed unsafe class FightRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't save the pull while unloading");
+            Services.Log.Error(ex, "Raid Codex couldn't save the pull while unloading");
         }
     }
 }

@@ -578,7 +578,7 @@ public class FightLengthTests
 }
 
 /// <summary>
-/// The site's test fixture (<c>kokos-tools/src/features/raid-planner/model/__fixtures__/sample.raidrec.json</c>)
+/// The site's test fixture (<c>kokos-tools/src/features/raid-codex/model/__fixtures__/sample.raidrec.json</c>)
 /// is the sample, written by this code: with <c>RP_FIXTURE_OUT</c> set to its path, this writes it.
 /// </summary>
 public class FixtureTests

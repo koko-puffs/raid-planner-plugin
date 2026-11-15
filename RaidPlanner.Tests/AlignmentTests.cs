@@ -11,7 +11,7 @@ namespace RaidPlanner.Tests;
 /// parser, its listeners the meter's session and the recording's sink, the recorder's builder and the
 /// game's status lists read each frame for both), so its recording, its summary and the meter's numbers
 /// after the fight all come from one stream of events. They're the site's fixtures
-/// (<c>kokos-tools/src/features/raid-planner/model/__fixtures__/align.raidrec.json</c>,
+/// (<c>kokos-tools/src/features/raid-codex/model/__fixtures__/align.raidrec.json</c>,
 /// <c>align.summary.json</c> and <c>align.meter.json</c>; with <c>RP_ALIGN_OUT</c> set to that folder,
 /// this writes them), and the site's <c>alignment.spec.ts</c> checks that its numbers for the recording
 /// (Review) and for the summary (Progress) are the meter's. Since 0.4.0 the pull also carries every new table, event

@@ -36,7 +36,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>"● Rec 2:31" in the server info bar while a pull is recorded.</summary>
     public bool ShowInBar { get; set; } = true;
 
-    /// <summary>Each kept pull is sent to the Raid Planner by itself (when linked).</summary>
+    /// <summary>Each kept pull is sent to the Raid Codex by itself (when linked).</summary>
     public bool SendEachPull { get; set; }
 
     /// <summary>Each kept pull's summary (how far it got, who died to what) goes to the site's progress tracker (when linked).</summary>
@@ -130,7 +130,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Where the meter shows the limit break gauge (added in 0.4.0): in its head, in its foot, or not at all.</summary>
     public GaugePlace MeterGauge { get; set; } = GaugePlace.Foot;
 
-    // The party cooldown tracker (0.4.0; Settings → Cooldowns, /raidplan cooldowns).
+    // The party cooldown tracker (0.4.0; Settings → Cooldowns, /raidcodex cooldowns).
 
     /// <summary>The tracker's window: shown, where, lock, click-through, grows, anchor, compact, background, width. Off at first.</summary>
     public OverlaySettings Cooldowns { get; set; } = new() { Show = false, Background = 0.6f };
@@ -147,7 +147,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The limit break gauge as the tracker's last row (when the party has one).</summary>
     public bool CooldownsGauge { get; set; } = true;
 
-    // The on-screen callouts (0.4.0; Settings → Plan window, /raidplan callouts).
+    // The on-screen callouts (0.4.0; Settings → Plan window, /raidcodex callouts).
 
     /// <summary>The callouts' window: shown (while the plan follows a pull), lock, click-through, grows, anchor, compact, background, width. On at first.</summary>
     public OverlaySettings CalloutOverlay { get; set; } = new() { Show = true, Everywhere = true, Background = 0.45f };
@@ -170,7 +170,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();
 
-    /// <summary>The token from the site (Settings → Raid Planner → In-game plugin) that sends pulls to your account. Never logged.</summary>
+    /// <summary>The token from the site (Settings → Raid Codex → In-game plugin) that sends pulls to your account. Never logged.</summary>
     public string SiteToken { get; set; } = string.Empty;
 
     public void Save() => Services.PluginInterface.SavePluginConfig(this);

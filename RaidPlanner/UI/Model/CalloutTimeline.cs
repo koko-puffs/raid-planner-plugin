@@ -200,7 +200,7 @@ public sealed class CalloutSounds
 }
 
 /// <summary>
-/// A sample of the on-screen callouts (Settings → Plan window, `/raidplan callouts preview`), to
+/// A sample of the on-screen callouts (Settings → Plan window, `/raidcodex callouts preview`), to
 /// place and size them without a pull: made-up steps a few seconds apart, counting down and looping.
 /// </summary>
 public static class CalloutSample

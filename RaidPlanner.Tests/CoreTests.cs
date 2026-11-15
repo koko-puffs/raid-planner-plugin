@@ -637,6 +637,19 @@ public class SiteLinkTests
     private const string Token = "rpp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ";
 
     [Fact]
+    public void Site_links_are_built_on_raid_codex()
+    {
+        // 0.5.1: the site's tool moved to /raid-codex (the old /raid-planner addresses redirect).
+        Assert.Equal("https://www.kokos-tools.com/raid-codex", SiteLink.CodexUrl);
+        Assert.Equal("https://www.kokos-tools.com/raid-codex?settings=raid-plugin", SiteLink.TokensUrl);
+        Assert.Equal("https://www.kokos-tools.com/raid-codex?from-game=a%20b", SiteLink.OpenUrl("a b"));
+        Assert.Equal("https://www.kokos-tools.com/raid-codex/plan/p%2F1/review?pull=s%261",
+            SiteLink.ReviewUrl("p/1", "s&1"));
+        foreach (var url in new[] { SiteLink.CodexUrl, SiteLink.TokensUrl, SiteLink.OpenUrl("x"), SiteLink.ReviewUrl("p", "s") })
+            Assert.DoesNotContain("raid-planner", url);
+    }
+
+    [Fact]
     public void Token_shape()
     {
         Assert.Equal(47, Token.Length);
@@ -674,8 +687,8 @@ public class SiteLinkTests
     {
         var raw = SiteLink.Read(HttpStatusCode.BadRequest, "{\"message\":\"canceling statement due to statement timeout\"}");
         Assert.DoesNotContain("statement", raw.Why);
-        var full = SiteLink.Read(HttpStatusCode.BadRequest, "{\"message\":\"Your Raid Planner is full.\",\"hint\":\"full\"}");
-        Assert.Equal("Your Raid Planner is full.", full.Why);
+        var full = SiteLink.Read(HttpStatusCode.BadRequest, "{\"message\":\"Your Raid Codex is full.\",\"hint\":\"full\"}");
+        Assert.Equal("Your Raid Codex is full.", full.Why);
     }
 
     [Fact]

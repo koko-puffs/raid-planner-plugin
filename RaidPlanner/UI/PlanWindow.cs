@@ -133,7 +133,7 @@ public sealed class PlanWindow : Window
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
             {
                 drawFailedAt = DateTime.UtcNow;
-                Services.Log.Error(ex, "Raid Planner's plan window couldn't draw");
+                Services.Log.Error(ex, "Raid Codex's plan window couldn't draw");
             }
         }
         finally
@@ -273,7 +273,7 @@ public sealed class PlanWindow : Window
         }
 
         // The footer: previous, where you are, next. At its smallest there's none (as the mock-up draws
-        // it: the callout, the board and the notes' line take the room; /raidplan next and prev still move it).
+        // it: the callout, the board and the notes' line take the room; /raidcodex next and prev still move it).
         var footH = small ? 0 : S(HSm);
         var footY = bottom - footH;
 
@@ -539,7 +539,7 @@ public sealed class PlanWindow : Window
                     plans.Retry();
                     break;
                 case EmptyKind.NoPlans:
-                    Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+                    Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
                     break;
                 default:
                     ImGui.OpenPopup(PlansMenu);

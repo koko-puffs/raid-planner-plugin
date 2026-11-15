@@ -464,7 +464,7 @@ public static class CooldownView
 }
 
 /// <summary>
-/// A sample of the tracker (Settings → Cooldowns, `/raidplan cooldowns preview`), to place and size
+/// A sample of the tracker (Settings → Cooldowns, `/raidcodex cooldowns preview`), to place and size
 /// it without a party: the meter's sample party (PLD, DRK, WHM, SCH, DRG, NIN, BRD, SMN) with their
 /// default cooldowns, each used now and then, recharging, coming back. Made-up and shown only under a Preview tag.
 /// </summary>

@@ -22,7 +22,7 @@ public sealed record SendResult(string? Id, string? Why, bool TokenRefused = fal
 }
 
 /// <summary>
-/// Sending a pull to your Raid Planner, with the token made on the site (Settings → Raid Planner
+/// Sending a pull to your Raid Codex, with the token made on the site (Settings → Raid Codex
 /// → In-game plugin), as Housing Studio's plugin sends a house. The plugin calls the site's
 /// database function <c>rp_plugin_send</c> with the site's publishable key, as the site itself
 /// would; the token says whose account it goes to, and it waits there under From the game until
@@ -35,11 +35,11 @@ public static class SiteLink
 
     public const string PublishableKey = "sb_publishable_A-5zpDIk5O6xyKTicipcuA_M3J0sGVP";
 
-    /// <summary>The Raid Planner.</summary>
-    public const string PlannerUrl = "https://www.kokos-tools.com/raid-planner";
+    /// <summary>The Raid Codex.</summary>
+    public const string CodexUrl = "https://www.kokos-tools.com/raid-codex";
 
-    /// <summary>Where a token is made: Settings → Raid Planner → In-game plugin.</summary>
-    public const string TokensUrl = "https://www.kokos-tools.com/raid-planner?settings=raid-plugin";
+    /// <summary>Where a token is made: Settings → Raid Codex → In-game plugin.</summary>
+    public const string TokensUrl = "https://www.kokos-tools.com/raid-codex?settings=raid-plugin";
 
     /// <summary>How long a send waits for the site: half a minute, and a quarter more for each MB (a slow upload).</summary>
     public static TimeSpan TimeoutFor(int bytes) => TimeSpan.FromSeconds(30 + 15.0 * bytes / 1_000_000);
@@ -206,8 +206,12 @@ public static class SiteLink
         : token.Length <= 8 ? new string('•', 8)
         : (token.StartsWith("rpp_", StringComparison.Ordinal) ? "rpp_" : string.Empty) + new string('•', 8) + token[^4..];
 
-    /// <summary>Where a sent pull opens: the planner, with it ready to make into a plan.</summary>
-    public static string OpenUrl(string id) => $"{PlannerUrl}?from-game={Uri.EscapeDataString(id)}";
+    /// <summary>Where a sent pull opens: the Raid Codex, with it ready to make into a plan.</summary>
+    public static string OpenUrl(string id) => $"{CodexUrl}?from-game={Uri.EscapeDataString(id)}";
+
+    /// <summary>A sent pull in Review on a plan (Open in Review, when the plugin has that duty's plan).</summary>
+    public static string ReviewUrl(string planId, string sentId) =>
+        $"{CodexUrl}/plan/{Uri.EscapeDataString(planId)}/review?pull={Uri.EscapeDataString(sentId)}";
 
     public static bool IsUuid(string? id) => id != null && Uuid.IsMatch(id);
 
@@ -256,7 +260,7 @@ public static class SiteLink
             var id = node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
             return IsUuid(id)
                 ? new SendResult(id, null)
-                : new SendResult(null, "The site answered, but not with the pull. Look in the Raid Planner before sending it again.");
+                : new SendResult(null, "The site answered, but not with the pull. Look in the Raid Codex before sending it again.");
         }
 
         string? message = null, hint = null;
@@ -288,13 +292,13 @@ public static class SiteLink
         n is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
 
     /// <summary>
-    /// Sends a pull to the token's owner's Raid Planner and says how it went; never throws (a lost
+    /// Sends a pull to the token's owner's Raid Codex and says how it went; never throws (a lost
     /// connection or the wait running out is said in words). The token goes in the body only.
     /// </summary>
     public static async Task<SendResult> SendAsync(HttpClient http, string token, string name, string recordingJson, string? clientId = null,
         CancellationToken cancel = default)
     {
-        if (!LooksRight(token)) return new SendResult(null, "That isn't a Raid Planner token. Link again in Settings.", true);
+        if (!LooksRight(token)) return new SendResult(null, "That isn't a Raid Codex token. Link again in Settings.", true);
         if (Fit(recordingJson) is not { } fit)
             return new SendResult(null, "This pull is too big to send. Save it as a file instead, and import it on the site.");
         string body;
@@ -319,7 +323,7 @@ public static class SiteLink
         }
         catch (OperationCanceledException) when (!cancel.IsCancellationRequested)
         {
-            return new SendResult(null, "The site didn't answer in time. Look in the Raid Planner before sending it again.");
+            return new SendResult(null, "The site didn't answer in time. Look in the Raid Codex before sending it again.");
         }
         catch (OperationCanceledException)
         {

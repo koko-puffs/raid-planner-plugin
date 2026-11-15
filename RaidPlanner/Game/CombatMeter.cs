@@ -115,7 +115,7 @@ public sealed unsafe class CombatMeter : IDisposable
     {
         if (DateTime.UtcNow - failedAt < TimeSpan.FromSeconds(10)) return;
         failedAt = DateTime.UtcNow;
-        Services.Log.Error(ex, "Raid Planner's meter couldn't read this frame");
+        Services.Log.Error(ex, "Raid Codex's meter couldn't read this frame");
     }
 
     /// <summary>Every frame: <see cref="Update"/>, guarded (not through <see cref="Guarded"/>, which would make a delegate each frame).</summary>

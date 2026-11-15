@@ -56,7 +56,7 @@ public sealed class Uploads : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't send a pull's summary");
+            Services.Log.Error(ex, "Raid Codex couldn't send a pull's summary");
         }
     }
 
@@ -102,7 +102,7 @@ public sealed class Uploads : IDisposable
                 return;
             }
             // Refused for good (turned off, the site not ready for it): this one isn't sent.
-            Services.Log.Information($"Raid Planner's pull summary wasn't taken: {r.Why}");
+            Services.Log.Information($"Raid Codex's pull summary wasn't taken: {r.Why}");
             queue.Answered(true);
             backoff.Failed(DateTime.UtcNow);
         });
@@ -161,7 +161,7 @@ public sealed class Uploads : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Services.Log.Error(ex, "Raid Planner couldn't use the site's answer");
+                        Services.Log.Error(ex, "Raid Codex couldn't use the site's answer");
                     }
                 });
             }

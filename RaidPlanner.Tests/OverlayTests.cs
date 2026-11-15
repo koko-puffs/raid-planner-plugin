@@ -513,7 +513,7 @@ public class OverlayLayoutTests
     }
 }
 
-/// <summary>/raidplan's words (UI/Model/Commands.cs).</summary>
+/// <summary>/raidcodex's words (UI/Model/Commands.cs).</summary>
 public class CommandWordsTests
 {
     [Theory]
@@ -530,4 +530,26 @@ public class CommandWordsTests
     [InlineData(null, "")]
     public void Commands_read_the_same_however_they_are_typed(string? args, string read) =>
         Assert.Equal(read, CommandWords.Normalize(args));
+
+    [Fact]
+    public void Raidcodex_is_the_command_and_raidplan_still_works()
+    {
+        // 0.5.1: Raid Codex (was Raid Planner). Both are registered, the new one first; each does the same.
+        Assert.Equal("/raidcodex", CommandWords.Main);
+        Assert.Equal("/raidplan", CommandWords.Old);
+        Assert.Equal(new[] { "/raidcodex", "/raidplan" }, CommandWords.Names);
+        Assert.Equal(CommandWords.Names.Length, CommandWords.Names.Distinct().Count());
+        // The main one's help names the new command and says the old one still works.
+        var main = CommandWords.HelpFor("/raidcodex");
+        Assert.StartsWith("Open Raid Codex.", main);
+        Assert.Contains("/raidcodex plan", main);
+        Assert.Contains("/raidplan still works", main);
+        Assert.DoesNotContain("Raid Planner", main);
+        Assert.DoesNotContain("/raidplan", main.Replace("/raidplan still works", ""));
+        // The old one's points at the new one.
+        var old = CommandWords.HelpFor("/raidplan");
+        Assert.Contains("/raidcodex", old);
+        Assert.Contains("/raidplan still works", old);
+        Assert.NotEqual(main, old);
+    }
 }

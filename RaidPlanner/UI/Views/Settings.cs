@@ -73,10 +73,10 @@ public sealed partial class MainWindow
         screen = Screen.Settings;
     }
 
-    /// <summary>Opens Settings on the meter's tab (the meter's Settings, /raidplan meter settings).</summary>
+    /// <summary>Opens Settings on the meter's tab (the meter's Settings, /raidcodex meter settings).</summary>
     public void ShowMeterSettings() => ShowSettingsOn(SettingsTab.Meter);
 
-    /// <summary>Opens Settings on a tab (/raidplan cooldowns settings, /raidplan callouts settings).</summary>
+    /// <summary>Opens Settings on a tab (/raidcodex cooldowns settings, /raidcodex callouts settings).</summary>
     public void ShowSettingsOn(SettingsTab tab)
     {
         Dismiss();
@@ -189,8 +189,8 @@ public sealed partial class MainWindow
             // Nothing is deleted on a click: the next pull kept lets the extra ones go.
             store.Keep = config.Keep;
         }
-        if (SwitchRow(i++, "##send-each", "Send each pull", "Each kept pull goes to your Raid Planner by itself", config.SendEachPull,
-                "Each pull worth keeping is sent to your Raid Planner as soon as it's kept, so it's waiting under From the game. Off, you send the ones you want.",
+        if (SwitchRow(i++, "##send-each", "Send each pull", "Each kept pull goes to your Raid Codex by itself", config.SendEachPull,
+                "Each pull worth keeping is sent to your Raid Codex as soon as it's kept, so it's waiting under From the game. Off, you send the ones you want.",
                 off: !Linked, linkFirst: !Linked))
         {
             config.SendEachPull = !config.SendEachPull;
@@ -229,7 +229,7 @@ public sealed partial class MainWindow
         Kit.BeginPanel("##set-plans", 0, 0, 0);
         var i = 0;
         if (SwitchRow(i++, "##plan-show", "Show my plan in duties", "Its window opens in a duty you have a plan for", config.ShowPlanInDuties,
-                "In a duty you've made a plan for on the site, its window opens: the step, its board and its notes, moving along with the pull. /raidplan plan shows it anywhere."))
+                "In a duty you've made a plan for on the site, its window opens: the step, its board and its notes, moving along with the pull. /raidcodex plan shows it anywhere."))
         {
             config.ShowPlanInDuties = !config.ShowPlanInDuties;
             config.Save();
@@ -256,7 +256,7 @@ public sealed partial class MainWindow
         if (ButtonRow(i++, "##plan-window", "Plan window", plans.Plan is { } p ? p.Name : "Your plan, anywhere on screen",
                 PlanWindowOpen?.Invoke() == true ? "Hide" : "Show", Btn.Outline))
             TogglePlanWindow?.Invoke();
-        if (ButtonRow(i, "##roster", "Send my party to my roster", "Their names, by spot, to your Raid Planner",
+        if (ButtonRow(i, "##roster", "Send my party to my roster", "Their names, by spot, to your Raid Codex",
                 uploads.RosterSending ? "Sending…" : "Send", Btn.Outline, !Linked || uploads.RosterSending, null,
                 "Your party's names go to your roster on the site, each in their spot (MT, OT, H1…), so your plans show who stands where. It replaces the roster there. Only when you press this.",
                 off: !Linked, linkFirst: !Linked))
@@ -292,7 +292,7 @@ public sealed partial class MainWindow
         Kit.Gap(10);
         Kit.BeginPanel("##set-callouts", 0, 0, 0);
         var i = 0;
-        if (SwitchRow(i++, "##co-show", "Show the callouts", "While your plan follows a pull. /raidplan callouts too", o.Show,
+        if (SwitchRow(i++, "##co-show", "Show the callouts", "While your plan follows a pull. /raidcodex callouts too", o.Show,
                 "While your plan follows a pull, its next steps' callouts sit over the fight, the next one big, each counting down to when it goes off (the plan's own times, kept to the fight by its cues).",
                 pad: 10))
         {
@@ -410,7 +410,7 @@ public sealed partial class MainWindow
         var o = config.Cooldowns;
         Kit.BeginPanel("##set-cooldowns", 0, 0, 0);
         var i = 0;
-        if (SwitchRow(i++, "##cd-show", "Show the tracker", "The party's cooldowns over the fight. /raidplan cooldowns too", o.Show,
+        if (SwitchRow(i++, "##cd-show", "Show the tracker", "The party's cooldowns over the fight. /raidcodex cooldowns too", o.Show,
                 "Small rows of your party's raid buffs, mitigation and the rest you pick below, each with the time until it's ready: yours from the game's own timers, the others' worked out from when they used them.",
                 pad: 10))
         {
@@ -486,7 +486,7 @@ public sealed partial class MainWindow
         var meter = Meter?.Invoke();
         Kit.BeginPanel("##set-meter", 0, 0, 0);
         var i = 0;
-        if (SwitchRow(i++, "##meter-show", "Show the meter", "Its own window, over the game. /raidplan meter too", config.ShowMeter,
+        if (SwitchRow(i++, "##meter-show", "Show the meter", "Its own window, over the game. /raidcodex meter too", config.ShowMeter,
                 "Damage, healing, damage taken and deaths for your party, worked out in the game from what it already tells the plugin. Its numbers and names stay in the plugin.", pad: 10))
         {
             config.ShowMeter = !config.ShowMeter;
@@ -527,7 +527,7 @@ public sealed partial class MainWindow
             config.Save();
         }
         if (SwitchRow(i++, "##meter-through", "Click-through when locked", "The mouse goes through to the game", config.MeterClickThrough,
-                "The meter doesn't take the mouse at all while it's locked: /raidplan meter unlock, or this, gives it back.", sub: true, pad: 10, off: !config.MeterLocked))
+                "The meter doesn't take the mouse at all while it's locked: /raidcodex meter unlock, or this, gives it back.", sub: true, pad: 10, off: !config.MeterLocked))
         {
             config.MeterClickThrough = !config.MeterClickThrough;
             config.Save();
@@ -616,9 +616,9 @@ public sealed partial class MainWindow
     {
         Kit.BeginPanel("##set-account", 0, 0, 0);
         DrawAccountRow(0);
-        if (ButtonRow(1, "##planner", "The Raid Planner", "Make plans from your pulls, draw your strats, present them", "Open", Btn.Outline, false, null,
-                "kokos-tools.com/raid-planner", icon: Icon.ExternalLink))
-            Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+        if (ButtonRow(1, "##codex", "The Raid Codex", "Make plans from your pulls, draw your strats, present them", "Open", Btn.Outline, false, null,
+                "kokos-tools.com/raid-codex", icon: Icon.ExternalLink))
+            Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
         Kit.EndPanel();
         Kit.Gap(12);
         Txt.Note("Anyone with the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");

@@ -14,16 +14,16 @@ using RaidPlanner.UI.Model;
 namespace RaidPlanner;
 
 /// <summary>
-/// Raid Planner: records the fights you're in and sends them to Koko's Raid Planner, where they
-/// become plans, and shows your plans in the game. /raidplan opens the window; /raidplan stop ends
-/// the pull being recorded; /raidplan settings opens Settings; /raidplan plan shows the plan
-/// window, /raidplan next and prev move its step; /raidplan send last sends the newest pull;
-/// /raidplan cooldowns shows the party cooldown tracker, /raidplan callouts the on-screen callouts.
+/// Raid Codex: records the fights you're in and sends them to Koko's Raid Codex, where they
+/// become plans, and shows your plans in the game. /raidcodex opens the window; /raidcodex stop ends
+/// the pull being recorded; /raidcodex settings opens Settings; /raidcodex plan shows the plan
+/// window, /raidcodex next and prev move its step; /raidcodex send last sends the newest pull;
+/// /raidcodex cooldowns shows the party cooldown tracker, /raidcodex callouts the on-screen callouts.
+/// /raidplan (its name before 0.5.1) still does all of it.
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
-    private const string Command = "/raidplan";
-    private const string BarTitle = "Raid Planner";
+    private const string BarTitle = "Raid Codex";
 
     private readonly Configuration config;
     private readonly RecordingStore store;
@@ -77,7 +77,7 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 catch (Exception ex)
                 {
-                    Services.Log.Error(ex, "Raid Planner couldn't read its recordings");
+                    Services.Log.Error(ex, "Raid Codex couldn't read its recordings");
                 }
             });
             var data = new GameData();
@@ -152,13 +152,9 @@ public sealed class Plugin : IDalamudPlugin
             // on-screen callouts (they need the plan's clock, which only a followed pull runs).
             recorder.FollowWanted = () => (planWindow.IsOpen || config.CalloutOverlay.Show) && plans.ForThisDuty;
 
-            Services.Commands.AddHandler(Command, new CommandInfo(OnCommand)
-            {
-                HelpMessage = "Open Raid Planner. /raidplan plan shows your plan, /raidplan next and /raidplan prev move its step; "
-                    + "/raidplan meter shows or hides the meter, /raidplan meter unlock gives it the mouse back, /raidplan meter preview shows a sample fight in it; "
-                    + "/raidplan cooldowns shows or hides the party cooldown tracker, /raidplan callouts the on-screen callouts (each with unlock, preview and settings after it); "
-                    + "/raidplan send last sends the newest pull; /raidplan stop ends the pull being recorded (and keeps it); /raidplan settings opens Settings.",
-            });
+            // /raidcodex, and /raidplan as before: each does the same (CommandWords.Names).
+            foreach (var name in CommandWords.Names)
+                Services.Commands.AddHandler(name, new CommandInfo(OnCommand) { HelpMessage = CommandWords.HelpFor(name) });
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
             Services.PluginInterface.UiBuilder.OpenMainUi += window.ShowMain;
             Services.PluginInterface.UiBuilder.OpenConfigUi += window.ShowSettings;
@@ -179,7 +175,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             case "stop":
                 if (recorder.Recording) recorder.Stop();
-                else Services.Log.Information("Raid Planner: nothing is being recorded");
+                else Services.Log.Information("Raid Codex: nothing is being recorded");
                 break;
             case "settings":
             case "config":
@@ -258,7 +254,7 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    /// <summary>/raidplan cooldowns, /raidplan callouts: shown or hidden (their setting), said in chat; a sample showing stops.</summary>
+    /// <summary>/raidcodex cooldowns, /raidcodex callouts: shown or hidden (their setting), said in chat; a sample showing stops.</summary>
     private void Toggle(OverlaySettings o, OverlayWindow w)
     {
         w.Previewing = false;
@@ -292,12 +288,12 @@ public sealed class Plugin : IDalamudPlugin
         });
     }
 
-    /// <summary>/raidplan send last: the newest kept pull to the Raid Planner, said in chat.</summary>
+    /// <summary>/raidcodex send last: the newest kept pull to the Raid Codex, said in chat.</summary>
     private void SendLast()
     {
         if (!site.Linked)
         {
-            PlanService.Print("Link your Raid Planner account first: /raidplan settings, then Account.");
+            PlanService.Print("Link your Raid Codex account first: /raidcodex settings, then Account.");
             return;
         }
         var all = store.All;
@@ -307,7 +303,7 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
         var info = all[0];
-        if (!window.SendPull(info, r => PlanService.Print(r.Sent ? $"Sent {info.Name} to your Raid Planner." : $"Couldn't send {info.Name}: {r.Why}")))
+        if (!window.SendPull(info, r => PlanService.Print(r.Sent ? $"Sent {info.Name} to your Raid Codex." : $"Couldn't send {info.Name}: {r.Why}")))
         {
             PlanService.Print("That pull is on its way already.");
             return;
@@ -320,7 +316,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         // A real fight ends the sample at once: its numbers are never shown with the real ones.
         if (meterWindow.Preview != null && RealFightOn) meterWindow.Preview = null;
-        // The meter's window follows Settings' Show the meter (and /raidplan meter), or a sample.
+        // The meter's window follows Settings' Show the meter (and /raidcodex meter), or a sample.
         var meterWanted = config.ShowMeter || meterWindow.Preview != null;
         if (meterWindow.IsOpen != meterWanted) meterWindow.IsOpen = meterWanted;
         // The overlays follow their settings (and their samples); the tracker's game side listens while it's shown where it may be.
@@ -333,7 +329,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception ex)
         {
             cooldowns.Wanted = false;
-            Services.Log.Debug(ex, "Raid Planner couldn't tell where the cooldown tracker may show");
+            Services.Log.Debug(ex, "Raid Codex couldn't tell where the cooldown tracker may show");
         }
         cooldowns.Update();
         try
@@ -348,12 +344,12 @@ public sealed class Plugin : IDalamudPlugin
             if (recorder.Current is { } b)
             {
                 text = $"● Rec {Words.Clock(recorder.Elapsed)}";
-                tip = $"Raid Planner is recording {b.Duty.Name}, pull {b.Pull}. Click to open the Raid Planner plugin.";
+                tip = $"Raid Codex is recording {b.Duty.Name}, pull {b.Pull}. Click to open the Raid Codex plugin.";
             }
             else if (justKept is { } k && DateTime.UtcNow < k.Until)
             {
                 text = $"Pull {k.Info.Pull} kept";
-                tip = $"Pull {k.Info.Pull} is kept. Click to open the Raid Planner plugin.";
+                tip = $"Pull {k.Info.Pull} is kept. Click to open the Raid Codex plugin.";
             }
             if (text == null)
             {
@@ -372,7 +368,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't update the server info bar");
+            Services.Log.Warning(ex, "Raid Codex couldn't update the server info bar");
             barBroken = true;
         }
     }
@@ -393,7 +389,7 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => Services.PluginInterface.UiBuilder.OpenMainUi -= window.ShowMain);
             Safely(() => Services.PluginInterface.UiBuilder.OpenConfigUi -= window.ShowSettings);
         }
-        Safely(() => Services.Commands.RemoveHandler(Command));
+        foreach (var name in CommandWords.Names) Safely(() => Services.Commands.RemoveHandler(name));
         if (recorder != null) Safely(() => recorder.Kept -= OnKept);
         if (recorder != null) Safely(() => recorder.PullStarted -= OnPullStarted);
         if (recorder != null) Safely(() => recorder.HooksWanted = null);
@@ -418,7 +414,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't let go of something while unloading");
+            Services.Log.Warning(ex, "Raid Codex couldn't let go of something while unloading");
         }
     }
 }
