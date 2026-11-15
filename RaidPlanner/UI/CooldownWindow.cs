@@ -11,7 +11,7 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The party cooldown tracker (Settings → Cooldowns, `/raidplan cooldowns`): small rows over the
+/// The party cooldown tracker (Settings → Cooldowns, `/raidcodex cooldowns`): small rows over the
 /// fight, one a party member's tracked cooldown, grouped by kind (raid buffs, party mitigation, the
 /// healers', Swiftcast…) with a hairline between, then in spot order. A row: the action's own icon
 /// (dimmed while it recharges), the member's spot, the action's name, and the time to ready in mono on
@@ -58,7 +58,7 @@ public sealed class CooldownWindow : OverlayWindow
     /// <summary>The limit break gauge now (the meter's), or null.</summary>
     public Func<LimitBreakGauge?>? Gauge { get; set; }
 
-    protected override string What => "Raid Planner's cooldown tracker couldn't draw";
+    protected override string What => "Raid Codex's cooldown tracker couldn't draw";
 
     private bool Compact => Settings.Compact;
 

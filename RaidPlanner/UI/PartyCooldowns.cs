@@ -74,7 +74,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't read the game's actions for the cooldown tracker");
+            Services.Log.Warning(ex, "Raid Codex couldn't read the game's actions for the cooldown tracker");
             return new CooldownRows(new Dictionary<uint, string>(), new Dictionary<string, ActionRowInfo>(), new Dictionary<string, int>());
         }
     }
@@ -254,7 +254,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     {
         if (DateTime.UtcNow - failedAt < TimeSpan.FromSeconds(10)) return;
         failedAt = DateTime.UtcNow;
-        Services.Log.Error(ex, "Raid Planner's cooldown tracker couldn't read this");
+        Services.Log.Error(ex, "Raid Codex's cooldown tracker couldn't read this");
     }
 
     public void Dispose()

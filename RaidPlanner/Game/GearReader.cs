@@ -65,7 +65,7 @@ public static unsafe class GearReader
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't read your gear for the recording");
+            Services.Log.Warning(ex, "Raid Codex couldn't read your gear for the recording");
             return null;
         }
     }

@@ -40,7 +40,7 @@ public sealed partial class MainWindow
             }
             catch (Exception ex)
             {
-                Services.Log.Warning(ex, "Raid Planner couldn't read a pull");
+                Services.Log.Warning(ex, "Raid Codex couldn't read a pull");
                 if (pullView?.File == file) pullView = new PullState(file, null, "Its file couldn't be read. Delete it, or look in the recordings folder.", 0);
             }
         });
@@ -55,8 +55,8 @@ public sealed partial class MainWindow
             {
                 if (Kit.IconButton("##delete", p, Icon.Trash, "Delete this pull", Btn.Danger))
                     Ask("Delete this pull?", info.SentId != null
-                            ? "It's gone from the plugin. The copy you sent stays in your Raid Planner."
-                            : "It's gone for good: it hasn't been sent to the Raid Planner.",
+                            ? "It's gone from the plugin. The copy you sent stays in your Raid Codex."
+                            : "It's gone for good: it hasn't been sent to the Raid Codex.",
                         "Delete", "Keep it", () =>
                         {
                             store.Delete(info);
@@ -86,7 +86,7 @@ public sealed partial class MainWindow
         Frame.EndBody();
 
         Frame.BeginFooter("pull-footer");
-        DrawSend("##pull-", info, "It waits in the Raid Planner under From the game. Make it a plan there: a step for each mechanic, yours to edit.", grow: true);
+        DrawSend("##pull-", info, "It waits in the Raid Codex under From the game. Make it a plan there: a step for each mechanic, yours to edit.", grow: true);
         Frame.EndFooter();
     }
 
@@ -148,7 +148,7 @@ public sealed partial class MainWindow
         }
 
         // The list in its slab, scrolling inside it; the footnote under it.
-        const string foot = "The Raid Planner makes a step of each moment something goes off, with the party where they stood, or in standard spots if you'd rather.";
+        const string foot = "The Raid Codex makes a step of each moment something goes off, with the party where they stood, or in standard spots if you'd rather.";
         var footH = Txt.Flow(Vector2.Zero, Kit.Width, new[] { Run.Note(foot) }, 19.5f, out _, draw: false);
         var rowH = S(42);
         var listH = rowH * view.Rows.Count + S(6) * 2;

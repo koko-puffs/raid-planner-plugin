@@ -204,7 +204,7 @@ public static unsafe class PartyMembers
         catch (Exception ex)
         {
             crossBrokenUntil = Environment.TickCount64 + 60_000;
-            Services.Log.Warning(ex, "Raid Planner couldn't read the cross-world party");
+            Services.Log.Warning(ex, "Raid Codex couldn't read the cross-world party");
             if (Diagnostics is { On: true } d) d.Write("party-read", $"cross-world read failed: {ex.GetType().Name}");
             return null;
         }

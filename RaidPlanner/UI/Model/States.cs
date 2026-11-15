@@ -16,7 +16,7 @@ public enum EmptyKind
     /// <summary>Something went wrong: the Boss awake; Try again (outlined).</summary>
     Wrong,
 
-    /// <summary>No plans at all: the Boss asleep; Open the Raid Planner (outlined).</summary>
+    /// <summary>No plans at all: the Boss asleep; Open the Raid Codex (outlined).</summary>
     NoPlans,
 
     /// <summary>In a duty with no plan for it: the Boss tilts its head; Pick a plan (the telegraph).</summary>
@@ -32,7 +32,7 @@ public sealed record EmptyState(EmptyKind Kind, string Title, string Line, strin
     /// <summary>The state from what the plans service knows, in the order it matters.</summary>
     public static EmptyState Of(bool linked, bool opening, bool listReading, string? why, int plans, bool inDuty)
     {
-        if (!linked) return new(EmptyKind.NotLinked, "Your plans live on the site", "Link your Raid Planner account to see them here.", "Link your account");
+        if (!linked) return new(EmptyKind.NotLinked, "Your plans live on the site", "Link your Raid Codex account to see them here.", "Link your account");
         if (opening) return new(EmptyKind.Reading, "Opening the plan", string.Empty, null);
         if (listReading) return new(EmptyKind.Reading, "Reading your plans", string.Empty, null);
         if (why != null)
@@ -40,7 +40,7 @@ public sealed record EmptyState(EmptyKind Kind, string Title, string Line, strin
             var (title, line) = Format.Headline(why);
             return new(EmptyKind.Wrong, title, line, "Try again");
         }
-        if (plans == 0) return new(EmptyKind.NoPlans, "No plans yet", "Make one on the site, or from a pull you've sent.", "Open the Raid Planner");
+        if (plans == 0) return new(EmptyKind.NoPlans, "No plans yet", "Make one on the site, or from a pull you've sent.", "Open the Raid Codex");
         if (inDuty) return new(EmptyKind.NoPlanHere, "No plan for this duty", "Pick one of yours, or make one on the site.", "Pick a plan");
         return new(EmptyKind.Pick, "Pick a plan", "Pick one of your plans to show it here.", "Pick a plan");
     }
@@ -95,7 +95,7 @@ public enum SendFix
     /// <summary>Busy, a 500, no answer, no connection: Try again.</summary>
     TryAgain,
 
-    /// <summary>It may be there already: Open the Raid Planner.</summary>
+    /// <summary>It may be there already: Open the Raid Codex.</summary>
     Look,
 
     /// <summary>Too big, or it couldn't be written or read: Save as file.</summary>
@@ -121,8 +121,8 @@ public sealed record SendFailure(SendFix Fix, string Text)
         if (Has("busy")) return new(SendFix.TryAgain, "The site is busy. Try again in a minute.");
         if (Has("had a problem") || Has("couldn't reach") || Has("connection"))
             return new(SendFix.TryAgain, "Couldn't reach the site. Check your connection, then try again.");
-        if (Has("didn't answer in time") || Has("not with the pull") || Has("look in the raid planner"))
-            return new(SendFix.Look, "The site may have it already. Look in the Raid Planner before sending it again.");
+        if (Has("didn't answer in time") || Has("not with the pull") || Has("look in the raid codex"))
+            return new(SendFix.Look, "The site may have it already. Look in the Raid Codex before sending it again.");
         if (Has("file couldn't be read")) return new(SendFix.SaveFile, "This pull's file couldn't be read.");
         if (Has("too big") || Has("couldn't be written"))
             return new(SendFix.SaveFile, "This pull is too big to send, even made smaller. Save it as a file and import it on the site.");

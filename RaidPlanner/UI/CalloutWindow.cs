@@ -12,7 +12,7 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The on-screen callouts (Settings → Plan window, `/raidplan callouts`): while your plan follows a
+/// The on-screen callouts (Settings → Plan window, `/raidcodex callouts`): while your plan follows a
 /// pull, its next few steps over the fight, each with a countdown to when it goes off (the plan's
 /// own times, as the cue follower moves its clock: <see cref="PlanService.PlanClock"/>). The first big
 /// and clear, as Present's callout (Archivo Expanded ExtraBold at 30px in capitals, its countdown in
@@ -37,7 +37,7 @@ public sealed class CalloutWindow : OverlayWindow
     public CalloutWindow(Configuration config, Fonts fonts, PlanService? plans)
         : base("Callouts###RaidPlannerCallouts", config, fonts, () => config.CalloutOverlay, 460, new Vector2(0.5f, 0.2f)) => this.plans = plans;
 
-    protected override string What => "Raid Planner's callouts couldn't draw";
+    protected override string What => "Raid Codex's callouts couldn't draw";
 
     private bool Compact => Settings.Compact;
 
@@ -213,7 +213,7 @@ public sealed class CalloutWindow : OverlayWindow
         {
             if (DateTime.UtcNow - soundFailedAt < TimeSpan.FromMinutes(1)) return;
             soundFailedAt = DateTime.UtcNow;
-            Services.Log.Warning(ex, "Raid Planner couldn't play the callouts' sound");
+            Services.Log.Warning(ex, "Raid Codex couldn't play the callouts' sound");
         }
     }
 }

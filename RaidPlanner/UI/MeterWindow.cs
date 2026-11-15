@@ -190,7 +190,7 @@ public sealed class MeterWindow : Window
     /// <summary>Where the numbers come from (the plugin's meter, set by the plugin); null before there is one.</summary>
     public Func<IMeterSource?>? Source { get; set; }
 
-    /// <summary>A sample fight to look at the meter with (Settings → Meter, the empty meter's link, `/raidplan meter preview`).</summary>
+    /// <summary>A sample fight to look at the meter with (Settings → Meter, the empty meter's link, `/raidcodex meter preview`).</summary>
     public IMeterSource? Preview { get; set; }
 
     /// <summary>Starts the sample (unless a real fight is on: it would end at once); false when it couldn't.</summary>
@@ -234,7 +234,7 @@ public sealed class MeterWindow : Window
             // Outside the window's own catch (before ImGui.Begin): a fault here would stop every window of the plugin drawing.
             view = View.Nothing;
             shown = null;
-            Failed(ex, "Raid Planner's meter couldn't read its numbers");
+            Failed(ex, "Raid Codex's meter couldn't read its numbers");
         }
         try
         {
@@ -242,7 +242,7 @@ public sealed class MeterWindow : Window
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner's meter couldn't place itself");
+            Failed(ex, "Raid Codex's meter couldn't place itself");
         }
         // The background is see-through as set; the rows stay solid.
         Theme.PushFrame(Palette.Rgba(13, 13, 16, Math.Clamp(config.MeterBackground, 0.2f, 1f)), Palette.RadiusMd);
@@ -284,7 +284,7 @@ public sealed class MeterWindow : Window
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner's meter couldn't draw");
+            Failed(ex, "Raid Codex's meter couldn't draw");
         }
         finally
         {
@@ -1550,7 +1550,7 @@ public sealed class MeterWindow : Window
         }
     }
 
-    /// <summary>/raidplan meter unlock: the mouse back, the window movable again.</summary>
+    /// <summary>/raidcodex meter unlock: the mouse back, the window movable again.</summary>
     public void Unlock()
     {
         config.MeterClickThrough = false;

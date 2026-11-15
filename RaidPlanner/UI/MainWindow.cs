@@ -15,7 +15,7 @@ namespace RaidPlanner.UI;
 /// <summary>
 /// The plugin's main window, in Ready Check (the mock-ups' "The plugin"). Three screens: Home (the
 /// state as a tag, the pull being recorded in the ember box with its clock as a cast bar, the
-/// latest pull with Send to Raid Planner as the telegraph, the night's earlier pulls), a pull (its
+/// latest pull with Send to Raid Codex as the telegraph, the night's earlier pulls), a pull (its
 /// facts, the pull to its own scale, what's in it as a row a mechanic, deaths too) and Settings
 /// (Recording, Plan window, Meter, Account). Below Home every screen has the square back button at
 /// its top left. Dalamud's title bar is kept.
@@ -47,7 +47,7 @@ public sealed partial class MainWindow : Window, IDisposable
     private DateTime drawFailedAt;
 
     public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, PlanService plans, Uploads uploads, Fonts fonts)
-        : base("Raid Planner###RaidPlannerMain")
+        : base("Raid Codex###RaidPlannerMain")
     {
         this.config = config;
         this.store = store;
@@ -73,7 +73,7 @@ public sealed partial class MainWindow : Window, IDisposable
         IsOpen = true;
     }
 
-    /// <summary>Opens Settings (Dalamud's cog, /raidplan settings).</summary>
+    /// <summary>Opens Settings (Dalamud's cog, /raidcodex settings).</summary>
     public void ShowSettings()
     {
         Dismiss();
@@ -162,7 +162,7 @@ public sealed partial class MainWindow : Window, IDisposable
         {
             if (DateTime.UtcNow - dialogFailedAt > TimeSpan.FromSeconds(10))
             {
-                Services.Log.Error(ex, "Raid Planner's file dialog failed");
+                Services.Log.Error(ex, "Raid Codex's file dialog failed");
                 dialogFailedAt = DateTime.UtcNow;
             }
         }
@@ -210,7 +210,7 @@ public sealed partial class MainWindow : Window, IDisposable
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
             {
                 drawFailedAt = DateTime.UtcNow;
-                Services.Log.Error(ex, "Raid Planner's window couldn't draw");
+                Services.Log.Error(ex, "Raid Codex's window couldn't draw");
             }
         }
         finally
@@ -230,7 +230,7 @@ public sealed partial class MainWindow : Window, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Services.Log.Error(ex, "Raid Planner action failed");
+                    Services.Log.Error(ex, "Raid Codex action failed");
                     Notify("Something went wrong (see /xllog)", ToastKind.Bad);
                 }
             }

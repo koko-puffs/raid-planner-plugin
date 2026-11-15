@@ -13,9 +13,9 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// Sending a pull to the Raid Planner, saving it as a file, and linking your account (Settings →
+/// Sending a pull to the Raid Codex, saving it as a file, and linking your account (Settings →
 /// Account), as the mock-ups' "Sending" draws it: not linked, Link your account is the telegraph;
-/// linked, Send to Raid Planner in the same place; sending, the button holds still and dims over a
+/// linked, Send to Raid Codex in the same place; sending, the button holds still and dims over a
 /// cast bar, with a quiet Stop; sent, a ready tick and Open in Review; failed, a red box that says
 /// what to do and the one button that does it. A send reads the pull's file and posts it from a
 /// worker. The token is never logged.
@@ -51,7 +51,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Sends a kept pull to your Raid Planner (Send each pull, /raidplan send last); <paramref name="done"/>
+    /// Sends a kept pull to your Raid Codex (Send each pull, /raidcodex send last); <paramref name="done"/>
     /// hears how it went, on the framework thread. False when it can't go now (not linked, already going).
     /// </summary>
     public bool SendPull(RecordingInfo info, Action<SendResult>? done = null)
@@ -61,7 +61,7 @@ public sealed partial class MainWindow
         return true;
     }
 
-    /// <summary>Sends a kept pull to your Raid Planner (it waits there under From the game).</summary>
+    /// <summary>Sends a kept pull to your Raid Codex (it waits there under From the game).</summary>
     private void Send(RecordingInfo info, Action<SendResult>? done = null)
     {
         if (!Linked || Sending(info)) return;
@@ -99,7 +99,7 @@ public sealed partial class MainWindow
             catch (Exception ex)
             {
                 // SendAsync says what went wrong in words; anything else is a fault here (it holds no token).
-                Services.Log.Error(ex, "Send to Raid Planner failed");
+                Services.Log.Error(ex, "Send to Raid Codex failed");
                 result = new SendResult(null, "Something went wrong sending it (see /xllog).");
             }
             finally
@@ -119,7 +119,7 @@ public sealed partial class MainWindow
                     if (result.Sent)
                     {
                         var id = result.Id!;
-                        Notify("Sent to your Raid Planner", ToastKind.Ok, action: "Open", onAction: () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, id)));
+                        Notify("Sent to your Raid Codex", ToastKind.Ok, action: "Open", onAction: () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, id)));
                     }
                     else if (result.Why != "Stopped.")
                     {
@@ -131,7 +131,7 @@ public sealed partial class MainWindow
                     }
                     catch (Exception ex)
                     {
-                        Services.Log.Error(ex, "Raid Planner couldn't say how the send went");
+                        Services.Log.Error(ex, "Raid Codex couldn't say how the send went");
                     }
                 });
             }
@@ -149,7 +149,7 @@ public sealed partial class MainWindow
     private string ReviewUrl(RecordingInfo info, string sentId)
     {
         if (plans.Plan is { Game: { } g } plan && string.Equals(g.Duty, info.Duty, StringComparison.OrdinalIgnoreCase))
-            return $"{SiteLink.PlannerUrl}/plan/{Uri.EscapeDataString(plan.Id)}/review?pull={Uri.EscapeDataString(sentId)}";
+            return SiteLink.ReviewUrl(plan.Id, sentId);
         return SiteLink.OpenUrl(sentId);
     }
 
@@ -159,7 +159,7 @@ public sealed partial class MainWindow
         var start = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var name = Path.GetFileName(info.File);
         if (name.EndsWith(Words.Extension, StringComparison.OrdinalIgnoreCase)) name = name[..^".json".Length];
-        dialogs.SaveFileDialog("Save the pull as a file", "Raid Planner recording{.json}", name, ".json", (ok, path) =>
+        dialogs.SaveFileDialog("Save the pull as a file", "Raid Codex recording{.json}", name, ".json", (ok, path) =>
         {
             if (!ok) return;
             try
@@ -171,7 +171,7 @@ public sealed partial class MainWindow
             catch (Exception ex)
             {
                 // Run by the file dialog, outside the window's own catch: nothing may escape.
-                if (ex is not (IOException or UnauthorizedAccessException)) Services.Log.Error(ex, "Raid Planner couldn't save the file");
+                if (ex is not (IOException or UnauthorizedAccessException)) Services.Log.Error(ex, "Raid Codex couldn't save the file");
                 Notify("Couldn't save it there", ToastKind.Bad);
             }
         }, start, true);
@@ -221,7 +221,7 @@ public sealed partial class MainWindow
     private void DrawSend(string id, RecordingInfo info, string readyLine, bool grow = false)
     {
         const string save = "Save as file";
-        const string saveTip = "A file to import in the Raid Planner yourself (Import on its front page), or to share.";
+        const string saveTip = "A file to import in the Raid Codex yourself (Import on its front page), or to share.";
         sends.TryGetValue(info.File, out var s);
         var sentId = store.Find(info.File)?.SentId ?? info.SentId;
 
@@ -253,8 +253,8 @@ public sealed partial class MainWindow
                 }
                 case SendFix.Look:
                 {
-                    var (a, b) = ButtonPair(id, "Open the Raid Planner", Btn.Tele, Icon.ExternalLink, save, Btn.Outline, Icon.Download, secondTip: saveTip);
-                    if (a) Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+                    var (a, b) = ButtonPair(id, "Open the Raid Codex", Btn.Tele, Icon.ExternalLink, save, Btn.Outline, Icon.Download, secondTip: saveTip);
+                    if (a) Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
                     if (b) SaveAs(info);
                     break;
                 }
@@ -280,10 +280,10 @@ public sealed partial class MainWindow
         if (s?.Result is { Sent: true } sent && sent.Id is { } sid)
         {
             var at = Kit.At;
-            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, sent.Thinned ? "Sent, with fewer of the party's places: it was too big whole." : "Sent. It's waiting in your Raid Planner."));
+            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, sent.Thinned ? "Sent, with fewer of the party's places: it was too big whole." : "Sent. It's waiting in your Raid Codex."));
             Kit.Gap(10);
             var (a, b) = ButtonPair(id, "Open in Review", Btn.Outline, Icon.ExternalLink, sent.Thinned ? save : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
-                secondTip: sent.Thinned ? saveTip : "It's in your Raid Planner already: this sends another copy.");
+                secondTip: sent.Thinned ? saveTip : "It's in your Raid Codex already: this sends another copy.");
             if (a) Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sid));
             if (b)
             {
@@ -301,7 +301,7 @@ public sealed partial class MainWindow
             Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, when, id + "review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
             Kit.Gap(10);
             var (a, b) = ButtonPair(id, "Send again", Btn.Quiet, Icon.Send, save, Btn.Quiet, Icon.Download,
-                firstTip: "It's in your Raid Planner already: this sends another copy.", secondTip: saveTip);
+                firstTip: "It's in your Raid Codex already: this sends another copy.", secondTip: saveTip);
             if (a) Send(info);
             if (b) SaveAs(info);
             return;
@@ -311,15 +311,15 @@ public sealed partial class MainWindow
         if (!Linked)
         {
             var (a, b) = ButtonPair(id, "Link your account", Btn.Tele, Icon.Link, save, Btn.Outline, Icon.Download, grow,
-                firstTip: "Link the plugin to the site once, and pulls go straight to your Raid Planner.", secondTip: saveTip);
+                firstTip: "Link the plugin to the site once, and pulls go straight to your Raid Codex.", secondTip: saveTip);
             if (a) OpenSettings(SettingsTab.Account);
             if (b) SaveAs(info);
             Kit.Gap(10);
             Txt.Note("Link once, and each pull is a button away from being a plan.");
             return;
         }
-        var (send, saveIt) = ButtonPair(id, "Send to Raid Planner", Btn.Tele, Icon.Send, save, Btn.Outline, Icon.Download, grow,
-            firstTip: "It waits in the Raid Planner under From the game, ready to make into a plan.", secondTip: saveTip);
+        var (send, saveIt) = ButtonPair(id, "Send to Raid Codex", Btn.Tele, Icon.Send, save, Btn.Outline, Icon.Download, grow,
+            firstTip: "It waits in the Raid Codex under From the game, ready to make into a plan.", secondTip: saveTip);
         if (send) Send(info);
         if (saveIt) SaveAs(info);
         Kit.Gap(10);
@@ -350,7 +350,7 @@ public sealed partial class MainWindow
         else if (sentId != null)
         {
             var at = Kit.At;
-            var text = s?.Result is { Sent: true } ? "Sent. It's waiting in your Raid Planner." : Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
+            var text = s?.Result is { Sent: true } ? "Sent. It's waiting in your Raid Codex." : Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
             Kit.Reserve(at, w, SentLine(at, w, text, "##latest-review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
             Kit.Gap(12);
         }
@@ -363,7 +363,7 @@ public sealed partial class MainWindow
         if (Kit.Button("##latest-save", new Vector2(x, row.Y), save, Btn.Quiet, BtnSize.Sm, Icon.Download)) SaveAs(info);
         x += Kit.ButtonWidth(save, BtnSize.Sm, Icon.Download, Btn.Quiet) + S(6.4f);
         if (Linked && sentId == null && s is not { Result: null } && Kit.Button("##latest-send", new Vector2(x, row.Y), "Send", Btn.Quiet, BtnSize.Sm, Icon.Send, 0, false,
-                "It waits in the Raid Planner under From the game."))
+                "It waits in the Raid Codex under From the game."))
             Send(info);
         Kit.Reserve(row, w, S(HSm));
     }
@@ -378,7 +378,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void DrawAccountRow(int index)
     {
-        const string name = "Raid Planner account";
+        const string name = "Raid Codex account";
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
@@ -400,7 +400,7 @@ public sealed partial class MainWindow
             var tw = Kit.Tag(dl, new Vector2(tx, ly), "Linked", TagKind.Live, 18);
             Txt.Line(dl, new Vector2(tx + tw + S(6.4f), ly), SiteLink.Masked(config.SiteToken), Face.Mono, 12, Palette.Muted, 18);
             if (Kit.Pointed(new Vector2(x, top), new Vector2(x + inner - uw, top + nameH + lineH)))
-                Kit.Tooltip("Send to Raid Planner puts a pull straight into your account on the site, under From the game.");
+                Kit.Tooltip("Send to Raid Codex puts a pull straight into your account on the site, under From the game.");
             if (Kit.Button("##site-unlink", new Vector2(at.X + w - S(16) - uw, at.Y + (h - S(HSm)) / 2), unlink, Btn.Outline, BtnSize.Sm, null, 0, false,
                     "Forget the token here. Revoke it on the site too if you won't use it again."))
             {
@@ -410,7 +410,7 @@ public sealed partial class MainWindow
                 foreach (var under in sends.Values)
                     if (under.Result == null) StopSend(under);
                 sends.Clear();
-                Notify("Unlinked from the Raid Planner", ToastKind.News, Icon.Link);
+                Notify("Unlinked from the Raid Codex", ToastKind.News, Icon.Link);
             }
             Kit.Reserve(at, w, h);
             return;
@@ -420,7 +420,7 @@ public sealed partial class MainWindow
         var y = at.Y + S(11);
         Txt.Line(dl, new Vector2(x, y), name, Face.SansMedium, 14, Palette.White, 14 * 1.3f);
         y += S(14 * 1.3f) + S(2);
-        var note = new[] { new Run("Not linked yet. Make a token on the site (Settings, Raid Planner, In-game plugin) and paste it here.", Face.Sans, 12, Palette.Muted) };
+        var note = new[] { new Run("Not linked yet. Make a token on the site (Settings, Raid Codex, In-game plugin) and paste it here.", Face.Sans, 12, Palette.Muted) };
         y += Txt.Flow(new Vector2(x, y), inner, note, 17.4f, out _);
         y += S(10);
         const string link = "Link";
@@ -442,7 +442,7 @@ public sealed partial class MainWindow
             y += S(18) + S(10);
         }
         if (Kit.Button("##site-get", new Vector2(x, y), "Get a token", Btn.Outline, BtnSize.Sm, Icon.ExternalLink, 0, false,
-                "Opens the site's Settings, Raid Planner, In-game plugin, where a token is made (shown once, revoked there)."))
+                "Opens the site's Settings, Raid Codex, In-game plugin, where a token is made (shown once, revoked there)."))
             Dalamud.Utility.Util.OpenLink(SiteLink.TokensUrl);
         y += S(HSm) + S(11);
         Kit.Reserve(at, w, y - at.Y);
@@ -461,6 +461,6 @@ public sealed partial class MainWindow
         tokenDraft = string.Empty;
         tokenProblem = null;
         sends.Clear();
-        Notify("Linked to the Raid Planner", ToastKind.Ok);
+        Notify("Linked to the Raid Codex", ToastKind.Ok);
     }
 }

@@ -10,11 +10,11 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// Home (the mock-ups' "Home"): the state as a tag in the header with Open the Raid Planner and
+/// Home (the mock-ups' "Home"): the state as a tag in the header with Open the Raid Codex and
 /// Settings; then the pull being recorded in the ember box (its duty as a small callout, the clock
 /// in mono over a cast bar running to the plan's length, what's being recorded counted in mono,
 /// Stop now in the danger outline); the latest pull (its number as a small callout, the outcome as
-/// a tag, the facts in mono, Send to Raid Planner as the telegraph); the night's earlier pulls as
+/// a tag, the facts in mono, Send to Raid Codex as the telegraph); the night's earlier pulls as
 /// rows with square wells, a tag and a tick once sent. Before the first pull, the Boss asleep and
 /// three steps numbered as waymarks.
 /// </summary>
@@ -52,8 +52,8 @@ public sealed partial class MainWindow
         var room = w - buttons - S(12);
         if (Kit.TagWidth(tagText, kind) > room) tagText = Kit.FitSpaced(Txt.Caps(state), Face.Mono, 11, 0.05f, room - (Kit.TagWidth(string.Empty, kind)));
         Kit.Tag(dl, new Vector2(at.X, at.Y + (S(H) - S(tagH)) / 2), tagText, kind);
-        if (Kit.IconButton("##open-site", new Vector2(at.X + w - buttons, at.Y), Icon.ExternalLink, "Open the Raid Planner", Btn.Quiet))
-            Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+        if (Kit.IconButton("##open-site", new Vector2(at.X + w - buttons, at.Y), Icon.ExternalLink, "Open the Raid Codex", Btn.Quiet))
+            Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
         if (Kit.IconButton("##settings", new Vector2(at.X + w - S(H), at.Y), Icon.Sliders, "Settings")) OpenSettings(settingsTab);
         Kit.Reserve(at, w, S(H));
         Frame.EndHeader();
@@ -212,7 +212,7 @@ public sealed partial class MainWindow
             }
             catch (Exception ex)
             {
-                Services.Log.Warning(ex, "Raid Planner couldn't read a pull's party");
+                Services.Log.Warning(ex, "Raid Codex couldn't read a pull's party");
             }
         });
         return null;
@@ -282,7 +282,7 @@ public sealed partial class MainWindow
             if (Kit.Link("##latest-open", lp, "What's in it", Icon.ArrowRight, tip: "Its mechanics, in order, before you send it")) Later(() => ShowPull(info));
             Kit.Reserve(lp, w, Txt.Natural(Face.SansMedium, 13));
             Kit.Gap(14);
-            DrawSend("##latest-", info, "It waits in the Raid Planner under From the game, ready to make into a plan.");
+            DrawSend("##latest-", info, "It waits in the Raid Codex under From the game, ready to make into a plan.");
         }
         Kit.EndPanel();
     }
@@ -371,7 +371,7 @@ public sealed partial class MainWindow
     {
         ("Go into a duty", "Trials, raids and ultimates are recorded by themselves."),
         ("Pull", "The boss's casts and where they land, markers, tethers, waymarks."),
-        ("Send it to the Raid Planner", "It becomes a plan: a step for each mechanic, yours to edit."),
+        ("Send it to the Raid Codex", "It becomes a plan: a step for each mechanic, yours to edit."),
     };
 
     private void DrawGetStarted()
@@ -421,18 +421,18 @@ public sealed partial class MainWindow
         Kit.EndPanel();
         Kit.Gap(18);
 
-        // Link your account is the telegraph until you've linked; Open the Raid Planner outlined.
+        // Link your account is the telegraph until you've linked; Open the Raid Codex outlined.
         var row = Kit.At;
         var x0 = row.X;
         if (!Linked)
         {
             const string link = "Link your account";
-            if (Kit.Button("##gs-link", row, link, Btn.Tele, BtnSize.Md, Icon.Link, 0, false, "Once, so pulls go straight to your Raid Planner"))
+            if (Kit.Button("##gs-link", row, link, Btn.Tele, BtnSize.Md, Icon.Link, 0, false, "Once, so pulls go straight to your Raid Codex"))
                 OpenSettings(SettingsTab.Account);
             x0 += Kit.ButtonWidth(link, BtnSize.Md, Icon.Link, Btn.Tele) + S(6.4f);
         }
-        if (Kit.Button("##gs-open", new Vector2(x0, row.Y), "Open the Raid Planner", Btn.Outline, BtnSize.Md, Icon.ExternalLink))
-            Dalamud.Utility.Util.OpenLink(SiteLink.PlannerUrl);
+        if (Kit.Button("##gs-open", new Vector2(x0, row.Y), "Open the Raid Codex", Btn.Outline, BtnSize.Md, Icon.ExternalLink))
+            Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
         Kit.Reserve(row, w, Kit.ButtonHeight());
         if (!config.AutoRecord)
         {

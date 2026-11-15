@@ -1,13 +1,13 @@
-# Raid Planner (Dalamud plugin): the details
+# Raid Codex (Dalamud plugin): the details
 
 How the plugin works, where things are, and why. The site's side (turning a pull into a plan,
-the account link, the encounter data) is in kokos-tools' DETAILS.md, under Raid Planner → _From
+the account link, the encounter data) is in kokos-tools' DETAILS.md, under Raid Codex → _From
 the game: the in-game plugin_.
 
 ## The idea
 
 The plugin only writes down what happened; everything that turns it into steps is on the site
-(`src/features/raid-planner/model/recording.ts`). So the plan-making can get better without a
+(`src/features/raid-codex/model/recording.ts`). So the plan-making can get better without a
 plugin release, an old recording can be made into a plan again, and the plugin stays small and
 quiet: it never acts in the game. The other way round, it shows your plans in the game (Plans,
 below), and says how far each pull got for the site's progress tracker.
@@ -26,7 +26,7 @@ It goes on while you or anyone in your party is in combat (you can be down while
 still the same pull), and ends when that's been over for 2 seconds, at once when the duty is wiped
 or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the whole party down it
 waits up to 15 seconds for the game to call the wipe, which it does at the fade-out, and calls it a
-wipe itself after that), when you leave the zone, log out, or press Stop (`/raidplan stop`; it
+wipe itself after that), when you leave the zone, log out, or press Stop (`/raidcodex stop`; it
 isn't started again until that combat ends). A pull that ended on its own without the game saying
 how is held 10 seconds before it's saved: the game's "duty complete" comes a moment after the
 kill's combat ends, and then it's a clear. A pull shorter than 10 seconds, or with no mechanic in
@@ -439,7 +439,7 @@ after a success) and `LiveShare` (below).
 As Housing Studio's plugin sends a house: the token from the site (`rpp_` and 43 letters, pasted
 in Settings → Account, kept masked, never logged), and a POST to the site's database function
 `rp_plugin_send` with the site's publishable key, the token in the body. Its answer is the pull's
-id there (the window then offers _Open it_, `/raid-planner?from-game=<id>`), or a refusal in the
+id there (the window then offers _Open it_, `/raid-codex?from-game=<id>`), or a refusal in the
 site's own words with a hint: `token` (link again), `recording`, `size`, `off`, `rate`, `full`;
 any other message (the database's own) isn't shown, only a word on what happened.
 
@@ -463,7 +463,7 @@ minute and a quarter more for each MB, and stops when the plugin unloads (the li
 after).
 
 With _Send each pull_ on (and linked), each kept pull is sent by itself as it's kept, the same way
-(a failure is said in chat); `/raidplan send last` sends the newest kept pull and says in chat how
+(a failure is said in chat); `/raidcodex send last` sends the newest kept pull and says in chat how
 it went.
 
 ## Progress and your roster (`Game/Uploads.cs`, `Core/PullSummary.cs`)
@@ -544,7 +544,7 @@ interrupt credited and an interruptible cast that went off, a stun resisted and 
 and a tank swap, a non-tank holding the boss, the BRD raised and dying again with Weakness, potions,
 the gauge, the enmity list, MP and barriers, signs, knockbacks, an absorbed buster and bonus %; the
 meter's numbers file has the new counts, the deaths' raises and the Events tab's list) and,
-with `RP_ALIGN_OUT` set to the site's `src/features/raid-planner/model/__fixtures__` folder, writes
+with `RP_ALIGN_OUT` set to the site's `src/features/raid-codex/model/__fixtures__` folder, writes
 the recording, its summary and the meter's numbers there (`align.raidrec.json`, `align.summary.json`,
 `align.meter.json`) for the site's `alignment.spec.ts`, which checks the meter's, Review's and
 Progress's numbers against each other (amounts exactly, the length to the hundredth, rates to a
@@ -645,12 +645,12 @@ starting from 0 there): the recorder runs follow-only, with the same pull detect
 events, but the pull is never kept, sent or summed up (nothing is written, even on unloading). The
 server info bar doesn't show it, the main window's tag says "Following your plan · not recorded"
 (or "… · recording starts next pull" when recording was turned on meanwhile: the pull isn't
-switched mid-way), and `/raidplan stop` and Stop only end a recorded pull.
+switched mid-way), and `/raidcodex stop` and Stop only end a recorded pull.
 
 **Saying each step in chat** (_Say each step in chat_ on; `Callouts` in the config): 5 seconds before
 a step's first cue (by the same clock), or as its cast begins when that's later, its name and its
 callout go to chat (`PlanJson.ChatLine`: "Exaflares: middle, step through the first."; the name alone
-when the step has no callout; before 0.3.0 the first line of its notes) with the "Raid Planner" tag,
+when the step has no callout; before 0.3.0 the first line of its notes) with the "Raid Codex" tag,
 and the chat's soft sound (as `<se.1>`, `UIGlobals.PlayChatSoundEffect`, only
 when the game's function for it was found). Each step once a pull; one the clock has passed by
 3 seconds isn't said late.
@@ -690,13 +690,13 @@ mono. Another plan on its way runs a slim cast bar under the header and keeps th
 it's in; one that couldn't be read says so in red with a quiet retry. At its smallest (under 270
 wide or 400 tall), as the mock-up draws it, the callout is 16px (three lines at most still), the
 list is the only button, the board 110 and plain (no bezel), there's no previous and next
-(`/raidplan next` and `prev` still move it), and the notes say "Notes: 2 lines, make it taller"
+(`/raidcodex next` and `prev` still move it), and the notes say "Notes: 2 lines, make it taller"
 instead of vanishing. A callout or notes in Japanese or Chinese (no spaces) wrap where a line fills
 (`Format.Wrap`), not cut on their first line; what's measured before the fonts are built isn't kept. With no plan to show, the Boss says why over a small
 callout, one line and one button (`EmptyState`): not linked (asleep in a dashed ring; _Link your
 account_, the telegraph, opens Settings → Account), reading (the party in a row over a running cast
 bar), gone wrong (awake; the error's first sentence as the callout, the rest under it; _Try again_
-outlined), no plans (asleep; _Open the Raid Planner_ outlined), no plan for this duty (its head
+outlined), no plans (asleep; _Open the Raid Codex_ outlined), no plan for this duty (its head
 tilted; _Pick a plan_, the telegraph, opens the menu), not in a duty (_Pick a plan_). The plans menu
 is the site's menu (raised #18181d, a white hairline at 12%, 14px corners, its shadow faked with
 rings in the menu's own draw list, so they show over the window it opens from): this duty's plans first under an eyebrow ("This duty · …"), the one shown with a ready
@@ -769,9 +769,9 @@ batches well under its 65,536 corners a draw.
 
 ## The windows' look (`UI/Kit/`)
 
-Since 0.3.0 every window is drawn in the planner's Ready Check (the site's
-`src/features/raid-planner/styles/ready.css`, the mock-ups in kokos-tools'
-`docs/proposals/raid-planner/mockup/pages/plugin.html` and `meter.html`), under Dalamud's own title
+Since 0.3.0 every window is drawn in the Raid Codex's Ready Check (the site's
+`src/features/raid-codex/styles/ready.css`, the mock-ups in kokos-tools'
+`docs/proposals/raid-codex/mockup/pages/plugin.html` and `meter.html`), under Dalamud's own title
 bar (only its colour, #0a0a0c, is the plugin's: its font and buttons stay Dalamud's, so their hit
 boxes do). Every size, colour and font is in the kit: `Palette` (the tokens by their CSS names: void
 #070708, basalt, slab #111115, raised #18181d, well #09090b, floor; white hairlines at 7, 12 and 20%;
@@ -841,7 +841,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
 - **Home** (`Views/Home.cs`): the header's state as a tag (`StateNow`): "Rec · pull 12 · 2:31"
   ember with a beating dot while recording; "Waiting for the pull · Example Arena" in a duty that
   records; "Following your plan · not recorded" (or "· recording starts next pull") while a pull is
-  only followed; "Recording is off"; "Not in a duty". On its right a quiet _Open the Raid Planner_
+  only followed; "Recording is off"; "Not in a duty". On its right a quiet _Open the Raid Codex_
   and the Settings button. While recording, the ember box: "Recording · pull 12 tonight" in ember and
   "Started 23:38"; the duty as a small callout; the clock in Geist Mono 600 30px over a cast bar
   running to the plan's length when you have a plan for the duty (named for its step: "Platforms:
@@ -859,23 +859,23 @@ above, 18 below), a footer on the basalt band where a screen has one.
   latest's), the outcome's tag, a ready tick once sent, the chevron; pointed at, a faint fill and the
   reticle. Before the first pull: the Boss asleep in a dashed ring, "Nothing pulled yet" and one
   line, three steps numbered as waymarks (1 red, 2 yellow, 3 blue squares), _Link your account_ (the
-  telegraph, until linked) and _Open the Raid Planner_ outlined, and "Recording is off. Turn it on"
+  telegraph, until linked) and _Open the Raid Codex_ outlined, and "Recording is off. Turn it on"
   when it is.
 - **Sending** (`Views/Send.cs`, the latest pull and a pull's footer): not linked, _Link your account_
   is the telegraph and _Save as file_ outlined, "Link once, and each pull is a button away from being
-  a plan."; linked, _Send to Raid Planner_ in the same place. Sending, it dims and holds still, a
+  a plan."; linked, _Send to Raid Codex_ in the same place. Sending, it dims and holds still, a
   quiet _Stop_ beside it (it cancels the send; so does _Unlink_), and a cast bar "Sending pull 12 · 0.6 MB" runs under
-  it. Sent, a ready tick, "Sent. It's waiting in your Raid Planner." (or "Sent, with fewer of the
+  it. Sent, a ready tick, "Sent. It's waiting in your Raid Codex." (or "Sent, with fewer of the
   party's places: it was too big whole."), _Open in Review_ and a quiet _Send again_ (or _Save as
   file_); sent in an earlier session, one line ("Sent yesterday at 23:52.") with _Open in Review ↗_.
   _Open in Review_ opens the plan for the pull's duty in Review on that pull
-  (`/raid-planner/plan/<id>/review?pull=<sent id>`) when the plugin has that duty's plan, else From
+  (`/raid-codex/plan/<id>/review?pull=<sent id>`) when the plugin has that duty's plan, else From
   the game (`?from-game=<id>`). Failed, a red box that says what to do and the one button that does
   it (`SendFailure`, from SiteLink's words): the token (_Link again_, to Settings → Account), a plugin
   too old (_Save as file_ until then), busy or no answer (_Try again_), timed out or answered without
-  the pull (_Open the Raid Planner_: it may be there already), too big or unreadable (_Save as
+  the pull (_Open the Raid Codex_: it may be there already), too big or unreadable (_Save as
   file_), anything else (_Try again_; the site's own words for players are said as it says them).
-  Toasts: "Sent to your Raid Planner" (Open), "Couldn't send it" (Why: the pull's screen), "Saved …",
+  Toasts: "Sent to your Raid Codex" (Open), "Couldn't send it" (Why: the pull's screen), "Saved …",
   "Couldn't save it there", "Deleted pull 9", "Linked to…", "Unlinked from…".
 - **A pull** (`Views/Pull.cs`): the 40px square back button, the eyebrow ("Pull 12 · tonight 23:42",
   `Format.Day`), the duty as a small callout, Delete as an outlined icon button in danger red at the
@@ -891,7 +891,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
   last, left out: `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the
   site keep; before the review it counted back from the recording's end, which runs on past the wipe). Reading it, the party in a row over a running cast bar; a file that won't read,
   the Boss awake ("This pull won't open"); nothing in it, asleep ("Nothing went off"). The footnote
-  in muted (it's read); the footer has the send with _Send to Raid Planner_ filling the row.
+  in muted (it's read); the footer has the send with _Send to Raid Codex_ filling the row.
 - **Settings** (`Views/Settings.cs`): the square back button, "Settings" as a small callout, the tabs
   _Recording_, _Plan window_, _Meter_, _Cooldowns_ (0.4.0), _Account_ over a hairline (dense, 32 tall
   at 13px, when the window is too narrow for them at 40). Each a slab of rows: the setting's
@@ -911,10 +911,10 @@ above, 18 below), a footer on the basalt band where a screen has one.
   linked, a ready tick, a green _Linked_ tag and the token masked in mono, _Unlink_ dense; not
   linked, the instructions, the 40px well field (the token in mono, masked) lined up with the other
   rows' controls with _Link_ as the telegraph, a bad token said in red with an icon under it, and
-  _Get a token_; _The Raid Planner_ · Open; the note on keeping the token. At the foot, the version in
+  _Get a token_; _The Raid Codex_ · Open; the note on keeping the token. At the foot, the version in
   mono and _What's new_.
 - **The server info bar** (`Plugin.cs`): the game's own text: "● Rec 2:31" while recording, "Pull 3
-  kept" for 10 seconds after; its tooltip says what a click does ("… Click to open the Raid Planner
+  kept" for 10 seconds after; its tooltip says what a click does ("… Click to open the Raid Codex
   plugin."; it promised a send before 0.3.0). A click opens Home.
 
 ## The meter's numbers (`Core/Meter/`, `Game/CombatMeter.cs`)
@@ -1050,13 +1050,13 @@ one (both tested).
 
 - **The meter** (`MeterWindow`, "Meter", 330 wide at first, translucent as Settings says: its
   background rgb 13 13 16 at _Background_, its rows solid, 10px corners). Shown with _Show the meter_
-  (or `/raidplan meter`), in duties or everywhere. Its head (36 tall): the fight's clock in mono
+  (or `/raidcodex meter`), in duties or everywhere. Its head (36 tall): the fight's clock in mono
   (600 15px) with the ember dot beating while a fight is on (a still faint dot otherwise), a _Wipe_
   or _Clear_ tag when the fight shown is over, the picker ("Pull 12 ⌄", 24 tall) and the lock (24px:
   ember-washed when locked, a pointer when click-through, quiet when open); the buttons are laid
   first and the tags only drawn as far as they fit before them. Locked, it has no title
   bar and can't be moved or sized (its tabs and picker still answer); click-through, the mouse goes
-  to the game (`/raidplan meter unlock` or Settings gives it back); open, Dalamud's title bar comes
+  to the game (`/raidcodex meter unlock` or Settings gives it back); open, Dalamud's title bar comes
   back with its menu, its × and the resize grip. Five tabs (27 tall, the ember bar under the one
   you're on; a meter too narrow for the five has compact's tab menu in their row): **Damage** (ENCDPS, or DPS in Settings, and the share; pace from 10 s into a phase
   against the picked pull: "PACE · P2 +0:41", a 3px bar with this pull in ember and the other's tick
@@ -1160,7 +1160,7 @@ one (both tested).
   mono and its outcome's tag; other duties' after; and _Pace against_ (Best, Last, Off) and _Compact_
   (a switch) at its foot. While the sample is on, _Stop the sample_ first.
 - **The sample fight** (`Model/MeterPreview`): Settings → Meter's _Show a sample fight_, the empty
-  meter's _See a sample_, or `/raidplan meter preview` show the meter mid-fight with made-up numbers,
+  meter's _See a sample_, or `/raidcodex meter preview` show the meter mid-fight with made-up numbers,
   to place and size it: the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
   its clock running and its numbers moving four times a second (bursts in the buffs at the pull and
   at 2:00, a raidwide every 24 seconds, each player's rate rising and falling with their rotation;
@@ -1177,8 +1177,8 @@ one (both tested).
   the meter's × again stop it too. The windows read it instead of the meter's own numbers, never
   both, and what was picked in one (a pull, a player) is let go of in the other. It doesn't start
   while a real fight is on (in combat or after its first hit), and one starting ends it at once.
-- **Opened up** (`MeterDetailWindow`, "Raid Planner meter", 1180×560 at first, 980×360 at the least
-  since 0.4.0, for the fifth tab; `/raidplan meter big`): the five tabs full size with their icons and
+- **Opened up** (`MeterDetailWindow`, "Raid Codex meter", 1180×560 at first, 980×360 at the least
+  since 0.4.0, for the fifth tab; `/raidcodex meter big`): the five tabs full size with their icons and
   the deaths and events counted; the clock,
   where in the fight ("P2 · 0:41 in"; these two only as they fit beside the tabs), which pull ("Pull
   12 · now ⌄"), ENCDPS or DPS, a quiet square _Copy as text_ (0.4.0: the copy mark, a tick while it
@@ -1209,7 +1209,7 @@ one (both tested).
   event picks them in the table, a death's opens its recap on Deaths. A line under each tab
   says how its numbers are worked out (Events: casts are GCDs, an interrupt is credited to whoever's
   interrupt hit the cast in the second before, time dead leaves out the wipe).
-- **Settings → Meter**: _Show the meter_ (`/raidplan meter` too) with _Where_ (In duties,
+- **Settings → Meter**: _Show the meter_ (`/raidcodex meter` too) with _Where_ (In duties,
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
   (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it; _Grows_
@@ -1233,14 +1233,14 @@ first time, moved to the other corner when Grows changes, following you while yo
 you've placed one it goes where `OverlayLayout.FirstAnchor` says (the callouts centred a fifth down
 the screen, the tracker at the left a third down). Unlocked, Dalamud's title bar ("Cooldowns",
 "Callouts") with its × (the setting's _Show_, or the sample's stop); locked, no title bar, no moving
-or sizing; click-through when locked, the mouse goes to the game (`/raidplan cooldowns unlock`,
-`/raidplan callouts unlock`). They never take focus, make no window sounds and ignore Escape; while
+or sizing; click-through when locked, the mouse goes to the game (`/raidcodex cooldowns unlock`,
+`/raidcodex callouts unlock`). They never take focus, make no window sounds and ignore Escape; while
 you hold one (unlocked) it's neither placed nor sized. A sample of each shows under a _Preview_ tag
 (pressed, it stops), from Settings or `… preview`. Each has its settings apart in the config
 (`Configuration.Cooldowns`, `.CalloutOverlay`: shown, where, locked, click-through, Grows, compact,
 background, width, anchor), and the plugin keeps each window open while it's shown or sampled.
 
-**The party cooldown tracker** (`CooldownWindow`; Settings → Cooldowns; `/raidplan cooldowns`; off at
+**The party cooldown tracker** (`CooldownWindow`; Settings → Cooldowns; `/raidcodex cooldowns`; off at
 first, in duties or everywhere). Small rows, one a party member's tracked cooldown, by kind (raid
 buffs, party mitigation, the healers' party heals and mitigation, Swiftcast, the tanks' Provoke,
 Shirk and invulnerabilities, interrupts and stuns), then as the catalogue lists them, then in spot
@@ -1309,7 +1309,7 @@ _Yours too_ (on) lists your own.
   the MT's Reprisal every half a minute.
 
 **The on-screen callouts** (`CalloutWindow`; Settings → Plan window → On-screen callouts;
-`/raidplan callouts`; on at first). While your plan follows a pull (`PlanService.Following`, its
+`/raidcodex callouts`; on at first). While your plan follows a pull (`PlanService.Following`, its
 clock running: a cue has matched, `PlanService.PlanClock`; with recording off, the callouts being on
 is enough for a pull to be followed, as the plan window being open is), its next steps over the fight, each with
 a countdown to when it goes off: a step's time is its earliest cue's (`CalloutTimeline.StepTimes`;
@@ -1376,7 +1376,7 @@ RaidPlanner/
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
               settings (Overlay),
-              /raidplan's words (Commands), SVG
+              /raidcodex's words (Commands), SVG
               paths, dashes), tested
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
 tools/      the icon (icon.svg → images/icon.png)
@@ -1385,17 +1385,35 @@ docs/       PUBLISHING.md
 
 ## Commands
 
-`/raidplan` opens the window; `/raidplan settings` opens Settings; `/raidplan stop` ends the pull
-being recorded (and keeps it); `/raidplan plan` shows or hides the plan window; `/raidplan next` and
-`/raidplan prev` move its step; `/raidplan send last` sends the newest kept pull; `/raidplan meter`
-shows or hides the meter, `/raidplan meter unlock` gives it the mouse back (and unlocks it),
-`/raidplan meter big` opens it up, `/raidplan meter settings` opens Settings → Meter, `/raidplan meter
+`/raidcodex` opens the window; `/raidcodex settings` opens Settings; `/raidcodex stop` ends the pull
+being recorded (and keeps it); `/raidcodex plan` shows or hides the plan window; `/raidcodex next` and
+`/raidcodex prev` move its step; `/raidcodex send last` sends the newest kept pull; `/raidcodex meter`
+shows or hides the meter, `/raidcodex meter unlock` gives it the mouse back (and unlocks it),
+`/raidcodex meter big` opens it up, `/raidcodex meter settings` opens Settings → Meter, `/raidcodex meter
 preview` (or `meter sample`) shows the sample fight in it (again to stop; not while a real fight is on).
-What follows `/raidplan` is read in lower case with runs of spaces as one (`CommandWords.Normalize`).
-Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the party cooldown tracker and
-`/raidplan callouts` the on-screen callouts (each says in chat where it will show); after either,
+What follows `/raidcodex` is read in lower case with runs of spaces as one (`CommandWords.Normalize`).
+Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the party cooldown tracker and
+`/raidcodex callouts` the on-screen callouts (each says in chat where it will show); after either,
 `unlock` gives it the mouse back (and shows it), `preview` (or `sample`) shows or stops its sample,
 `settings` opens Settings on its tab (Cooldowns, Plan window).
+
+Since 0.5.1 the command is `/raidcodex` and `/raidplan` (from when the plugin was Raid Planner) still
+works: both are registered, each does the same (`CommandWords.Names`, `Main` first, then `Old`), the
+main one's help line says the old one still works (`CommandWords.HelpFor`).
+
+## The name, and what kept the old one
+
+Since 0.5.1 the plugin is Raid Codex, as the site's tool is (its address `/raid-codex`; the old
+`/raid-planner` addresses redirect there). Everything a player reads says Raid Codex, and the site's
+links are built on `SiteLink.CodexUrl` (`https://www.kokos-tools.com/raid-codex`: the front page,
+`?settings=raid-plugin` for tokens, `?from-game=<id>`, `/plan/<id>/review?pull=<sent id>`). What
+Dalamud or the player's setup keys on keeps the old name, so installs, updates, the settings file and
+window places carry on: `InternalName` `RaidPlanner`, the assembly, project, namespace and zip
+`RaidPlanner`, the window ids after `###` (`###RaidPlannerMain` and the rest: ImGui keeps a window's
+place and size by it), the `WindowSystem`'s name, the configuration, the recording's format, and the
+GitHub repository (`koko-puffs/raid-planner-plugin`). The server info bar's entry is titled Raid Codex
+(Dalamud keys its order and hiding in the bar by that title, so it starts again where Dalamud puts a new
+entry).
 
 ## Not yet
 
@@ -1476,6 +1494,14 @@ Since 0.4.0: `/raidplan cooldowns` (or `cds`, `cooldown`) shows or hides the par
   where it can (stack, spread, tankbuster…).
 
 ## Release notes
+
+### 0.5.1 (not released yet)
+
+- **Renamed Raid Codex** (was Raid Planner), as the site's tool is: its name in the plugin installer,
+  every window, button, tooltip and chat line. `/raidcodex` is the command; `/raidplan` still works.
+- **The site moved to `/raid-codex`**: the plugin opens and sends its links there (the old
+  `/raid-planner` addresses redirect). The plugin's internal name, its settings and kept pulls, its
+  windows' places and the recording's file are as they were.
 
 ### 0.5.0
 

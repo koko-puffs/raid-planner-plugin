@@ -38,7 +38,7 @@ public sealed class MeterDetailWindow : Window
     private DateTime copiedAt;
 
     public MeterDetailWindow(Configuration config, Fonts fonts)
-        : base("Raid Planner meter###RaidPlannerMeterDetail")
+        : base("Raid Codex meter###RaidPlannerMeterDetail")
     {
         this.config = config;
         this.fonts = fonts;
@@ -96,7 +96,7 @@ public sealed class MeterDetailWindow : Window
             if (DateTime.UtcNow - drawFailedAt > TimeSpan.FromSeconds(10))
             {
                 drawFailedAt = DateTime.UtcNow;
-                Services.Log.Error(ex, "Raid Planner's meter couldn't draw");
+                Services.Log.Error(ex, "Raid Codex's meter couldn't draw");
             }
         }
         finally

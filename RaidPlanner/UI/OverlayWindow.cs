@@ -252,7 +252,7 @@ public abstract class OverlayWindow : Window
         Services.Log.Error(ex, What);
     }
 
-    /// <summary>/raidplan … unlock: the mouse back, movable again.</summary>
+    /// <summary>/raidcodex … unlock: the mouse back, movable again.</summary>
     public void Unlock()
     {
         Settings.ClickThrough = false;

@@ -109,7 +109,7 @@ public sealed unsafe class GameHooks : IDisposable
         catch (Exception ex)
         {
             missing.Add("where attacks land, whom they hit and the party's own numbers");
-            Services.Log.Error(ex, "Raid Planner couldn't hook action effects");
+            Services.Log.Error(ex, "Raid Codex couldn't hook action effects");
         }
         try
         {
@@ -119,7 +119,7 @@ public sealed unsafe class GameHooks : IDisposable
         catch (Exception ex)
         {
             missing.Add("head markers and damage-over-time ticks");
-            Services.Log.Error(ex, "Raid Planner couldn't hook actor control");
+            Services.Log.Error(ex, "Raid Codex couldn't hook actor control");
         }
         try
         {
@@ -129,7 +129,7 @@ public sealed unsafe class GameHooks : IDisposable
         catch (Exception ex)
         {
             missing.Add("arena changes");
-            Services.Log.Error(ex, "Raid Planner couldn't hook map effects");
+            Services.Log.Error(ex, "Raid Codex couldn't hook map effects");
         }
         try
         {
@@ -151,12 +151,12 @@ public sealed unsafe class GameHooks : IDisposable
             }
             else
             {
-                Services.Log.Warning($"Raid Planner found {found.Length} batched map-effect handlers, not 3; arena changes sent in batches aren't recorded");
+                Services.Log.Warning($"Raid Codex found {found.Length} batched map-effect handlers, not 3; arena changes sent in batches aren't recorded");
             }
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't hook batched map effects");
+            Services.Log.Warning(ex, "Raid Codex couldn't hook batched map effects");
         }
         if (missing.Count > 0)
             Problem = $"This version of the game hides {string.Join(" and ", missing)} from the plugin, so pulls are recorded without them. An update to the plugin should bring them back.";
@@ -257,7 +257,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner couldn't read an action effect");
+            Failed(ex, "Raid Codex couldn't read an action effect");
         }
     }
 
@@ -370,7 +370,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner couldn't read an actor control message");
+            Failed(ex, "Raid Codex couldn't read an actor control message");
         }
     }
 
@@ -413,7 +413,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner couldn't read a map effect");
+            Failed(ex, "Raid Codex couldn't read a map effect");
         }
     }
 
@@ -435,7 +435,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Failed(ex, "Raid Planner couldn't read batched map effects");
+            Failed(ex, "Raid Codex couldn't read batched map effects");
         }
     }
 
@@ -457,7 +457,7 @@ public sealed unsafe class GameHooks : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner couldn't let go of a hook");
+            Services.Log.Error(ex, "Raid Codex couldn't let go of a hook");
         }
     }
 }

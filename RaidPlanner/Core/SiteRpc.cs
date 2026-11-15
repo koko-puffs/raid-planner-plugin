@@ -108,7 +108,7 @@ public static class SiteRpc
     public static async Task<RpcResult> CallAsync(HttpClient http, string function, JsonObject args, TimeSpan timeout, CancellationToken cancel)
     {
         var token = args["p_token"] is JsonValue tv && tv.TryGetValue<string>(out var t) ? t : null;
-        if (!SiteLink.LooksRight(token)) return new RpcResult(false, null, "Link your Raid Planner account in Settings first.", "token", true);
+        if (!SiteLink.LooksRight(token)) return new RpcResult(false, null, "Link your Raid Codex account in Settings first.", "token", true);
         if (cancel.IsCancellationRequested) return RpcResult.Stopped;
         string body;
         try

@@ -283,7 +283,7 @@ public static partial class Kit
 
     public static Vector2 SwitchSize => new(S(34), S(20));
 
-    /// <summary>The planner's switch (`.switch`), 34×20: white 14% with a white knob, ember with a dark knob when on; the knob slides 14px over 160ms. Returns true when flipped.</summary>
+    /// <summary>The Raid Codex's switch (`.switch`), 34×20: white 14% with a white knob, ember with a dark knob when on; the knob slides 14px over 160ms. Returns true when flipped.</summary>
     public static bool Switch(string id, Vector2 pos, bool on, bool disabled = false)
     {
         var size = SwitchSize;

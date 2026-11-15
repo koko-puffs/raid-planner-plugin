@@ -170,7 +170,7 @@ public static class Icons
         }, false),
         [Icon.ExternalLink] = (new[] { "M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" }, false),
         [Icon.ChevronLeft] = (new[] { "m15 18-6-6 6-6" }, false),
-        // The Raid Planner's: its swords (the favicon), and the plugin's own.
+        // The Raid Codex's: its swords (the favicon), and the plugin's own.
         [Icon.Swords] = (new[]
         {
             "m13 19 6-6", "M14.5 17.5 3.586 6.586A2 2 0 0 1 3 5.172V3h2.172a2 2 0 0 1 1.414.586L17.5 14.5",

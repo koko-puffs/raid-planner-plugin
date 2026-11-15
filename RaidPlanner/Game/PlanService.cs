@@ -142,7 +142,7 @@ public sealed class PlanService : IDisposable
         }
         catch (Exception ex)
         {
-            Services.Log.Error(ex, "Raid Planner's plan couldn't update");
+            Services.Log.Error(ex, "Raid Codex's plan couldn't update");
         }
     }
 
@@ -231,7 +231,7 @@ public sealed class PlanService : IDisposable
     private void Nudge()
     {
         nudgeDue = false;
-        Print($"You have a plan for this duty: {Plan!.Name}. /raidplan plan shows it.");
+        Print($"You have a plan for this duty: {Plan!.Name}. /raidcodex plan shows it.");
         if (!config.ShowPlanInDuties) return;
         shownForDuty = true;
         ShowWindow?.Invoke(true);
@@ -281,7 +281,7 @@ public sealed class PlanService : IDisposable
         live.Changed(new LiveStep(Plan.Id, step, id), DateTime.UtcNow);
     }
 
-    /// <summary>The next or previous step (the window's buttons, /raidplan next and prev).</summary>
+    /// <summary>The next or previous step (the window's buttons, /raidcodex next and prev).</summary>
     public void Move(int by)
     {
         if (follower == null || Plan == null) return;
@@ -313,11 +313,11 @@ public sealed class PlanService : IDisposable
     {
         try
         {
-            Services.Chat.Print(text, "Raid Planner");
+            Services.Chat.Print(text, "Raid Codex");
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't write to chat");
+            Services.Log.Warning(ex, "Raid Codex couldn't write to chat");
         }
     }
 
@@ -333,7 +333,7 @@ public sealed class PlanService : IDisposable
         {
             if (DateTime.UtcNow - chimeFailedAt < TimeSpan.FromMinutes(1)) return;
             chimeFailedAt = DateTime.UtcNow;
-            Services.Log.Warning(ex, "Raid Planner couldn't play its callout sound");
+            Services.Log.Warning(ex, "Raid Codex couldn't play its callout sound");
         }
     }
 
@@ -506,7 +506,7 @@ public sealed class PlanService : IDisposable
             // Always told, so a call that's no longer wanted can't hold sharing up (a stale one is ignored).
             live.Done(call, r.Ok, DateTime.UtcNow);
             if (g != generation) return;
-            if (!r.Ok && !r.Unreachable) Services.Log.Information($"Raid Planner couldn't share the step: {r.Why}");
+            if (!r.Ok && !r.Unreachable) Services.Log.Information($"Raid Codex couldn't share the step: {r.Why}");
         });
     }
 
@@ -526,7 +526,7 @@ public sealed class PlanService : IDisposable
             }
             catch (Exception ex)
             {
-                Services.Log.Error(ex, "Raid Planner couldn't read the site's answer");
+                Services.Log.Error(ex, "Raid Codex couldn't read the site's answer");
                 value = default!;
                 r = r with { Ok = false, Why = "The site's answer couldn't be read." };
             }
@@ -541,7 +541,7 @@ public sealed class PlanService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Services.Log.Error(ex, "Raid Planner couldn't use the site's answer");
+                        Services.Log.Error(ex, "Raid Codex couldn't use the site's answer");
                     }
                 });
             }

@@ -9,7 +9,7 @@ namespace RaidPlanner.UI.Model;
 
 /// <summary>
 /// A sample fight, to see the meter mid-fight without one (Settings → Meter's _Show a sample fight_,
-/// the empty meter's _See a sample_, `/raidplan meter preview`): the mock-ups' pull 12 in Example
+/// the empty meter's _See a sample_, `/raidcodex meter preview`): the mock-ups' pull 12 in Example
 /// Arena, eight players, played from 2:15 with its clock running and its numbers moving as a pull's
 /// do (four snapshots a second; bursts in the two-minute buffs, a raidwide every 24 seconds, each
 /// player's damage rising and falling with their rotation), the limit break used at 0:58, P2 from

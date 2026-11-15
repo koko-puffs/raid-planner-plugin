@@ -201,7 +201,7 @@ public sealed class GameData
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't read the game's actions and statuses in English");
+            Services.Log.Warning(ex, "Raid Codex couldn't read the game's actions and statuses in English");
         }
         return n;
     }
@@ -233,7 +233,7 @@ public sealed class GameData
         }
         catch (Exception ex)
         {
-            Services.Log.Warning(ex, "Raid Planner couldn't read the game's statuses in English");
+            Services.Log.Warning(ex, "Raid Codex couldn't read the game's statuses in English");
         }
         return (fails, dots, shields);
     }
