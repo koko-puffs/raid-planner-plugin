@@ -495,7 +495,7 @@ public class SummaryAdditionTests
             Assert.Equal(row.Damage, slots[i]!["dmg"]!.GetValue<long>());
             Assert.Equal(row.Healing, slots[i]!["heal"]!.GetValue<long>());
             Assert.Equal(row.Overheal, slots[i]!["over"]!.GetValue<long>());
-            Assert.Equal(Math.Round(row.CritRate, 3), slots[i]!["crit"]!.GetValue<double>());
+            Assert.Equal(Math.Round(row.CritRate, 3, MidpointRounding.AwayFromZero), slots[i]!["crit"]!.GetValue<double>());
         }
     }
 }
@@ -574,6 +574,18 @@ public class FightLengthTests
         var none = Builder();
         none.Hit(2, 101, 600, 0, 0, 0, 0, 0, new[] { 2 }, new long[] { 0 }, new[] { Effects.FxDodged }, new long[] { 100_000 });
         Assert.False(PullStats.Stats(none.Finish(20, Outcome.Ended)).ContainsKey("len"));
+    }
+
+    [Fact]
+    public void A_slots_numbers_round_halves_up_as_the_sites_server_summary_does()
+    {
+        // Active from 1 to 1.25: 0.25 s, a half at one decimal. The site's summary (JavaScript's Math.round) says 0.3;
+        // rounding to even would have said 0.2, so the plugin's and the server's summaries of one pull differed.
+        var b = Builder();
+        b.CombatFx(1, 9, 3, 101, 12_000, (int)FxKind.Damage, -1);
+        b.CombatFx(1.25, 9, 3, 101, 12_000, (int)FxKind.Damage, -1);
+        var slot = PullStats.Stats(b.Finish(20, Outcome.Ended))["slots"]!.AsArray().Single(s => s!["slot"]!.GetValue<string>() == "R1");
+        Assert.Equal(0.3, slot!["active"]!.GetValue<double>());
     }
 }
 

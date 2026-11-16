@@ -532,24 +532,42 @@ public class CommandWordsTests
         Assert.Equal(read, CommandWords.Normalize(args));
 
     [Fact]
-    public void Raidcodex_is_the_command_and_raidplan_still_works()
+    public void Raidcodex_is_the_command_rc_is_short_and_raidplan_still_works()
     {
-        // 0.5.1: Raid Codex (was Raid Planner). Both are registered, the new one first; each does the same.
+        // 0.5.1: Raid Codex (was Raid Planner); 0.7.4: /rc. All registered, the main one first; each does the same.
         Assert.Equal("/raidcodex", CommandWords.Main);
+        Assert.Equal("/rc", CommandWords.Short);
         Assert.Equal("/raidplan", CommandWords.Old);
-        Assert.Equal(new[] { "/raidcodex", "/raidplan" }, CommandWords.Names);
+        Assert.Equal(new[] { "/raidcodex", "/rc", "/raidplan" }, CommandWords.Names);
         Assert.Equal(CommandWords.Names.Length, CommandWords.Names.Distinct().Count());
-        // The main one's help names the new command and says the old one still works.
+        // Dalamud's list shows the main one only, and it names just the three to know.
+        Assert.True(CommandWords.Listed("/raidcodex"));
+        Assert.False(CommandWords.Listed("/rc"));
+        Assert.False(CommandWords.Listed("/raidplan"));
         var main = CommandWords.HelpFor("/raidcodex");
         Assert.StartsWith("Open Raid Codex.", main);
-        Assert.Contains("/raidcodex plan", main);
-        Assert.Contains("/raidplan still works", main);
+        Assert.Contains("/raidcodex settings", main);
+        Assert.Contains("/raidcodex help", main);
+        Assert.Contains("/rc", main);
+        Assert.DoesNotContain("/raidcodex plan", main);
         Assert.DoesNotContain("Raid Planner", main);
-        Assert.DoesNotContain("/raidplan", main.Replace("/raidplan still works", ""));
-        // The old one's points at the new one.
+        Assert.Contains("/raidcodex", CommandWords.HelpFor("/rc"));
         var old = CommandWords.HelpFor("/raidplan");
         Assert.Contains("/raidcodex", old);
         Assert.Contains("/raidplan still works", old);
         Assert.NotEqual(main, old);
+    }
+
+    [Fact]
+    public void Help_lists_every_command_the_plugin_answers()
+    {
+        var lines = CommandWords.HelpLines();
+        Assert.Contains("/rc", lines[0]);
+        Assert.Equal(CommandWords.Help.Length + 1, lines.Length);
+        Assert.Equal("/raidcodex: opens or closes the window", lines[1]);
+        foreach (var words in new[] { "settings", "stop", "send last", "plan", "next / prev", "meter", "meter unlock", "meter big",
+                     "meter preview", "meter settings", "cooldowns", "callouts", "help" })
+            Assert.Contains(lines, l => l.StartsWith($"/raidcodex {words}: "));
+        Assert.Contains("help", CommandWords.Normalize("HELP"));
     }
 }

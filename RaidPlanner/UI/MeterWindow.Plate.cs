@@ -60,7 +60,6 @@ public sealed partial class MeterWindow
         Configure(plate, config);
         plate.Locked = config.MeterLocked;
         plate.ClickThrough = config.MeterClickThrough;
-        plate.Up = Up;
         plate.PreviewOn = Preview != null;
         if (shown != null) plate.Update(shown, m, MeterLayout.Known(config.MeterTab), config.MeterRank, config.MeterWholeNumbers, Now());
     }
@@ -74,6 +73,8 @@ public sealed partial class MeterWindow
         p.Whole = config.MeterWholeNumbers;
         p.JobsOnly = config.MeterJobsOnly;
         p.Background = Math.Clamp(config.MeterBackground, 0.2f, 1f);
+        // Where its head sits and the rows' order (since 0.7.4 apart from which way it grows; Settings' preview follows them too).
+        p.Arrange = config.MeterArrangeNow();
     }
 
     private static double Now() => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
@@ -89,11 +90,16 @@ public sealed partial class MeterWindow
         var width = t.Win.Width;
         SizeConstraints = PlateSizesLimits;
         float h;
-        if (PlateOneLine) h = plate.LineHeight + chrome / scale;
+        if (PlateOneLine)
+        {
+            holdH = 0;
+            h = plate.LineHeight + chrome / scale;
+        }
         else
         {
             var needed = plate.Needed(PartyRows(), view == View.Waiting);
-            h = MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y);
+            // Held while the mouse is on it (MeterLayout.Hold): a tab picked or a row come doesn't move its head under the mouse.
+            h = HoldHeight(MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y));
         }
         Size = new Vector2(width, h);
         SizeCondition = ImGuiCond.Always;
@@ -128,8 +134,8 @@ public sealed partial class MeterWindow
             plate.PaceTip = paceTip.Tip;
         }
         var h = bottom - top.Y;
-        headTop = Up ? bottom - S(t.Win.HeadH) : top.Y;
-        headBottom = Up ? bottom : top.Y + S(t.Win.HeadH);
+        headTop = HeadBottom ? bottom - S(t.Win.HeadH) : top.Y;
+        headBottom = HeadBottom ? bottom : top.Y + S(t.Win.HeadH);
         PlateInput input;
         var oneLine = PlateOneLine;
         if (oneLine)

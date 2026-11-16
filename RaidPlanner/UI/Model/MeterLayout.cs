@@ -4,14 +4,92 @@ using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.UI.Model;
 
-/// <summary>Which way the meter grows when its height changes by itself (Settings → Meter, Grows).</summary>
+/// <summary>
+/// Which way the meter grows when its height changes by itself (Settings → Meter, Grows): the edge that
+/// stays put. Since 0.7.4 it's only that: where the head sits is <see cref="MeterHead"/>, the rows' order <see cref="MeterOrder"/>.
+/// </summary>
 public enum MeterGrows
 {
-    /// <summary>Its top edge stays where it is: the head (the clock, the picker, the lock) on top, the rows reading down from it.</summary>
+    /// <summary>Its top edge stays where it is; it grows downwards.</summary>
     Down,
 
-    /// <summary>Its foot stays where it is: the head at the foot, the rows reading up from it (the top player nearest the head).</summary>
+    /// <summary>Its bottom edge stays where it is; it grows upwards (a meter sitting on your hotbars).</summary>
     Up,
+}
+
+/// <summary>
+/// Where the meter's head sits (Settings → Meter, Head; since 0.7.4): the normal meter's clock, tabs, pull
+/// menu and lock (pace and the column heads beside them), compact's head band. The foot (the limit break's
+/// row and the party's line) sits at the other edge.
+/// </summary>
+public enum MeterHead
+{
+    Top,
+    Bottom,
+}
+
+/// <summary>
+/// The rows' order reading down the window (Settings → Meter, Order; since 0.7.4): the top player at the top
+/// of the list, or at its bottom. Deaths and events follow it (the first death and the newest event where the top player is).
+/// </summary>
+public enum MeterOrder
+{
+    HighestFirst,
+    LowestFirst,
+}
+
+/// <summary>
+/// How the meter is laid out (since 0.7.4; until then one Grows setting flipped all three): the edge that
+/// stays put, the edge the head sits at, and the rows' order reading down. Worked out away from ImGui so it's
+/// tested: where the head goes, and where each row goes counting from the head's side.
+/// </summary>
+public readonly record struct MeterArrange(MeterGrows Grows, MeterHead Head, MeterOrder Order)
+{
+    /// <summary>As a new meter is: growing down, the head on top, highest first.</summary>
+    public static readonly MeterArrange Default = new(MeterGrows.Down, MeterHead.Top, MeterOrder.HighestFirst);
+
+    /// <summary>The settings' version that has the three apart (<see cref="Migrate"/>): 0 before 0.7.4.</summary>
+    public const int Current = 1;
+
+    /// <summary>The head at the bottom edge (the foot at the top).</summary>
+    public bool HeadAtBottom => Head == MeterHead.Bottom;
+
+    /// <summary>The top player nearest the head (highest first under a head on top, lowest first over one at the bottom).</summary>
+    public bool TopNearHead => (Head == MeterHead.Top) == (Order == MeterOrder.HighestFirst);
+
+    /// <summary>
+    /// Where the <paramref name="k"/>th of <paramref name="n"/> rows shown (0 the top player, n − 1 the last,
+    /// compact's pinned you) sits, counting from the head's side (0 next to the head).
+    /// </summary>
+    public int FromHead(int k, int n) => TopNearHead ? k : n - 1 - k;
+
+    /// <summary>Which row (0 the top player) is <paramref name="d"/>th reading down the window, of <paramref name="n"/> shown.</summary>
+    public int ReadingDown(int d, int n) => FromHead(HeadAtBottom ? n - 1 - d : d, n);
+
+    /// <summary>
+    /// Compact's dashed rule before you pinned (the last of <paramref name="n"/> rows, furthest from the top player):
+    /// the place from the head's side it sits before; the rows from there on are moved past it. The last place when
+    /// the top player is nearest the head, else the second (you are first from the head then).
+    /// </summary>
+    public int PinBoundary(int n) => TopNearHead || n <= 1 ? Math.Max(0, n - 1) : 1;
+
+    /// <summary>
+    /// The three as an older version's one Grows has them (before 0.7.4): down, the head on top and the
+    /// top player first; up, the head at the foot and the rows reading up from it (so lowest first, reading down).
+    /// </summary>
+    public static MeterArrange Of(MeterGrows grows) =>
+        grows == MeterGrows.Up ? new MeterArrange(MeterGrows.Up, MeterHead.Bottom, MeterOrder.LowestFirst) : Default;
+
+    /// <summary>
+    /// Brings an older configuration's layout to this version's once: before 0.7.4 (<paramref name="version"/> 0)
+    /// its Grows set the head and the order too (<see cref="Of"/>), so it looks exactly as it did. After that they're the person's.
+    /// </summary>
+    public static (int Version, MeterHead Head, MeterOrder Order) Migrate(int version, MeterGrows grows, MeterHead head, MeterOrder order)
+    {
+        if (version >= Current) return (version, head, order);
+        var was = Of(grows);
+        return (Current, was.Head, was.Order);
+    }
 }
 
 /// <summary>
@@ -44,12 +122,12 @@ public sealed record MeterSizes(
     public static readonly MeterSizes Normal = new(36, 27, 26, 20, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11);
 
     /// <summary>
-    /// How tall a fight's content is for a party of <paramref name="rows"/> (CSS px): the head, the
-    /// tabs, pace when it's on, the column heads, a row each, the limit break's row and the foot. The
-    /// limit break's and pace's rooms are kept even before they show, so the meter doesn't jump
-    /// mid-fight when they come.
+    /// How tall a fight's content is for <paramref name="rows"/> rows (CSS px): the head, the tabs, pace's
+    /// row when it shows, the column heads, a row each, the limit break's row when it shows, and the foot.
+    /// Since 0.7.4 the meter is fitted to what it shows (<see cref="MeterFit"/>): no room is kept for pace or
+    /// the limit break before they come (it grows by their rows then), so there's no empty band in it.
     /// </summary>
-    public float Needed(int rows, bool pace) => Head + Tabs + (pace ? Pace : 0) + Cols + Math.Max(0, rows) * Row + LimitBreak + Foot;
+    public float Needed(int rows, bool pace, bool limitBreak = true) => Head + Tabs + (pace ? Pace : 0) + Cols + Math.Max(0, rows) * Row + (limitBreak ? LimitBreak : 0) + Foot;
 
     /// <summary>
     /// The normal meter's sizes in a theme (since 0.7.3 it draws in the compact meter's theme): Ready Check's are
@@ -59,13 +137,61 @@ public sealed record MeterSizes(
     public static MeterSizes For(MeterTheme t) => t.Id == MeterThemeId.ReadyCheck ? Normal : Normal with { Row = MathF.Max(Normal.Row, t.Row.H + 5) };
 
     /// <summary>How many rows fit in a fight's content this tall (CSS px), the rest as <see cref="Needed"/> has it.</summary>
-    public int RowsIn(float content, bool pace) => Row <= 0 ? 0 : Math.Max(0, (int)MathF.Floor((content - Needed(0, pace) + 1) / Row));
+    public int RowsIn(float content, bool pace, bool limitBreak = true) => Row <= 0 ? 0 : Math.Max(0, (int)MathF.Floor((content - Needed(0, pace, limitBreak) + 1) / Row));
 }
 
 /// <summary>
-/// The meter's bands laid from its head's edge: the top when it grows down, the foot when it grows up.
-/// The head first, then what goes next to it (the tabs, pace, the column heads), the rows running away
-/// from it, and at the far edge the party's line. Screen pixels.
+/// The normal meter's height fitted to what it shows (since 0.7.4; CSS px, the window's content without its
+/// title bar): no empty band at the far edge from the head, whichever way it grows. A fight's rows, pace's row
+/// and the limit break's only when they show; waiting, the party with dashes; Deaths and Events, their lines
+/// (at most the room the party's rows take, so a long list doesn't make it taller than the fight). The height
+/// you gave it caps it (<see cref="MeterLayout.FightHeight"/>): the most it grows to.
+/// </summary>
+public static class MeterFit
+{
+    /// <summary>An empty list's line ("Nobody died", "Deaths, raises… show here"): 14 above, its 19.5 line, 14 under.</summary>
+    public const float Message = 14 + 19.5f + 14;
+
+    /// <summary>The Deaths tab's lines under a live fight's deaths ("7 alive" and its hint), in place of the foot.</summary>
+    public const float Alive = 14 + 19.5f + 7.2f + 16 + 6;
+
+    /// <summary>A fight on Damage, Healing or Taken: the head, the tabs, pace when it shows, the column heads, the rows, the limit break when it shows, the foot.</summary>
+    public static float Fight(MeterSizes z, int rows, bool pace, bool limitBreak) => z.Needed(rows, pace, limitBreak);
+
+    /// <summary>Waiting for the first hit: the head, the tabs, the column heads, the party with dashes, the foot.</summary>
+    public static float Waiting(MeterSizes z, int rows) => z.Needed(rows, false, false);
+
+    /// <summary>The Events tab's row (23 tall, or the theme's row less 2).</summary>
+    public static float EventRow(MeterSizes z) => MathF.Max(23, z.Row - 2);
+
+    /// <summary>
+    /// The Deaths tab: the head, the tabs, a <paramref name="rowH"/> row a death, then (live) the alive line in the
+    /// foot's place, else the foot and, with none, its line; at most the party's fight (<see cref="ListCap"/>).
+    /// </summary>
+    public static float Deaths(MeterSizes z, int deaths, float rowH, bool live, int party)
+    {
+        var n = Math.Max(0, deaths);
+        var own = z.Head + z.Tabs + n * rowH + (live ? Alive : z.Foot + (n == 0 ? Message : 0));
+        return MathF.Min(own, MathF.Max(ListCap(z, party), z.Head + z.Tabs + (live ? Alive : z.Foot + Message)));
+    }
+
+    /// <summary>The Events tab: the head, the tabs, a row an event (the newest kept), the foot, and with none its line; at most the party's fight.</summary>
+    public static float Events(MeterSizes z, int events, int party)
+    {
+        var n = Math.Max(0, events);
+        var own = z.Head + z.Tabs + n * EventRow(z) + z.Foot + (n == 0 ? Message : 0);
+        return MathF.Min(own, MathF.Max(ListCap(z, party), z.Head + z.Tabs + z.Foot + Message));
+    }
+
+    /// <summary>The most a list (Deaths, Events) takes: the party's rows on Damage with the limit break's, as the meter is in the fight.</summary>
+    public static float ListCap(MeterSizes z, int party) => z.Needed(party, false, true);
+}
+
+/// <summary>
+/// The meter's bands laid from its head's edge: the top, or the bottom with its head there (up;
+/// since 0.7.4 <see cref="MeterHead"/>, apart from which way it grows). The head first, then what goes next to it
+/// (the tabs, pace, the column heads), the rows running away from it (each row's place from the head is
+/// <see cref="MeterArrange.FromHead"/>'s), and at the far edge the party's line. Screen pixels.
 /// </summary>
 public struct MeterStack
 {
@@ -80,7 +206,7 @@ public struct MeterStack
         far = up ? top : bottom;
     }
 
-    /// <summary>The head is at the foot (it grows up).</summary>
+    /// <summary>The head is at the bottom edge.</summary>
     public readonly bool Up => up;
 
     /// <summary>Where the room left starts on the head's side (the first row's edge).</summary>
@@ -189,6 +315,15 @@ public static class MeterLayout
         if (given > 0) h = MathF.Min(h, given);
         return Math.Clamp(h, min, MathF.Max(min, max));
     }
+
+    /// <summary>
+    /// The window's height in a fight while the mouse is on it (since 0.7.4; CSS px): the height it had as the mouse
+    /// came (<paramref name="holding"/>; 0 none yet) is kept, so a tab switch or a row coming or going doesn't move its
+    /// head or tabs from under the mouse (with the head at the edge that isn't anchored, they'd move). Rows that don't
+    /// fit it are cut, as under a height you gave it; fewer leave room at the far side. With the mouse off it, or
+    /// nothing held yet, it's the fitted height (<paramref name="fitted"/>). Sizing it by its edge isn't this: your drag wins.
+    /// </summary>
+    public static float Hold(float fitted, float holding, bool pointed) => pointed && holding > 0 && float.IsFinite(holding) ? holding : fitted;
 
     /// <summary>
     /// Whether the meter's window can be resized by its edges: only the normal meter, unlocked. Compact

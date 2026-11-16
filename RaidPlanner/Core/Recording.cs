@@ -349,8 +349,8 @@ public sealed record AggroEvent(double T, int Actor, int On) : RecEvent(T)
 
 /// <summary>
 /// The head signs (the party's target markers) as they now are (since 0.4.0): by the game's index
-/// (0–16; assumed attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8
-/// [verify]) the party id or actor id marked. One missing isn't placed.
+/// (0–16: attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8, the game's
+/// Marker sheet's rows in order, row − 1) the party id or actor id marked. One missing isn't placed.
 /// </summary>
 public sealed record SignsEvent(double T, IReadOnlyDictionary<int, int> Marks) : RecEvent(T)
 {
@@ -369,8 +369,13 @@ public sealed record SignsEvent(double T, IReadOnlyDictionary<int, int> Marks) :
     }
 }
 
-/// <summary>A head marker appeared over someone (the game's icon number, as it sent it).</summary>
-public sealed record MarkerEvent(double T, int On, uint Icon) : RecEvent(T)
+/// <summary>
+/// A head marker appeared over someone (the game's icon number, as it sent it): a party member, or (an actor's id) an
+/// enemy or a helper: a "rotate clockwise" or "turn left" over the boss is one. Since 0.7.4 with <see cref="Target"/>,
+/// the one the game said it points at (<c>tgt</c>, its second argument [verify]; 0, left out, for none or someone not in
+/// the recording).
+/// </summary>
+public sealed record MarkerEvent(double T, int On, uint Icon, int Target = 0) : RecEvent(T)
 {
     public override void Write(Utf8JsonWriter w)
     {
@@ -379,6 +384,29 @@ public sealed record MarkerEvent(double T, int On, uint Icon) : RecEvent(T)
         w.WriteString("k", "marker");
         w.WriteNumber("on", On);
         w.WriteNumber("icon", Icon);
+        if (Target != 0) w.WriteNumber("tgt", Target);
+        w.WriteEndObject();
+    }
+}
+
+/// <summary>
+/// An enemy (a boss, an add or a helper) turning or moving while it's at a mechanic (since 0.7.4): its cast going, or
+/// within a moment of its cast's end or its last hit (<see cref="RecordingBuilder.Facing"/>). Its facing (radians, the
+/// game's: 0 south, a quarter turn east) and where it stood, as often as the frame shows it turned by
+/// <see cref="RecordingBuilder.TurnStep"/> or more. What shows a boss turning step by step through a rotating mechanic,
+/// or a helper's heading while it casts (helpers aren't in the frames), finer than the frames' half second.
+/// </summary>
+public sealed record TurnEvent(double T, int Actor, float Rotation, float X, float Z) : RecEvent(T)
+{
+    public override void Write(Utf8JsonWriter w)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("t", CastEvent.Round(T, 2));
+        w.WriteString("k", "turn");
+        w.WriteNumber("actor", Actor);
+        w.WriteNumber("rot", CastEvent.Round(Rotation, 3));
+        w.WriteNumber("x", CastEvent.Round(X, 2));
+        w.WriteNumber("z", CastEvent.Round(Z, 2));
         w.WriteEndObject();
     }
 }
@@ -818,7 +846,9 @@ public sealed class Recording
             case "hit":
                 return ReadHit(e, t);
             case "marker":
-                return new MarkerEvent(t, Int(e["on"]) ?? 0, (UInt(e["icon"]) ?? 0));
+                return new MarkerEvent(t, Int(e["on"]) ?? 0, (UInt(e["icon"]) ?? 0), Int(e["tgt"]) ?? 0);
+            case "turn":
+                return new TurnEvent(t, Int(e["actor"]) ?? 0, (float)(Num(e["rot"]) ?? 0), (float)(Num(e["x"]) ?? 0), (float)(Num(e["z"]) ?? 0));
             case "tether":
             case "untether":
                 return new TetherEvent(t, Int(e["from"]) ?? 0, Int(e["to"]) ?? 0, (UInt(e["id"]) ?? 0), Str(e["k"]) == "tether");

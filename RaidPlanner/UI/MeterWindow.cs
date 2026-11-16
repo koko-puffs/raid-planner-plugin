@@ -23,10 +23,11 @@ namespace RaidPlanner.UI;
 /// Only the normal meter, unlocked, can be sized by hand (<see cref="MeterLayout.Resizable"/>): its
 /// head's buttons are kept out of the reach of its edges and corners, and while the mouse is over one
 /// it isn't resizable that frame (<see cref="ResizeGuard"/>), so a press there is the button's.
-/// In a fight it's as tall as the party needs (at most the height you gave it); out of combat it folds
-/// to one line (as it shrinks to the Boss before any fight, or when the meter has stopped). It stays
-/// put at its anchor as it does: its top edge growing down, its foot growing up (its head at the foot
-/// then, the rows reading up from it). Its numbers come from <see cref="IMeterSource"/> only.
+/// In a fight it's as tall as what it shows (<see cref="MeterFit"/>; at most the height you gave it); out of
+/// combat it folds to one line (as it shrinks to the Boss before any fight, or when the meter has stopped).
+/// It stays put at its anchor as it does: its top edge growing down, its bottom edge growing up. Its head sits
+/// at the top or the bottom and its rows read highest or lowest first, apart from that (<see cref="MeterArrange"/>,
+/// since 0.7.4). Its numbers come from <see cref="IMeterSource"/> only.
 /// </summary>
 public sealed partial class MeterWindow : Window
 {
@@ -123,6 +124,18 @@ public sealed partial class MeterWindow : Window
     /// <summary>A height you gave the normal meter by its edge (CSS px; 0 none), kept once you let go.</summary>
     private float givenNow;
 
+    /// <summary>
+    /// The height held while the mouse is on the meter (CSS px; 0 none: <see cref="MeterLayout.Hold"/>), so a tab switch
+    /// or a row change doesn't move it under the mouse; it settles to the fitted height once the mouse is off it.
+    /// </summary>
+    private float holdH;
+
+    /// <summary>The frame the mouse was last on the meter (or one of its menus open), as Draw saw it; -1 never.</summary>
+    private int pointedFrame = -1;
+
+    /// <summary>The mouse was on the meter last frame (not click-through: then the mouse is the game's).</summary>
+    private bool Pointed => pointedFrame >= 0 && pointedFrame >= ImGui.GetFrameCount() - 1;
+
     /// <summary>The head's and foot's buttons kept clear of the resizing edges (the normal meter's).</summary>
     private readonly ResizeGuard guard = new();
 
@@ -210,8 +223,14 @@ public sealed partial class MeterWindow : Window
     /// <summary>The normal meter's sizes in its theme (<see cref="MeterSizes.For"/>; compact is <see cref="PlateMeter"/>'s own since 0.7.0).</summary>
     private MeterSizes Z => NormalLook().Z;
 
-    /// <summary>It grows up: anchored at its foot, its head at the foot.</summary>
-    private bool Up => config.MeterGrows == MeterGrows.Up;
+    /// <summary>
+    /// How it's laid out (since 0.7.4 three settings apart): the edge it stays put at (<see cref="MeterGrows"/>,
+    /// its anchor), the edge its head sits at, the rows' order reading down.
+    /// </summary>
+    private MeterArrange Arr => config.MeterArrangeNow();
+
+    /// <summary>Its head at the bottom edge (the foot at the top), whichever way it grows.</summary>
+    private bool HeadBottom => config.MeterHead == MeterHead.Bottom;
 
     /// <summary>Shown when wanted, in a duty (or everywhere), and not hidden out of combat.</summary>
     public override bool DrawConditions()
@@ -336,9 +355,9 @@ public sealed partial class MeterWindow : Window
     // Its size and place.
 
     /// <summary>
-    /// Before ImGui.Begin: its flags, its height (folded or empty, what it shows; in a fight what the
-    /// party needs, at most the height you gave it) and its place, from its anchor (its top edge kept
-    /// growing down, its foot growing up), kept on the screen. Not while you're moving or sizing it.
+    /// Before ImGui.Begin: its flags, its height (folded or empty, what it shows; in a fight what it shows
+    /// too, at most the height you gave it) and its place, from its anchor (its top edge kept growing down,
+    /// its bottom edge growing up), kept on the screen. Not while you're moving or sizing it.
     /// </summary>
     private void Arrange()
     {
@@ -368,6 +387,7 @@ public sealed partial class MeterWindow : Window
         var height = float.NaN;
         if (fits)
         {
+            holdH = 0;
             Flags |= ImGuiWindowFlags.AlwaysAutoResize;
             Size = new Vector2(widthCss, 0);
             SizeCondition = ImGuiCond.Always;
@@ -375,10 +395,12 @@ public sealed partial class MeterWindow : Window
         }
         else if (widthKnown && !held)
         {
-            // In a fight: as tall as the party needs (a bigger party, a taller meter), at most the height you gave it.
+            // In a fight: as tall as what it shows (its rows, pace and the limit break when they show; a bigger
+            // party, a taller meter), at most the height you gave it. The anchored edge stays; the other moves.
             var given = config.MeterHeight;
-            var needed = Z.Needed(PartyRows(), config.MeterPace != PaceAgainst.Off);
-            var h = MeterLayout.FightHeight(needed, chrome / scale, given, Sizes.MinimumSize.Y, Sizes.MaximumSize.Y);
+            var h = MeterLayout.FightHeight(Fitted(), chrome / scale, given, Sizes.MinimumSize.Y, Sizes.MaximumSize.Y);
+            // While the mouse is on it, the height it had as the mouse came (a tab switch doesn't move its head under the mouse).
+            h = HoldHeight(h);
             Size = new Vector2(widthCss, h);
             SizeCondition = ImGuiCond.Always;
             height = h * scale;
@@ -386,6 +408,15 @@ public sealed partial class MeterWindow : Window
         }
         else SizeCondition = ImGuiCond.FirstUseEver;
         PlaceAt(widthCss * scale, height);
+    }
+
+    /// <summary>The fight's height (CSS px) as <see cref="MeterLayout.Hold"/> has it this frame, held from here on while the mouse stays.</summary>
+    private float HoldHeight(float fitted)
+    {
+        var pointed = Pointed;
+        var h = MeterLayout.Hold(fitted, holdH, pointed);
+        holdH = pointed ? h : 0;
+        return h;
     }
 
     /// <summary>Places the window from its anchor for this size (screen px), kept on the screen; not while held, nor before its height is known.</summary>
@@ -398,6 +429,34 @@ public sealed partial class MeterWindow : Window
             vp.WorkPos + vp.WorkSize, otherScreens);
         ImGui.SetNextWindowPos(at, ImGuiCond.Always);
     }
+
+    /// <summary>
+    /// The normal meter's content's height for what it shows this frame (CSS px; <see cref="MeterFit"/>): a fight's
+    /// rows with pace's and the limit break's only when they're drawn, waiting's party, the Deaths and Events lists.
+    /// </summary>
+    private float Fitted()
+    {
+        var z = Z;
+        var party = PartyRows();
+        var m = Meter;
+        if (view == View.Waiting || shown == null || m == null) return MeterFit.Waiting(z, party);
+        var e = shown;
+        var tab = MeterLayout.Known(config.MeterTab);
+        switch (tab)
+        {
+            case MeterTab.Deaths:
+                Words(e);
+                return MeterFit.Deaths(z, said.Deaths.Count, deathRowCss, m.InEncounter && e.Live, party);
+            case MeterTab.Events:
+                return MeterFit.Events(z, Math.Min(m.Events(e.Id).Count, EventIds.Length), party);
+        }
+        var pace = tab == MeterTab.Damage && config.MeterPace != PaceAgainst.Off && m.Pace(e.Id, config.MeterPace) != null;
+        var lb = LinesOf(e, tab, config.MeterRank).LimitBreak != null;
+        return MeterFit.Fight(z, party, pace, lb);
+    }
+
+    /// <summary>A death's row on the Deaths tab (CSS px), measured in its faces as it was last drawn (its words' heights).</summary>
+    private float deathRowCss = 44;
 
     /// <summary>How many party rows the shown fight has (the limit break's apart): what its height is worked out for.</summary>
     private int PartyRows()
@@ -427,6 +486,11 @@ public sealed partial class MeterWindow : Window
         }
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
             heldOnMe = !config.MeterLocked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
+        // The mouse on it, or on one of its menus (a tab picked there mustn't move the head either): its height is held.
+        // Click-through (no inputs) it never is: the mouse is the game's.
+        if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup)
+            || ImGui.IsPopupOpen(Picker) || ImGui.IsPopupOpen(TabMenu) || ImGui.IsPopupOpen(PlateMenu))
+            pointedFrame = ImGui.GetFrameCount();
         if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows)
         {
             // 0.3.0 kept the height it first opened to (382) by itself, not only one you gave it: that one isn't yours.
@@ -436,6 +500,8 @@ public sealed partial class MeterWindow : Window
         }
         else if (held && drawnOnce && (pos != lastPos || size != lastSize))
         {
+            // Sized by its edge: your drag wins; once you let go it's fitted again under the height you gave it, not held.
+            if (size != lastSize) holdH = 0;
             SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
             anchorMoved = true;
             // The normal meter sized by its edge in a fight: that's the height you're giving it (compact can't be sized).
@@ -488,6 +554,8 @@ public sealed partial class MeterWindow : Window
         widthCss = w / ImGuiHelpers.GlobalScale;
         widthKnown = true;
         previewInFoot = false;
+        // A death's row's height in its faces, for the height fitted to the Deaths tab before it's drawn.
+        deathRowCss = DeathRowH() / S(1);
         if (shown != null) Words(shown);
         // The theme's ground and frame under it all (its sparkles as Decorations has them), as compact's.
         Configure(plate, config);
@@ -535,14 +603,14 @@ public sealed partial class MeterWindow : Window
 
     /// <summary>
     /// A fight, from the head's edge: the head, the tabs (not compact), pace on the Damage tab, the
-    /// columns' heads, the rows (the top player nearest the head), the limit break after them, and the
-    /// party's line at the far edge. Growing up it's the same bands from the foot.
+    /// columns' heads, the rows (in the order Order has them), the limit break after them, and the
+    /// party's line at the far edge. With the head at the bottom it's the same bands from the bottom.
     /// </summary>
     private void DrawFight(ImDrawListPtr dl, Vector2 top, float w, float bottom, MeterEncounter e, IMeterSource m)
     {
         var z = Z;
         var ended = !e.Live;
-        var stack = new MeterStack(top.Y, bottom, Up);
+        var stack = new MeterStack(top.Y, bottom, HeadBottom);
         Header(dl, top.X, ref stack, w, said.Clock, e.Live, MeterView.OutcomeWord(e.Ended), e.Ended == Core.Outcome.Clear ? TagKind.Clear : TagKind.Wipe,
             said.Pick, m, null, true);
         TabsRow(dl, top.X, ref stack, w);
@@ -774,7 +842,7 @@ public sealed partial class MeterWindow : Window
         var vp = ImGui.GetMainViewport();
         var screenTop = vp.WorkPos.Y;
         var screenBottom = vp.WorkPos.Y + vp.WorkSize.Y;
-        var up = MeterLayout.MenuUp(Up, headTop - screenTop, screenBottom - headBottom, menuH + S(MenuGap));
+        var up = MeterLayout.MenuUp(HeadBottom, headTop - screenTop, screenBottom - headBottom, menuH + S(MenuGap));
         var x = MeterLayout.MenuLeft(buttonLeft, win.X, win.X + ImGui.GetWindowWidth(), menuW, S(MenuInset), vp.WorkPos.X, vp.WorkPos.X + vp.WorkSize.X);
         ImGui.SetNextWindowPos(new Vector2(x, up ? headTop - S(MenuGap) : headBottom + S(MenuGap)), ImGuiCond.Always, new Vector2(0, up ? 1 : 0));
     }

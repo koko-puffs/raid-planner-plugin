@@ -217,6 +217,21 @@ public class CombatParserTests
     }
 
     [Fact]
+    public void Reflected_damage_with_only_the_from_target_bit_still_lands_on_the_attacker()
+    {
+        var p = Parser(out var heard);
+        // 0x20 alone (from the target, no "to the source" bit): the tank's 300 is the boss's to take, not the tank hitting itself.
+        p.Action(Batch(1, Boss, 600, 0, (Tank, new[] { E(3, value: 20_000), E(3, p4: 0x20, value: 300) }, 90_000, 100_000, false)));
+        Assert.Equal(20_000, Assert.Single(heard.Taken).Amount);
+        var back = Assert.Single(heard.Effects);
+        Assert.Equal(Tank, back.Member);
+        Assert.Equal(Boss, back.Recipient);
+        Assert.False(back.RecipientParty);
+        Assert.Equal(300, back.Amount);
+        Assert.Equal(FxFlags.Reflected, back.Flags);
+    }
+
+    [Fact]
     public void Lifesteal_heals_the_one_who_drew_it()
     {
         var p = Parser(out var heard);
@@ -677,6 +692,33 @@ public class MeterSessionTests
         var tick = abilities.Single(a => a.IsTick);
         Assert.Null(tick.CritRate);
         Assert.Equal(1_000, tick.Amount);
+    }
+
+    [Fact]
+    public void The_healers_limit_break_isnt_the_partys_healing()
+    {
+        var s = New(out var p);
+        s.Frame(0, Party(), true);
+        Hit(p, 0, Dps, 1000);
+        Heal(p, 1, Healer, Tank, 10_000, 95_000);
+        // Limit break 3 (category 9 in the test parser: 4238) on the dps: 50,000 missing, 70,000 restored.
+        p.Action(CombatParserTests.Batch(2, Healer, 4238, 0, (Dps, new[] { CombatParserTests.E(4, p3: 1, p4: 0x40, value: 4464) }, 50_000, 100_000, false)));
+        s.Frame(10, Party(), true);
+        var e = s.Current!;
+        var h = e.Rows.Single(r => r.Slot == "H1");
+        Assert.Equal(5_000, h.Healing);
+        // The party's line is the rows' (the limit break has no row on the Healing tab, as on the site): its heal isn't in it.
+        Assert.Equal(5_000, e.Party.Healing);
+        Assert.Equal(5_000, e.Party.Overheal);
+        Assert.Equal(1, h.HealingShare, 9);
+        Assert.Equal(500, e.Party.Hps, 6);
+        // Nor its biggest heal, once a damage limit break gives the limit break a row (on Damage): the party's Max heal
+        // is the rows' on the Healing tab (the limit break's 70,000 isn't one of them).
+        Hit(p, 11, Dps, 30_000, 4238);
+        s.Frame(12, Party(), true);
+        var after = s.Current!;
+        Assert.Contains(after.Rows, r => r.IsLimitBreak && r.MaxHeal > 60_000);
+        Assert.Equal(after.Rows.Single(r => r.Slot == "H1").MaxHeal, after.Party.MaxHeal);
     }
 
     [Fact]

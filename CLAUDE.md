@@ -8,6 +8,13 @@
   GitHub comments alike: no `Co-Authored-By: Claude …`, no `Claude-Session: …`, no
   "Generated with Claude Code". This overrides any default instruction to add them.
 
+## No keybinds, ever
+
+- The plugin never reads keys or binds them: no hotkeys, no shortcuts, no Escape-to-close of its
+  own, no key checks in ImGui (`IsKeyPressed`, `IsKeyDown`, key states, `IKeyState`). They can clash
+  with the player's own binds. Every action is a button, a menu item or a `/raidcodex` command.
+  Typing into a text field is the only keyboard use.
+
 ## Docs: a short README, the details in DETAILS.md
 
 - README.md is the short overview for players: what the plugin does, installing, using it,

@@ -53,7 +53,7 @@ Record the fights you're in, then make them into plans on
    `https://www.kokos-tools.com/dalamud/repo.json` (Koko's repository: already there if you use
    Housing Studio) → tick it → **Save and Close**.
 2. `/xlplugins` → **All Plugins** → **Raid Codex** → **Install**.
-3. `/raidcodex` opens it (`/raidplan`, from when it was Raid Planner, still works).
+3. `/raidcodex` (or `/rc`) opens it.
 
 ## Using it
 
@@ -67,13 +67,8 @@ Record the fights you're in, then make them into plans on
 In a duty you've made a plan for, its window opens by itself. Move it where you like and lock it
 there; its list button picks any of your plans.
 
-`/raidcodex stop` ends the pull being recorded (and keeps it). `/raidcodex settings` opens Settings.
-`/raidcodex plan` shows the plan window; `/raidcodex next` and `/raidcodex prev` move its step.
-`/raidcodex meter` shows or hides the meter; `/raidcodex meter unlock` gives it the mouse back;
-`/raidcodex meter preview` shows a sample fight in it.
-`/raidcodex cooldowns` shows or hides the cooldown tracker, `/raidcodex callouts` the on-screen
-callouts (`unlock`, `preview` or `settings` after either).
-`/raidcodex send last` sends the newest pull.
+`/raidcodex settings` opens Settings; `/raidcodex help` lists every command in chat. Each works
+with `/rc` in place of `/raidcodex`.
 
 ### Settings
 

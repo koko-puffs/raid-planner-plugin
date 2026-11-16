@@ -150,9 +150,25 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>
     /// Which way the meter grows when its height changes by itself (folding, opening, a bigger party,
-    /// compact): down keeps its top edge where it is, up keeps its foot there (and puts its head at the foot).
+    /// compact): down keeps its top edge where it is, up keeps its bottom edge there. Until 0.7.4 up put its
+    /// head at the foot and read its rows up too; those are <see cref="MeterHead"/> and <see cref="MeterOrder"/> now.
     /// </summary>
     public MeterGrows MeterGrows { get; set; } = MeterGrows.Down;
+
+    /// <summary>Where the meter's head sits (since 0.7.4): the top or the bottom edge, whichever way it grows.</summary>
+    public MeterHead MeterHead { get; set; } = MeterHead.Top;
+
+    /// <summary>The rows' order reading down the window (since 0.7.4): the top player first or last.</summary>
+    public MeterOrder MeterOrder { get; set; } = MeterOrder.HighestFirst;
+
+    /// <summary>
+    /// The meter's layout's version (<see cref="UI.Model.MeterArrange"/>): 0 before 0.7.4, whose Grows Up is moved
+    /// once to the head at the bottom and lowest first (as it looked), by <see cref="Migrate"/>.
+    /// </summary>
+    public int MeterArrangeVersion { get; set; }
+
+    /// <summary>The meter's three layout settings together.</summary>
+    public MeterArrange MeterArrangeNow() => new(MeterGrows, MeterHead, MeterOrder);
 
     /// <summary>
     /// The point the meter stays put at (screen px): its top-left corner when it grows down, its
@@ -219,7 +235,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>What's uploaded, as <see cref="UploadPrefs"/> has it (a method, so it isn't saved with the settings).</summary>
     public UploadPrefs UploadPrefsNow() => new(Version, UploadLogs, UploadSince);
 
-    /// <summary>Brings settings saved by an older version up to this one (<see cref="UploadPrefs.Migrate"/>, <see cref="UI.Model.MeterLook.Migrate"/>); true when anything changed (then save).</summary>
+    /// <summary>Brings settings saved by an older version up to this one (<see cref="UploadPrefs.Migrate"/>, <see cref="UI.Model.MeterLook.Migrate"/>, <see cref="MeterArrange.Migrate"/>); true when anything changed (then save).</summary>
     public bool Migrate(DateTimeOffset now)
     {
         var changed = false;
@@ -237,6 +253,13 @@ public sealed class Configuration : IPluginConfiguration
         if (look != (MeterLook, MeterCompact, MeterCompactHeight))
         {
             (MeterLook, MeterCompact, MeterCompactHeight) = look;
+            changed = true;
+        }
+        // 0.7.4: Grows, Head and Order apart; an older Up keeps its look (the head at the bottom, lowest first).
+        var arrange = MeterArrange.Migrate(MeterArrangeVersion, MeterGrows, MeterHead, MeterOrder);
+        if (arrange != (MeterArrangeVersion, MeterHead, MeterOrder))
+        {
+            (MeterArrangeVersion, MeterHead, MeterOrder) = arrange;
             changed = true;
         }
         // 0.7.0: the compact meter isn't sized by hand (its width is its theme's, its height its rows'):

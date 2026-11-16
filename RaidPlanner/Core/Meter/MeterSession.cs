@@ -1070,12 +1070,17 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 healCrits += t.HealCrits;
             }
             var best = rows.Count == 0 ? null : rows.MaxBy(r => r.MaxHit);
+            // The biggest heal of the rows the Healing tab shows: the healers' limit break's isn't the party's (Tally.Heal).
+            long maxHeal = 0;
+            foreach (var r in rows)
+                if (!r.IsLimitBreak && r.MaxHeal > maxHeal)
+                    maxHeal = r.MaxHeal;
             var healed = Tally.PartyHealing + Tally.PartyOverheal;
             return new MeterRow(0, string.Empty, "Party", string.Empty, string.Empty, false, false,
                 Tally.PartyDamage, Tally.PartyDamage / clock, rows.Sum(r => r.Dps), Tally.PartyDamage == 0 ? 0 : 1,
                 hits == 0 ? 0 : (double)crits / hits, hits == 0 ? 0 : (double)dhs / hits, best?.MaxHit ?? 0, best?.MaxHitName ?? string.Empty,
                 Tally.PartyHealing, Tally.PartyOverheal, Tally.PartyHealing / clock, healed == 0 ? 0 : (double)Tally.PartyOverheal / healed,
-                Tally.PartyHealing == 0 ? 0 : 1, heals == 0 ? 0 : (double)healCrits / heals, rows.Count == 0 ? 0 : rows.Max(r => r.MaxHeal),
+                Tally.PartyHealing == 0 ? 0 : 1, heals == 0 ? 0 : (double)healCrits / heals, maxHeal,
                 Tally.PartyTaken, Tally.PartyTaken / clock, Tally.PartyTaken == 0 ? 0 : 1, rows.Count == 0 ? 0 : rows.Max(r => r.MaxTaken),
                 rows.Sum(r => r.Deaths), Members.Count > 0 && Members.All(m => m.Dead), null, Math.Max(0, clock),
                 rows.Sum(r => r.Casts), rows.Sum(r => r.Potions), rows.Sum(r => r.RaisesGiven), rows.Sum(r => r.Raised), rows.Sum(r => r.DeadSeconds),

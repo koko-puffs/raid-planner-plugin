@@ -320,7 +320,7 @@ public sealed partial class MainWindow : Window, IDisposable
     /// front, which dims the window under Dalamud's title bar (rgb 4 4 5 at 74%) and takes every
     /// click; in its middle the site's dialog: raised near-solid #18181d with 20px corners, a white
     /// hairline and the shadow faked with rings, its title a small callout, its words, its two
-    /// answers on the right (a destructive one in the danger outline). Escape is No. It fades in
+    /// answers on the right (a destructive one in the danger outline). No key answers it. It fades in
     /// over 280ms (text can't scale crisply in ImGui, so it doesn't grow).
     /// </summary>
     private void DrawConfirm()
@@ -388,8 +388,7 @@ public sealed partial class MainWindow : Window, IDisposable
                 close = true;
                 Later(c.OnYes);
             }
-            // Escape is No, when the question has the keyboard (not an Escape meant for the game or another window).
-            if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsKeyPressed(ImGuiKey.Escape)) close = true;
+            // No key answers it (the plugin reads no keys: CLAUDE.md); No and Yes are pressed.
             Kit.Reserve(buttons, inner, Kit.ButtonHeight());
             Kit.PopBox();
             confirmCardH = Kit.At.Y - cardPos.Y + pad;
