@@ -1003,7 +1003,8 @@ says it has one; types 3, 5 and 6 are damage (5 blocked, 6 parried), 4 a heal (i
 byte than damage's), 1 a miss, 2 fully resisted, 7 (or damage marked immune) invulnerable, 10 and 11
 MP (never healing), 14 and 15 a status put on, 51 instant death. An effect comes from the caster,
 or from the target when it says so (retaliation: Vengeance's damage back at the boss is the tank's,
-flagged reflected), and lands on the target, or on the caster when it says so (lifesteal: Bloodbath's
+flagged reflected; damage from the target is always at the caster, whether or not the game also sets the "to the
+caster" bit), and lands on the target, or on the caster when it says so (lifesteal: Bloodbath's
 heal is its user's). A pet's or summon's action is its owner's (the owner from the game), flagged; an
 action whose ActionCategory is 9 or 15 is a limit break, flagged. The party is `PartyMembers`' entity
 ids (the party list's; since 0.5.0, outside a duty, a cross-world party's group: above, What's
@@ -1052,7 +1053,9 @@ party's row is the sum of the rows, the limit break's included):
   the HP the target was missing when the heal was announced, or the tick came (it reads a little
   high when a hit is on its way, as ACT's does; the recording keeps a tick's HP, `combat.tick.h`, so
   the summary and the site measure a HoT's tick the same). HPS is that over the encounter's length;
-  overheal % is overheal over all healed. Shields aren't healing; lifesteal goes to whoever drew it; MP never.
+  overheal % is overheal over all healed. Shields aren't healing; lifesteal goes to whoever drew it; MP never. The
+  healers' limit break's healing is the limit break's, never the party's (it has no row on the Healing tab, and the
+  site leaves it out), so the party's healing is its rows' (since 0.7.4).
 - **Taken**: every enemy hit (or instant death) on them and every damage tick on them (bleeds, the
   boss's DoTs), as the game took it off (mitigation already in); a miss or an invulnerable hit is
   nothing.
@@ -1808,7 +1811,16 @@ entry).
 
 ## Release notes
 
-### 0.7.3 (not released yet)
+### 0.7.4 (not released yet)
+
+- **The meter's numbers, checked.** Damage a tank's retaliation (Vengeance, Damnation) sends back is the boss's to take
+  even when the game sets only the "from the target" bit (before, without the "to the source" bit too it read as the
+  tank hitting itself and was dropped). The healers' limit break isn't the party's healing any more: it has no row on the
+  Healing tab (nor on the site), so the party's line was more than its rows and the shares fell short of 100. The
+  summary's crit and direct hit rates and active time round halves up, as the site's server summary does (they were
+  rounded to even: 0.25 s of active time was 0.2 here and 0.3 there).
+
+### 0.7.3
 
 - **The normal meter takes the theme too.** With _Compact_ off, the meter is the theme's bigger sibling of its compact
   one: its ground and frame, its head band and clock, its faces, the rows on its plates with its icons, bars and marks,

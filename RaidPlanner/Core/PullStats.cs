@@ -357,9 +357,10 @@ public static class PullStats
                 ["heal"] = t.Healing,
                 ["over"] = t.Overheal,
                 ["taken"] = t.Taken,
-                ["crit"] = Math.Round(t.CritRate, 3),
-                ["dh"] = Math.Round(t.DirectHitRate, 3),
-                ["active"] = Math.Round(t.Active, 1),
+                // Halves away from zero, as the site's server summary rounds them (JavaScript's Math.round), not to even.
+                ["crit"] = Math.Round(t.CritRate, 3, MidpointRounding.AwayFromZero),
+                ["dh"] = Math.Round(t.DirectHitRate, 3, MidpointRounding.AwayFromZero),
+                ["active"] = Math.Round(t.Active, 1, MidpointRounding.AwayFromZero),
                 ["deaths"] = r.Events.OfType<DeathEvent>().Count(d => d.Who == p.Id && !wipe.Contains(d)),
                 ["dd"] = dd.TryGetValue(p.Id, out var ddn) ? ddn : 0,
                 ["vuln"] = vuln.TryGetValue(p.Id, out var vn) ? vn : 0,
