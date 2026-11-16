@@ -1169,8 +1169,8 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   `UI/Kit/ResizeGuard.cs`, tested): `ResizeReach` works out ImGui 1.88's grip (drawn
   `floor(max(font × 1.35, rounding + 1 + font × 0.2))` big at the font at Begin, taking a press three
   quarters of that in from the corner; the edges 4px either side), and a button level with a bottom
-  grip sits the grip's reach and 4px more in from the side (growing up, the head at the foot: the lock
-  about 20px in at 100%, the picker beside it; the foot's _Preview_ tag growing down), one by an edge
+  grip sits the grip's reach and 4px more in from the side (the head at the bottom, whichever way it grows:
+  the lock about 20px in at 100%, the picker beside it; the foot's _Preview_ tag with the head on top), one by an edge
   clear of its band; and while the mouse is over one of the head's or foot's buttons (where they were
   last frame, and not mid-drag) the window gets `NoResize` that frame, so a press on them is theirs;
   everywhere else it sizes as ever. Five tabs (27 tall, the ember bar under the one
@@ -1200,7 +1200,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   163,188", a chevron that opens it again), or hides with _Hide out of combat_. A new pull shows itself, whatever was picked before it.
   Pressing a row opens the meter opened up on that player; a death, on its recap.
 - **Events** (0.4.0; `IMeterSource.Events`, the session's newest 200 a fight): the fight's events as a
-  feed, the newest nearest the head (growing up too), a 23px row each: the time in mono
+  feed, the newest where the top player goes (at the top highest first, at the bottom lowest first; _Order_), a 23px row each: the time in mono
   (11px, faint, in a 30px column), the kind's Lucide mark in its colour (`MeterText.Tone`: a death's
   skull, a cast that went off's warning and aggro lost red; a raise's heart and an interrupt green;
   the limit break's sparkles and a potion's flask ember; a stun's bolt, a resist's shield and a tank
@@ -1225,38 +1225,54 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   deaths" (with _Jobs only_, "M1 DRG …": no names), the wipe's deaths not counted, and the limit
   break last when it was used ("Limit break 7,000 · 4.2%"). The foot says "copied to the clipboard"
   for 2.5 seconds.
-- **Its height**: folded, empty or stopped, the window is as tall as what it shows (ImGui fits it,
-  its width kept). In a fight (or waiting for one) it's as tall as its party needs
-  (`MeterSizes.Needed`: the head, the tabs, pace's room when pace is on, the column heads, a row
-  each, the limit break's room and the foot, so it doesn't jump when pace or the limit break comes:
-  364 for eight, the title bar's height on top when it shows), and never taller than the height you
-  gave it by its edge (`MeterHeight`; kept once you let go: none
-  until you do; one taller than the party needs goes back to what they need, and rows past one
-  shorter are cut; 0.3.0 kept 382, the height it first opened to, by itself, so a 382 saved by it is
-  read as none). A bigger party makes it taller, a smaller one shorter (a member joining mid-fight
-  adds a row).
+- **Its height** (since 0.7.4 fitted to what it shows, `MeterFit`, tested): folded, empty or stopped, the
+  window is as tall as what it shows (ImGui fits it, its width kept). In a fight it's as tall as what it
+  draws: the head, the tabs, pace's row only once pace shows, the column heads, a row each, the limit
+  break's row only once it was used, and the foot (136 for one player with neither, 364 for eight with
+  both); waiting, the head, the tabs, the column heads, the party with dashes and the foot; Deaths, a row
+  each (as tall as its faces), then the alive line live or the foot (and "Nobody died" with none); Events,
+  a 23px row each (the newest 64) and the foot (and its line with none); a list never taller than the
+  party's fight on Damage, so a long one doesn't stretch it. Until 0.7.4 it kept room for pace and the
+  limit break before they came (`MeterSizes.Needed`'s 364 for eight from the start), which showed as an
+  empty band at the edge away from the head (a meter growing up with one player: 53px over its row). The
+  anchored edge stays put and the other moves as rows, pace or the limit break come and go. It's never
+  taller than the height you gave it by its edge (`MeterHeight`, the title bar's height in it; kept once
+  you let go: none until you do): the most it grows to, the rows past it cut. One sized taller than what it
+  shows goes back to what it shows (and keeps that height as its most); 0.3.0 kept 382, the height it first
+  opened to, by itself, so a 382 saved by it is read as none. A member joining mid-fight adds a row.
 - **Where it stays put** (_Grows_, `MeterGrows`): as its height changes by itself (folding, opening,
-  a bigger party, compact), growing **down** keeps its top edge where it is, growing **up** its foot.
+  a bigger party, compact), growing **down** keeps its top edge where it is, growing **up** its bottom
+  edge. Since 0.7.4 that's all Grows does: where the head sits and the rows' order are their own (below).
   Its anchor (`MeterAnchorX`, `MeterAnchorY`, screen px: its top-left corner, or its bottom-left
   growing up, `MeterAnchorFor`) is read from where the window is the first time it's drawn (so one
   saved by an older version keeps its place), moved to the other corner when Grows changes (so it
   doesn't move then), and follows the window while you move or size it (unlocked; saved once you let
   go, not each frame). Each frame the meter is placed from it (`MeterLayout.Place`, ImGui's
   SetNextWindowPos before Dalamud's Begin: it never sets the meter's Position), kept whole on the
-  game's screen while the anchor is on it (moved in as little as it takes, its head's edge first
+  game's screen while the anchor is on it (moved in as little as it takes, its anchored edge first
   when it's taller than the screen, and back onto it after the resolution shrinks; the anchor itself
   stays, so it goes back as it shrinks; with Dalamud's multi-monitor windows on, an anchor off the
   game's screen is on another monitor, and left alone); while you hold it (the
   left button went down on it and is still down) it's neither placed nor sized.
-- **Growing up, the head at the foot**: the clock, the picker, the lock (and a narrow meter's tab menu)
-  sit at the foot, where it's anchored, and everything else is the other way up from them (as WoW's
-  meters that grow up have it): the tabs over the head, pace over them, the column heads over those,
-  the rows reading up from them (the top player nearest the head), the limit break over the rows and
-  the party's line at the top; on Deaths the first death nearest the head, "7 alive" over them; the
-  empty and stopped states the Boss and its words over the tabs; the waiting state likewise. A row
-  reads as ever (its bar still under its words); each band's hairline is on its side away from the
-  head, the limit break's and the foot's toward it; the column heads hug the rows (at their band's
-  top). The menus open upwards (below).
+- **The head and the order** (since 0.7.4; _Head_, `MeterHead`, and _Order_, `MeterOrder`; `MeterArrange`,
+  tested; until then growing up flipped both with Grows): the head (the clock, the picker, the lock, and a
+  narrow meter's tab menu; the tabs, pace and the column heads beside it; compact's head) sits at the
+  **top** or the **bottom**, whichever way the meter grows, and the foot (the limit break's row and the
+  party's line) at the other edge. With the head at the bottom everything else is the other way up from
+  it: the tabs over the head, pace over them, the column heads over those (hugging the rows, at their
+  band's top), the rows, the limit break over them and the party's line at the top; the empty and stopped
+  states the Boss and its words over the tabs, waiting likewise; each band's hairline on its side away from
+  the head, the limit break's and the foot's toward it; the themes' head bands turned to face the rows
+  (Native's title band inset from the window's edge it's against and its gilt rule toward the rows, Neon's
+  horizon fading away from the rows, Grimoire's two rules on the rows' side). The rows read **highest
+  first** (the top player at the top of the list) or **lowest first** (at its bottom), reading down the
+  window, wherever the head is (`MeterArrange.FromHead`: each row's place counted from the head; cut past
+  the room from the lowest); the first death and the newest event go where the top player does, waiting's
+  party (in spot order) and compact's rows too, compact's pinned you staying at the end of the list away
+  from the top player (below). A row reads as ever (its bar still under its words). The menus open away
+  from the head (up from one at the bottom, down from one on top; below). An older configuration is moved
+  once (`MeterArrangeVersion` 0 → 1, `Configuration.Migrate`): growing up becomes Up, the head at the
+  Bottom and Lowest first, exactly its old look; growing down Down, Top, Highest first, a new meter's too.
 - **Compact** (`MeterCompact`, on by default since 0.7.0; `PlateMeter`, `MeterWindow.Plate.cs`, its
   model `Model/MeterPlate.cs` and `Model/MeterTheme.cs`, tested): round four's variant A, "Plate" (the
   proposal: kokos-tools `docs/proposals/raid-codex/meter/METER.md`), in place of 0.3–0.6's compact (20px
@@ -1274,7 +1290,8 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     _Pace against_, _Compact_ and _One line_. It replaces the tab row, the picker's button, pace's row and
     the column heads.
   - **The rows**: at most eight, the top eight; when you're ranked below the last row shown (ninth or
-    lower: the window is never shorter than its eight), the last row is you, pinned under a dashed rule, with
+    lower: the window is never shorter than its eight), the last row is you, pinned at the end of the list away
+    from the top player (the bottom highest first, the top lowest first) past a dashed rule, with
     your real rank after your name ("#9"); no alliance view (`PlateRows.Select`). Each row (20 tall, 1
     apart, 4px corners) sits on a near-solid plate (#18181d at 92%, whatever the Background), so its
     words never touch the game; the bar fills its track from the plate's left to its share of the top
@@ -1322,8 +1339,9 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     light party with no limit break yet 133), the title bar's height on top when it shows. A height
     the old compact was given (`MeterCompactHeight`, 0.4.0 to 0.6.0) or a width 0.7.0
     let you give it (`MeterCompactWidth`) is still read from the settings but ignored, and cleared once
-    (`Configuration.Migrate`). Grows down or up as the normal meter (up, the head at the foot and
-    everything else the other way up from it); its anchor is shared, and it's moved by its title bar.
+    (`Configuration.Migrate`). Grows down or up, its head at the top or the bottom (at the bottom
+    everything else the other way up from it) and its rows highest or lowest first, as the normal meter
+    (above, _The head and the order_); its anchor is shared, and it's moved by its title bar.
   - **One line** (`MeterCollapsed`, the menu's _One line_; and between pulls, folded, as the normal
     meter folds; and before any fight): one 26px line on a plate: the dot and the clock (the outcome when
     it's over, else the phase), then on the right you ("You #6" with an ember bar and your number), the
@@ -1472,8 +1490,11 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
   (Names, Jobs only); _Lock it where it is_ (its tooltip: compact is never sized by hand) with
-  _Click-through when locked_ under it; _Grows_
-  (Down, Up: which edge stays put, the head going with it); _Limit break gauge_ (Head, Foot, Off;
+  _Click-through when locked_ under it; since 0.7.4 three small segmented choices in place of 0.7.3's one
+  _Grows_ (which flipped the head and the order with it), each with a one-line hint: _Grows_ (Down, Up: "The
+  edge that stays put as it grows"), _Head_ (Top, Bottom: "The clock, tabs, pulls and lock") and _Order_
+  (Highest first, Lowest first: "Reading down the list"), both meters', the theme's live preview following
+  Head and Order; _Limit break gauge_ (Head, Foot, Off;
   0.4.0; compact's pips are in its head, or none with Off); _Theme_ (since 0.7.2 a row of its own, before
   _Compact_: it's both meters' and the opened-up window's look) with _Role colours_ and _Decorations_ under
   it, then _Compact_ (on at first since 0.7.0) with _Whole numbers_ under it (compact's alone). _Theme_ (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
@@ -1675,8 +1696,13 @@ Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the pa
 `settings` opens Settings on its tab (Cooldowns, Plan window).
 
 Since 0.5.1 the command is `/raidcodex` and `/raidplan` (from when the plugin was Raid Planner) still
-works: both are registered, each does the same (`CommandWords.Names`, `Main` first, then `Old`), the
-main one's help line says the old one still works (`CommandWords.HelpFor`).
+works; since 0.7.4 `/rc` does too. All three are registered and each does the same
+(`CommandWords.Names`: `Main`, `Short`, `Old`); Dalamud's command list shows `/raidcodex` only
+(`CommandWords.Listed`), its line naming just `/raidcodex`, `/raidcodex settings`, `/raidcodex help`
+and `/rc` (`CommandWords.HelpFor`). If another plugin has `/rc` already, it stays theirs (Dalamud refuses
+it; logged) and the plugin removes only the commands it registered. `/raidcodex help` (or `?`) writes
+every command in chat, a line each (`CommandWords.Help`, `HelpLines`). No command is bound to a key:
+the plugin reads no keys at all (CLAUDE.md).
 
 ## The name, and what kept the old one
 

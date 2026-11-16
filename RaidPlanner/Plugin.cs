@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Dalamud.Game.Command;
@@ -158,9 +159,14 @@ public sealed class Plugin : IDalamudPlugin
             // on-screen callouts (they need the plan's clock, which only a followed pull runs).
             recorder.FollowWanted = () => (planWindow.IsOpen || config.CalloutOverlay.Show) && plans.ForThisDuty;
 
-            // /raidcodex, and /raidplan as before: each does the same (CommandWords.Names).
+            // /raidcodex, /rc and /raidplan (from before): each does the same (CommandWords.Names). Dalamud's
+            // list shows /raidcodex only. Another plugin may have /rc already: then it's theirs, /raidcodex still works.
             foreach (var name in CommandWords.Names)
-                Services.Commands.AddHandler(name, new CommandInfo(OnCommand) { HelpMessage = CommandWords.HelpFor(name) });
+            {
+                var info = new CommandInfo(OnCommand) { HelpMessage = CommandWords.HelpFor(name), ShowInHelp = CommandWords.Listed(name) };
+                if (Services.Commands.AddHandler(name, info)) commands.Add(name);
+                else Services.Log.Warning($"Raid Codex: {name} is taken by another plugin; /raidcodex still works");
+            }
             Services.PluginInterface.UiBuilder.Draw += windows.Draw;
             Services.PluginInterface.UiBuilder.OpenMainUi += window.ShowMain;
             Services.PluginInterface.UiBuilder.OpenConfigUi += window.ShowSettings;
@@ -174,6 +180,9 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
+    /// <summary>The commands registered (one another plugin has already isn't: it isn't ours to remove).</summary>
+    private readonly List<string> commands = new();
+
     private void OnCommand(string command, string args)
     {
         // Lower case, one space between words, "cds" as "cooldowns" (CommandWords.Normalize).
@@ -182,6 +191,10 @@ public sealed class Plugin : IDalamudPlugin
             case "stop":
                 if (recorder.Recording) recorder.Stop();
                 else Services.Log.Information("Raid Codex: nothing is being recorded");
+                break;
+            case "help":
+            case "?":
+                foreach (var line in CommandWords.HelpLines()) PlanService.Print(line);
                 break;
             case "settings":
             case "config":
@@ -391,7 +404,7 @@ public sealed class Plugin : IDalamudPlugin
             Safely(() => Services.PluginInterface.UiBuilder.OpenMainUi -= window.ShowMain);
             Safely(() => Services.PluginInterface.UiBuilder.OpenConfigUi -= window.ShowSettings);
         }
-        foreach (var name in CommandWords.Names) Safely(() => Services.Commands.RemoveHandler(name));
+        foreach (var name in commands) Safely(() => Services.Commands.RemoveHandler(name));
         if (recorder != null) Safely(() => recorder.Kept -= OnKept);
         if (recorder != null) Safely(() => recorder.PullStarted -= OnPullStarted);
         if (recorder != null) Safely(() => recorder.HooksWanted = null);
