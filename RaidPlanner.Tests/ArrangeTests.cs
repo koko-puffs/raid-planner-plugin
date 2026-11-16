@@ -200,4 +200,27 @@ public class ArrangeTests
         Assert.True(was.TopNearHead);
         Assert.Equal(MeterArrange.Default, MeterArrange.Of(MeterGrows.Down));
     }
+
+    [Fact]
+    public void Its_height_is_held_while_the_mouse_is_on_it()
+    {
+        var z = MeterSizes.Normal;
+        var damage = MeterFit.Fight(z, 8, false, true);
+        var deaths = MeterFit.Deaths(z, 0, 44, false, 8);
+        Assert.NotEqual(damage, deaths);
+        // The mouse comes on Damage: nothing held yet, so the fitted height (then held).
+        var held = MeterLayout.Hold(damage, 0, true);
+        Assert.Equal(damage, held);
+        // Deaths picked with the mouse still on it: the height stays (Grows Up with the head on top: the tabs don't move).
+        Assert.Equal(damage, MeterLayout.Hold(deaths, held, true));
+        // A row come mid-fight waits too, and the rows past the held height are cut (as under a height you gave it).
+        var nine = MeterFit.Fight(z, 9, false, true);
+        Assert.Equal(damage, MeterLayout.Hold(nine, held, true));
+        Assert.Equal(8, z.RowsIn(MeterLayout.Hold(nine, held, true), false, true));
+        // The mouse off it: it settles to what it shows.
+        Assert.Equal(deaths, MeterLayout.Hold(deaths, held, false));
+        // Nothing sensible held: fitted.
+        Assert.Equal(deaths, MeterLayout.Hold(deaths, float.NaN, true));
+        Assert.Equal(deaths, MeterLayout.Hold(deaths, -1, true));
+    }
 }

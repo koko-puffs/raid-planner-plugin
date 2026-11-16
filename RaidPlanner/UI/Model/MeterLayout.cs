@@ -317,6 +317,15 @@ public static class MeterLayout
     }
 
     /// <summary>
+    /// The window's height in a fight while the mouse is on it (since 0.7.4; CSS px): the height it had as the mouse
+    /// came (<paramref name="holding"/>; 0 none yet) is kept, so a tab switch or a row coming or going doesn't move its
+    /// head or tabs from under the mouse (with the head at the edge that isn't anchored, they'd move). Rows that don't
+    /// fit it are cut, as under a height you gave it; fewer leave room at the far side. With the mouse off it, or
+    /// nothing held yet, it's the fitted height (<paramref name="fitted"/>). Sizing it by its edge isn't this: your drag wins.
+    /// </summary>
+    public static float Hold(float fitted, float holding, bool pointed) => pointed && holding > 0 && float.IsFinite(holding) ? holding : fitted;
+
+    /// <summary>
     /// Whether the meter's window can be resized by its edges: only the normal meter, unlocked. Compact
     /// (0.7.0) never can, locked or not: its width is its theme's and its height its rows', so a size
     /// given by hand would only snap back.

@@ -124,6 +124,18 @@ public sealed partial class MeterWindow : Window
     /// <summary>A height you gave the normal meter by its edge (CSS px; 0 none), kept once you let go.</summary>
     private float givenNow;
 
+    /// <summary>
+    /// The height held while the mouse is on the meter (CSS px; 0 none: <see cref="MeterLayout.Hold"/>), so a tab switch
+    /// or a row change doesn't move it under the mouse; it settles to the fitted height once the mouse is off it.
+    /// </summary>
+    private float holdH;
+
+    /// <summary>The frame the mouse was last on the meter (or one of its menus open), as Draw saw it; -1 never.</summary>
+    private int pointedFrame = -1;
+
+    /// <summary>The mouse was on the meter last frame (not click-through: then the mouse is the game's).</summary>
+    private bool Pointed => pointedFrame >= 0 && pointedFrame >= ImGui.GetFrameCount() - 1;
+
     /// <summary>The head's and foot's buttons kept clear of the resizing edges (the normal meter's).</summary>
     private readonly ResizeGuard guard = new();
 
@@ -375,6 +387,7 @@ public sealed partial class MeterWindow : Window
         var height = float.NaN;
         if (fits)
         {
+            holdH = 0;
             Flags |= ImGuiWindowFlags.AlwaysAutoResize;
             Size = new Vector2(widthCss, 0);
             SizeCondition = ImGuiCond.Always;
@@ -386,6 +399,8 @@ public sealed partial class MeterWindow : Window
             // party, a taller meter), at most the height you gave it. The anchored edge stays; the other moves.
             var given = config.MeterHeight;
             var h = MeterLayout.FightHeight(Fitted(), chrome / scale, given, Sizes.MinimumSize.Y, Sizes.MaximumSize.Y);
+            // While the mouse is on it, the height it had as the mouse came (a tab switch doesn't move its head under the mouse).
+            h = HoldHeight(h);
             Size = new Vector2(widthCss, h);
             SizeCondition = ImGuiCond.Always;
             height = h * scale;
@@ -393,6 +408,15 @@ public sealed partial class MeterWindow : Window
         }
         else SizeCondition = ImGuiCond.FirstUseEver;
         PlaceAt(widthCss * scale, height);
+    }
+
+    /// <summary>The fight's height (CSS px) as <see cref="MeterLayout.Hold"/> has it this frame, held from here on while the mouse stays.</summary>
+    private float HoldHeight(float fitted)
+    {
+        var pointed = Pointed;
+        var h = MeterLayout.Hold(fitted, holdH, pointed);
+        holdH = pointed ? h : 0;
+        return h;
     }
 
     /// <summary>Places the window from its anchor for this size (screen px), kept on the screen; not while held, nor before its height is known.</summary>
@@ -462,6 +486,11 @@ public sealed partial class MeterWindow : Window
         }
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
             heldOnMe = !config.MeterLocked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
+        // The mouse on it, or on one of its menus (a tab picked there mustn't move the head either): its height is held.
+        // Click-through (no inputs) it never is: the mouse is the game's.
+        if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup)
+            || ImGui.IsPopupOpen(Picker) || ImGui.IsPopupOpen(TabMenu) || ImGui.IsPopupOpen(PlateMenu))
+            pointedFrame = ImGui.GetFrameCount();
         if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows)
         {
             // 0.3.0 kept the height it first opened to (382) by itself, not only one you gave it: that one isn't yours.
@@ -471,6 +500,8 @@ public sealed partial class MeterWindow : Window
         }
         else if (held && drawnOnce && (pos != lastPos || size != lastSize))
         {
+            // Sized by its edge: your drag wins; once you let go it's fitted again under the height you gave it, not held.
+            if (size != lastSize) holdH = 0;
             SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
             anchorMoved = true;
             // The normal meter sized by its edge in a fight: that's the height you're giving it (compact can't be sized).

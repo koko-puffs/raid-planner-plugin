@@ -90,11 +90,16 @@ public sealed partial class MeterWindow
         var width = t.Win.Width;
         SizeConstraints = PlateSizesLimits;
         float h;
-        if (PlateOneLine) h = plate.LineHeight + chrome / scale;
+        if (PlateOneLine)
+        {
+            holdH = 0;
+            h = plate.LineHeight + chrome / scale;
+        }
         else
         {
             var needed = plate.Needed(PartyRows(), view == View.Waiting);
-            h = MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y);
+            // Held while the mouse is on it (MeterLayout.Hold): a tab picked or a row come doesn't move its head under the mouse.
+            h = HoldHeight(MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y));
         }
         Size = new Vector2(width, h);
         SizeCondition = ImGuiCond.Always;

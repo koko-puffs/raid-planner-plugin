@@ -1261,6 +1261,13 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   you let go: none until you do): the most it grows to, the rows past it cut. One sized taller than what it
   shows goes back to what it shows (and keeps that height as its most); 0.3.0 kept 382, the height it first
   opened to, by itself, so a 382 saved by it is read as none. A member joining mid-fight adds a row.
+  While the mouse is on it (or on one of its menus, the pull picker or the tab menu), the normal meter and
+  compact keep the height they had as it came (`MeterLayout.Hold`, tested): a tab switch or a row coming or
+  going doesn't move the head and tabs from under the mouse (they would, with the head at the edge that isn't
+  anchored: Grows Up with the head on top). Rows that don't fit the held height are cut, as under a height
+  you gave it; fewer leave room at the far side. A row come mid-fight waits too. Once the mouse is off it, it
+  settles to what it shows. Sizing it by its edge isn't held: the drag wins, and once you let go it's fitted
+  under the height you gave it. Click-through, it's never held (the mouse is the game's).
 - **Where it stays put** (_Grows_, `MeterGrows`): as its height changes by itself (folding, opening,
   a bigger party, compact), growing **down** keeps its top edge where it is, growing **up** its bottom
   edge. Since 0.7.4 that's all Grows does: where the head sits and the rows' order are their own (below).
@@ -1860,7 +1867,8 @@ entry).
   what it shows, growing down and up (one player, then the sample's eight: no empty band at either edge; pace's row
   and the limit break's adding their height as they come, the anchored edge not moving; waiting, Deaths live and
   kept, Events, the empty and stopped meter and the fold all fitted; a height given by its edge capping it, and
-  the rows past it cut from the lowest); each of the eight Grows, Head and Order settings (the head at the bottom
+  the rows past it cut from the lowest; the height held while the mouse is on it or its menus, a tab picked not
+  moving the head, settling once the mouse leaves; a resize by its edge still followed while held); each of the eight Grows, Head and Order settings (the head at the bottom
   growing down and on top growing up; highest and lowest first; the first death and the newest event with the
   top player; compact's pinned you at the end away from the top player, its dashed rule on the right side and
   its rows sliding without a jump); the lock, picker and fold's chevron with the head at the bottom growing down
@@ -1879,7 +1887,9 @@ entry).
   they come, so there's no empty band at the edge away from its head (a meter growing up with one player had 53px
   over its row). Its rows, pace's row, the limit break's, waiting's party and the Deaths and Events lists set its
   height; the edge it's anchored at stays put and the other moves as they come and go. The height you give it by its
-  edge is the most it grows to.
+  edge is the most it grows to. While the mouse is on the meter (either meter, or its menus) its height is held, so
+  picking a tab or a row coming doesn't move its head from under the mouse (Grows Up with the head on top); it
+  settles once the mouse leaves.
 - **Grows, Head and Order are three settings.** Settings → Meter's _Grows_ (Down, Up) is only the edge that stays
   put now; _Head_ (Top, Bottom) puts the clock, tabs, pull menu and lock (compact's head) at either edge, whichever
   way it grows; _Order_ (Highest first, Lowest first) is whether the top player is at the top or the bottom of the
