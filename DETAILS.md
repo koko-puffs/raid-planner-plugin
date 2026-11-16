@@ -901,7 +901,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 - **The question** (`MainWindow.DrawConfirm`): a window of its own over the plugin's, which dims it
   under the title bar (rgb 4 4 5 at 74%) and takes every click; the site's dialog in its middle
   (raised, 20px corners, a 12% hairline, a shadow faked with rings, its title a small callout, its
-  words at 14px, its answers on the right: a destructive one in the danger outline). Escape is No (while it has the keyboard). It
+  words at 14px, its answers on the right: a destructive one in the danger outline). No key answers it (the plugin reads no keys). It
   fades in over 280ms (it doesn't grow: text can't scale crisply).
 
 ## The main window (`UI/MainWindow.cs`, `UI/Views/`)
