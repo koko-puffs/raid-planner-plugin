@@ -50,14 +50,14 @@ public static class PlateArt
     /// <summary>How wide the words are in a theme's face (capitals and digit cells as they're drawn).</summary>
     public static float Width(string text, ThemeFont f) => Run(default, Vector2.Zero, text, f, Vector4.Zero, false, null);
 
-    /// <summary>Draws one line centred in a CSS line box <paramref name="lineCss"/> tall; returns its width.</summary>
+    /// <summary>
+    /// Draws one line in a CSS line box <paramref name="lineCss"/> tall, its capitals' ink centred in it
+    /// (<see cref="InkCentre"/>: a face whose ascent and descent are lopsided, Zen Maru Gothic's, sits where
+    /// Geist's does; Geist's capitals are centred in its line already, so it doesn't move); returns its width.
+    /// </summary>
     /// <param name="glow">An outline in this colour instead of the face's own (Neon's clock); null: the face's.</param>
-    public static float Line(ImDrawListPtr dl, Vector2 lineTop, string text, ThemeFont f, Vector4 color, float lineCss, Vector4? glow = null)
-    {
-        var size = Natural(f);
-        var p = new Vector2(lineTop.X, lineTop.Y + (S(lineCss) - size) / 2);
-        return Run(dl, p, text, f, color, true, glow);
-    }
+    public static float Line(ImDrawListPtr dl, Vector2 lineTop, string text, ThemeFont f, Vector4 color, float lineCss, Vector4? glow = null) =>
+        Run(dl, new Vector2(lineTop.X, lineTop.Y + S(lineCss) / 2), text, f, color, true, glow);
 
     /// <summary>Draws one line right-aligned at <paramref name="right"/>; returns its width.</summary>
     public static float LineRight(ImDrawListPtr dl, float right, float lineTop, string text, ThemeFont f, Vector4 color, float lineCss)
@@ -67,9 +67,19 @@ public static class PlateArt
         return w;
     }
 
-    /// <summary>The words cut to fit a width in a theme's face (kept, as <see cref="Txt.Fit"/>).</summary>
-    public static string Fit(string text, ThemeFont f, float width) => f.Cells > 0 || f.Caps ? text : Txt.Fit(text, f.Face, f.Px, width);
+    /// <summary>The words cut to fit a width in a theme's face (kept, as <see cref="Txt.Fit"/>; an outlined face's tracking kept out of the width).</summary>
+    public static string Fit(string text, ThemeFont f, float width) =>
+        f.Cells > 0 || f.Caps ? text : Txt.Fit(text, f.Face, f.Px, f.Outline ? width - OutlineTrack * (text.Length + 1) : width);
 
+    /// <summary>An outlined face's tracking (screen px): the outline's pixel each side, so two glyphs' outlines never merge.</summary>
+    private const float OutlineTrack = 1;
+
+    /// <summary>Each font's capitals' ink middle (its own px, from its line's top), by the font; let go when the fonts are built again.</summary>
+    private static readonly Dictionary<nint, float> InkMid = new();
+
+    private static int inkOf = -1;
+
+    /// <param name="pos">Drawing: its left and its line's middle (the ink is centred on it). Measuring: unused.</param>
     private static float Run(ImDrawListPtr dl, Vector2 pos, string text, ThemeFont f, Vector4 color, bool draw, Vector4? glow)
     {
         var ink = glow ?? (f.Outline ? new Vector4(OutlineInk.X, OutlineInk.Y, OutlineInk.Z, OutlineInk.W * color.W) : (Vector4?)null);
@@ -77,13 +87,21 @@ public static class PlateArt
         if (f.Caps) text = Txt.Caps(text);
         using (Txt.Fonts.Push(face, f.Px))
         {
-            var spacing = f.Caps ? S(f.Px * 0.06f) : 0;
+            // Outlined (Native's), a pixel more between glyphs: their outlines don't merge ("9k").
+            var spacing = (f.Caps ? S(f.Px * 0.06f) : 0) + (f.Outline ? OutlineTrack : 0);
             var cells = f.Cells > 0 ? MathF.Max(S(f.Cells), DigitWidth(face, f.Px)) : 0;
             var font = ImGui.GetFont();
             var size = ImGui.GetFontSize();
             // A face whose first glyph reaches left of its pen, or last right of its advance (the game's
-            // Jupiter), is moved in and measured with it, so the words never run into what's beside them.
+            // Jupiter), is moved in and measured with it, so the words never run into what's beside them;
+            // an outlined one by its outline's pixel too.
             var (lead, tail) = Overhang(font, size, text, cells > 0);
+            if (f.Outline)
+            {
+                lead += OutlineTrack;
+                tail += OutlineTrack;
+            }
+            if (draw) pos.Y = InkCentre.Top(pos.Y, CapsMid(font, size));
             if (cells <= 0 && spacing <= 0)
             {
                 if (draw) Put(dl, pos + new Vector2(lead, 0), text, color, ink);
@@ -122,6 +140,25 @@ public static class PlateArt
             if (g != null) tail = MathF.Max(0, (g->X1 - g->AdvanceX) * k);
         }
         return (MathF.Ceiling(lead), MathF.Ceiling(tail));
+    }
+
+    /// <summary>The pushed font's capitals' ink middle ('H', from its line's top; screen px), read from ImGui's glyph once a font build. Without an 'H', the line's middle.</summary>
+    private static unsafe float CapsMid(ImFontPtr font, float size)
+    {
+        var gen = Txt.Fonts.Generation;
+        if (gen != inkOf)
+        {
+            InkMid.Clear();
+            inkOf = gen;
+        }
+        var key = (nint)font.Handle;
+        if (!InkMid.TryGetValue(key, out var mid))
+        {
+            var g = font.FindGlyphNoFallback('H');
+            mid = g != null && g->Y1 > g->Y0 ? InkCentre.Mid(g->Y0, g->Y1) : font.FontSize / 2;
+            InkMid[key] = mid;
+        }
+        return mid * size / font.FontSize;
     }
 
     private static void Put(ImDrawListPtr dl, Vector2 pos, ReadOnlySpan<char> text, Vector4 color, Vector4? outline)
