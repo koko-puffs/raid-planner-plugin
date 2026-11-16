@@ -712,6 +712,13 @@ public class MeterSessionTests
         Assert.Equal(5_000, e.Party.Overheal);
         Assert.Equal(1, h.HealingShare, 9);
         Assert.Equal(500, e.Party.Hps, 6);
+        // Nor its biggest heal, once a damage limit break gives the limit break a row (on Damage): the party's Max heal
+        // is the rows' on the Healing tab (the limit break's 70,000 isn't one of them).
+        Hit(p, 11, Dps, 30_000, 4238);
+        s.Frame(12, Party(), true);
+        var after = s.Current!;
+        Assert.Contains(after.Rows, r => r.IsLimitBreak && r.MaxHeal > 60_000);
+        Assert.Equal(after.Rows.Single(r => r.Slot == "H1").MaxHeal, after.Party.MaxHeal);
     }
 
     [Fact]
