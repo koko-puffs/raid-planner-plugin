@@ -110,11 +110,36 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public float MeterHeight { get; set; }
 
-    /// <summary>Compact: 20px rows with smaller words and the tabs in a menu by the lock, so more of the party fits in less room.</summary>
-    public bool MeterCompact { get; set; }
+    /// <summary>
+    /// Compact (since 0.7.0 the default, and round four's "Plate"): the top eight on near-solid plates, the bar in the role's
+    /// colour, three-figure numbers, the tabs and the picker in one menu in a 24px head, in the theme picked
+    /// (<see cref="MeterTheme"/>). Off, the normal meter (the tabs, pace and column heads), as before.
+    /// </summary>
+    public bool MeterCompact { get; set; } = true;
 
     /// <summary>The height you gave the meter in compact (as <see cref="MeterHeight"/>, kept apart: compact is shorter).</summary>
     public float MeterCompactHeight { get; set; }
+
+    /// <summary>The width you gave the compact meter (CSS px; 0: its theme's own, 248 for Ready Check). Since 0.7.0.</summary>
+    public float MeterCompactWidth { get; set; }
+
+    /// <summary>The compact meter folded to one line by hand (the clock, the phase, you and your rank, deaths, the LB). Since 0.7.0.</summary>
+    public bool MeterCollapsed { get; set; }
+
+    /// <summary>The compact meter's theme (since 0.7.0): Ready Check, Mochi, Native, Readout, Neon or Grimoire.</summary>
+    public MeterThemeId MeterTheme { get; set; } = MeterThemeId.ReadyCheck;
+
+    /// <summary>The bars' colours (since 0.7.0): the theme's colour-blind-safe set, or the game's blue, green and red.</summary>
+    public MeterRoleColours MeterRoleColours { get; set; } = MeterRoleColours.Theme;
+
+    /// <summary>Whole numbers ("27,840") in the compact meter instead of three figures ("27.8k"). Since 0.7.0.</summary>
+    public bool MeterWholeNumbers { get; set; }
+
+    /// <summary>The themes' decorations (sparkles, scanlines, the horizon, the glitch, the ribbon…). On at first. Since 0.7.0.</summary>
+    public bool MeterDecorations { get; set; } = true;
+
+    /// <summary>The meter's look's version (<see cref="UI.Model.MeterLook"/>): 0 before 0.7.0, whose configuration is moved to compact once.</summary>
+    public int MeterLook { get; set; }
 
     /// <summary>
     /// Which way the meter grows when its height changes by itself (folding, opening, a bigger party,
@@ -187,16 +212,27 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>What's uploaded, as <see cref="UploadPrefs"/> has it (a method, so it isn't saved with the settings).</summary>
     public UploadPrefs UploadPrefsNow() => new(Version, UploadLogs, UploadSince);
 
-    /// <summary>Brings settings saved by an older version up to this one (<see cref="UploadPrefs.Migrate"/>); true when anything changed (then save).</summary>
+    /// <summary>Brings settings saved by an older version up to this one (<see cref="UploadPrefs.Migrate"/>, <see cref="UI.Model.MeterLook.Migrate"/>); true when anything changed (then save).</summary>
     public bool Migrate(DateTimeOffset now)
     {
+        var changed = false;
         var was = UploadPrefsNow();
         var to = UploadPrefs.Migrate(was, now);
-        if (to == was) return false;
-        Version = to.Version;
-        UploadLogs = to.UploadLogs;
-        UploadSince = to.UploadSince;
-        return true;
+        if (to != was)
+        {
+            Version = to.Version;
+            UploadLogs = to.UploadLogs;
+            UploadSince = to.UploadSince;
+            changed = true;
+        }
+        // 0.7.0: the new compact meter is the default and replaces the old compact (MeterLook.Migrate).
+        var look = UI.Model.MeterLook.Migrate(MeterLook, MeterCompact, MeterCompactHeight);
+        if (look != (MeterLook, MeterCompact, MeterCompactHeight))
+        {
+            (MeterLook, MeterCompact, MeterCompactHeight) = look;
+            changed = true;
+        }
+        return changed;
     }
 
     public void Save() => Services.PluginInterface.SavePluginConfig(this);

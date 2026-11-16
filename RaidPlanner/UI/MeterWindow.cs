@@ -17,14 +17,15 @@ namespace RaidPlanner.UI;
 /// lock; four tabs with the ember cast bar under the one you're on; pace on the Damage tab; a 25px
 /// row a player (the spot in its role's colour, the name, the job in mono, the number and its share,
 /// a slim bar to the top player's: yours ember), the limit break on its own row, the party at the
-/// foot. Compact, 20px rows with the bar as the row's background, and the tabs in a menu by the lock.
+/// foot. Compact (since 0.7.0 the default: <see cref="PlateMeter"/>, in MeterWindow.Plate.cs), the top
+/// eight on plates in the theme picked, the tabs and the picker in one menu in its head.
 /// Locked, it has no title bar and can't be moved or sized; click-through, the mouse goes to the game.
 /// In a fight it's as tall as the party needs (at most the height you gave it); out of combat it folds
 /// to one line (as it shrinks to the Boss before any fight, or when the meter has stopped). It stays
 /// put at its anchor as it does: its top edge growing down, its foot growing up (its head at the foot
 /// then, the rows reading up from it). Its numbers come from <see cref="IMeterSource"/> only.
 /// </summary>
-public sealed class MeterWindow : Window
+public sealed partial class MeterWindow : Window
 {
     private const string Picker = "##rp-meter-picker";
     private const string TabMenu = "##rp-meter-tabs";
@@ -165,8 +166,8 @@ public sealed class MeterWindow : Window
     private DateTime copiedAt;
 
     /// <summary>The Events tab's feed (newest first, each time in words, the foot's counts), made again only for a new list from the source.</summary>
-    private (IReadOnlyList<MeterEvent>? Of, int Count, bool Compact, List<MeterEvent> Newest, List<string> Times, string Foot) feed =
-        (null, -1, false, new List<MeterEvent>(), new List<string>(), string.Empty);
+    private (IReadOnlyList<MeterEvent>? Of, int Count, List<MeterEvent> Newest, List<string> Times, string Foot) feed =
+        (null, -1, new List<MeterEvent>(), new List<string>(), string.Empty);
 
     /// <summary>The limit break gauge's bars, worked out again only when the gauge changes.</summary>
     private (LimitBreakGauge? Of, float[] Bars) gaugeBars = (null, Array.Empty<float>());
@@ -207,7 +208,8 @@ public sealed class MeterWindow : Window
 
     private IMeterSource? Meter => Preview ?? Source?.Invoke();
 
-    private MeterSizes Z => MeterSizes.Of(config.MeterCompact);
+    /// <summary>The normal meter's sizes (compact is <see cref="PlateMeter"/>'s own since 0.7.0).</summary>
+    private static MeterSizes Z => MeterSizes.Normal;
 
     /// <summary>It grows up: anchored at its foot, its head at the foot.</summary>
     private bool Up => config.MeterGrows == MeterGrows.Up;
@@ -244,8 +246,9 @@ public sealed class MeterWindow : Window
         {
             Failed(ex, "Raid Codex's meter couldn't place itself");
         }
-        // The background is see-through as set; the rows stay solid.
-        Theme.PushFrame(Palette.Rgba(13, 13, 16, Math.Clamp(config.MeterBackground, 0.2f, 1f)), Palette.RadiusMd);
+        // The background is see-through as set; the rows stay solid. Compact draws its theme's own ground and frame.
+        if (config.MeterCompact) Theme.PushFrame(Vector4.Zero, PlateTheme.Win.Radius, Vector4.Zero);
+        else Theme.PushFrame(Palette.Rgba(13, 13, 16, Math.Clamp(config.MeterBackground, 0.2f, 1f)), Palette.RadiusMd);
     }
 
     public override void PostDraw() => Theme.Pop();
@@ -273,7 +276,7 @@ public sealed class MeterWindow : Window
             {
                 try
                 {
-                    Frame.Window(!config.MeterLocked);
+                    if (!config.MeterCompact) Frame.Window(!config.MeterLocked);
                     DrawInside();
                 }
                 finally
@@ -327,6 +330,7 @@ public sealed class MeterWindow : Window
             : !live && !m.Waiting && !unfolded && picked == null && Preview == null ? View.Folded
             : m.Waiting && picked == null ? View.Waiting
             : View.Fight;
+        if (config.MeterCompact) PlateDecide(m);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -351,6 +355,11 @@ public sealed class MeterWindow : Window
         }
         var scale = ImGuiHelpers.GlobalScale;
         var chrome = config.MeterLocked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        if (config.MeterCompact)
+        {
+            ArrangePlate(scale, chrome);
+            return;
+        }
         // Folded (or empty) it's as tall as what it shows, as wide as it was (ImGui fits the height to what
         // was drawn; the width is set, so it's kept: known once it's been drawn).
         var fits = widthKnown && view is View.Nothing or View.Stopped or View.Folded;
@@ -366,7 +375,7 @@ public sealed class MeterWindow : Window
         else if (widthKnown && !held)
         {
             // In a fight: as tall as the party needs (a bigger party, a taller meter), at most the height you gave it.
-            var given = config.MeterCompact ? config.MeterCompactHeight : config.MeterHeight;
+            var given = config.MeterHeight;
             var needed = Z.Needed(PartyRows(), config.MeterPace != PaceAgainst.Off);
             var h = MeterLayout.FightHeight(needed, chrome / scale, given, Sizes.MinimumSize.Y, Sizes.MaximumSize.Y);
             Size = new Vector2(widthCss, h);
@@ -375,10 +384,16 @@ public sealed class MeterWindow : Window
             fightH = height;
         }
         else SizeCondition = ImGuiCond.FirstUseEver;
+        PlaceAt(widthCss * scale, height);
+    }
+
+    /// <summary>Places the window from its anchor for this size (screen px), kept on the screen; not while held, nor before its height is known.</summary>
+    private void PlaceAt(float width, float height)
+    {
         if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows || held || float.IsNaN(height)) return;
         var vp = ImGui.GetMainViewport();
         var otherScreens = (ImGui.GetIO().ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0;
-        var at = MeterLayout.Place(new Vector2(config.MeterAnchorX, config.MeterAnchorY), new Vector2(widthCss * scale, height), config.MeterGrows, vp.WorkPos,
+        var at = MeterLayout.Place(new Vector2(config.MeterAnchorX, config.MeterAnchorY), new Vector2(width, height), config.MeterGrows, vp.WorkPos,
             vp.WorkPos + vp.WorkSize, otherScreens);
         ImGui.SetNextWindowPos(at, ImGuiCond.Always);
     }
@@ -423,7 +438,9 @@ public sealed class MeterWindow : Window
             SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
             anchorMoved = true;
             // Sized by its edge in a fight: that's the height you're giving it.
-            if (view is View.Fight or View.Waiting && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / ImGuiHelpers.GlobalScale;
+            if (view is View.Fight or View.Waiting && !PlateOneLine && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / ImGuiHelpers.GlobalScale;
+            // Compact keeps its own width (its theme's until you give it one).
+            if (config.MeterCompact && MathF.Abs(size.X - lastSize.X) > 0.5f) givenWidth = size.X / ImGuiHelpers.GlobalScale;
         }
         lastPos = pos;
         lastSize = size;
@@ -441,6 +458,12 @@ public sealed class MeterWindow : Window
     /// <summary>Once you let go: the height you gave it and where you put it, saved once (not every frame of the drag).</summary>
     private void Commit()
     {
+        if (givenWidth > 0)
+        {
+            config.MeterCompactWidth = MathF.Round(givenWidth);
+            givenWidth = 0;
+            anchorMoved = true;
+        }
         if (givenNow > 0)
         {
             if (config.MeterCompact) config.MeterCompactHeight = MathF.Round(givenNow);
@@ -464,6 +487,12 @@ public sealed class MeterWindow : Window
         var w = ImGui.GetWindowWidth();
         var bottom = win.Y + ImGui.GetWindowHeight();
         var dl = Kit.Dl;
+        if (config.MeterCompact)
+        {
+            widthKnown = true;
+            DrawPlate(top, w, bottom, m);
+            return;
+        }
         widthCss = w / ImGuiHelpers.GlobalScale;
         widthKnown = true;
         previewInFoot = false;
@@ -519,7 +548,7 @@ public sealed class MeterWindow : Window
         var stack = new MeterStack(top.Y, bottom, Up);
         Header(dl, top.X, ref stack, w, said.Clock, e.Live, MeterView.OutcomeWord(e.Ended), e.Ended == Core.Outcome.Clear ? TagKind.Clear : TagKind.Wipe,
             said.Pick, m, null, true);
-        if (!z.IsCompact) TabsRow(dl, top.X, ref stack, w);
+        TabsRow(dl, top.X, ref stack, w);
         var tab = MeterLayout.Known(config.MeterTab);
         if (tab == MeterTab.Deaths)
         {
@@ -557,7 +586,7 @@ public sealed class MeterWindow : Window
     /// The head (`.mt-h`, 36 tall; 30 compact) at the anchored edge: on the right the lock, compact's
     /// tab menu ("Damage ⌄") and the picker ("Pull 12 ⌄"); on the left the clock (mono 600) with its
     /// dot, then the Preview tag and the outcome's tag, or the waiting line, as far as they fit before
-    /// the buttons. Compact (no tab row to do it) has a hairline on its far side.
+    /// the buttons.
     /// </summary>
     private void Header(ImDrawListPtr dl, float left, ref MeterStack stack, float w, string clock, bool beating, string? tag, TagKind tagKind, string? pick,
         IMeterSource? m, string? waitingLine, bool hasFight)
@@ -565,7 +594,6 @@ public sealed class MeterWindow : Window
         var z = Z;
         var h = S(z.Head);
         var y = stack.Near(h);
-        if (z.IsCompact) Kit.Rule(dl, left, left + w, stack.Away(y, h));
         headTop = y;
         headBottom = y + h;
         var cy = y + h / 2;
@@ -580,21 +608,11 @@ public sealed class MeterWindow : Window
             config.Save();
         }
         var edge = lx;
-        if (z.IsCompact)
-        {
-            // Compact: the tabs as one menu by the lock, its button the tab's word.
-            var word = MeterLayout.TabWord(config.MeterTab);
-            var tw = DropWidth(word);
-            var tx = edge - S(6) - tw;
-            if (DropButton("##meter-tabs", new Vector2(tx, cy - S(12)), tw, word)) ImGui.OpenPopup(TabMenu);
-            DrawTabMenu(tx, hasFight);
-            edge = tx;
-        }
         if (pick != null && m != null)
         {
             // The picker (`.mt-pick`): 24 tall, 6px corners, a hairline; "Pull 12 ⌄".
             var pw = DropWidth(pick);
-            var px = edge - S(z.IsCompact ? 6 : 8) - pw;
+            var px = edge - S(8) - pw;
             if (DropButton("##meter-pick", new Vector2(px, cy - S(12)), pw, pick)) ImGui.OpenPopup(Picker);
             DrawPicker(m, px);
             edge = px;
@@ -631,13 +649,13 @@ public sealed class MeterWindow : Window
             var gw = GaugeWidth(bars.Length);
             if (x + gw <= room)
             {
-                DrawGauge(dl, new Vector2(x, cy), gw, bars, z.IsCompact ? 4 : 5);
+                DrawGauge(dl, new Vector2(x, cy), gw, bars, 5);
                 if (Kit.Pointed(new Vector2(x, y), new Vector2(x + gw, y + h)) && m?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
                 x += gw + S(8);
             }
         }
         // "Waiting for the first hit", as much as fits before the buttons.
-        var px2 = z.IsCompact ? 12 : 13;
+        const int px2 = 13;
         if (waitingLine != null && room - x > S(20))
             Txt.Line(dl, new Vector2(x, y), Txt.Fit(waitingLine, Face.Sans, px2, room - x), Face.Sans, px2, Palette.Muted, z.Head);
     }
@@ -718,7 +736,7 @@ public sealed class MeterWindow : Window
         var (label, ahead, on) = PaceWords(pace);
         var x = left + S(z.Pad);
         var lw = Txt.Spaced(dl, new Vector2(x, y + (h - Txt.Natural(Face.Mono, 9)) / 2), label, Face.Mono, 9, Palette.Faint, 0.09f);
-        var aheadPx = z.IsCompact ? 11 : 12;
+        const int aheadPx = 12;
         var aw = Txt.Width(ahead, Face.MonoSemibold, aheadPx);
         var ow = Txt.Width(on, Face.Sans, 11);
         var rx = left + w - S(z.Pad);
@@ -807,12 +825,11 @@ public sealed class MeterWindow : Window
             {
                 var y = stack.Up ? stack.NearEdge - n * rowH - lbH : stack.NearEdge + n * rowH;
                 Kit.Rule(dl, left, left + w, stack.Toward(y, lbH));
-                if (z.IsCompact) BarBehind(dl, left, w, y, lbH, lb.Bar, false, false);
                 Kit.LimitMark(dl, new Vector2(g.Spot, y + (lbH - S(z.Spot)) / 2), z.Spot);
                 Txt.Line(dl, new Vector2(g.Name, y), "Limit break", Face.SansMedium, z.NamePx, Palette.White, z.LimitBreak);
                 Txt.LineRight(dl, g.ValueRight, y, lb.Value, Face.MonoSemibold, z.ValuePx, Palette.White, z.LimitBreak);
                 Txt.LineRight(dl, g.SecondRight, y, lb.Second, Face.Mono, z.SecondPx, Palette.Muted, z.LimitBreak);
-                if (!z.IsCompact) Bar(dl, left, w, y + lbH, lb.Bar, false, false);
+                Bar(dl, left, w, y + lbH, lb.Bar, false, false);
             }
         }
         finally
@@ -831,11 +848,10 @@ public sealed class MeterWindow : Window
         var max = new Vector2(left + w, y + rowH);
         var (clicked, hovered, _) = Kit.Hit(line.Id, min, max - min);
         var dim = r.Dead;
-        if (z.IsCompact) BarBehind(dl, left, w, y, rowH, line.Bar, r.IsYou, dim);
         if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
         if (clicked) OpenDetail?.Invoke(tab, e.Id, r.PartyId, null);
-        Kit.Spot(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Slot, Palette.RoleColor(r.Role), 1.5f);
-        var skull = z.IsCompact ? 11 : 12;
+        PlateArt.JobBadge(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Job, r.Role, config.MeterRoleColours, dim, r.Slot);
+        const int skull = 12;
         var nameText = config.MeterJobsOnly ? r.Job : r.Name;
         var nameRoom = (config.MeterJobsOnly ? g.ValueRight - S(z.ValueCol) : g.Job - S(z.Gap)) - g.Name - (dim ? S(5 + skull) : 0);
         var nw = Txt.Line(dl, new Vector2(g.Name, y), Txt.Fit(nameText, Face.SansMedium, z.NamePx, nameRoom), Face.SansMedium, z.NamePx,
@@ -844,7 +860,7 @@ public sealed class MeterWindow : Window
         if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(g.Job, y + (rowH - Txt.Natural(Face.Mono, z.JobPx)) / 2), Caps(r.Job), Face.Mono, z.JobPx, Palette.Faint, 0.06f);
         Txt.LineRight(dl, g.ValueRight, y, line.Value, Face.MonoSemibold, z.ValuePx, dim ? Palette.Muted : Palette.White, z.Row);
         Txt.LineRight(dl, g.SecondRight, y, line.Second, Face.Mono, z.SecondPx, Palette.Muted, z.Row);
-        if (!z.IsCompact) Bar(dl, left, w, y + rowH, line.Bar, r.IsYou, dim);
+        Bar(dl, left, w, y + rowH, line.Bar, r.IsYou, dim);
     }
 
     /// <summary>A row's bar (`.mb`): a slim cast bar to the top player's, 38 in from the left; grey, yours ember, a death's dimmer.</summary>
@@ -857,24 +873,6 @@ public sealed class MeterWindow : Window
         if (fw < 1) return;
         if (you) Kit.CastGradient(dl, a, new Vector2(a.X + fw, b.Y));
         else dl.AddRectFilled(a, new Vector2(a.X + fw, b.Y), Palette.U32(Palette.Rgba(255, 255, 255, dead ? 0.16f : 0.3f)), S(1));
-    }
-
-    /// <summary>
-    /// Compact's bar: the row's own background to the top player's (6px in at each side, a pixel
-    /// short of the row's edges so rows don't run together), white at 5.5% (a death's at 3%, yours
-    /// ember-washed), with the cast bar's line a pixel thick along its foot (grey, yours the ember gradient).
-    /// </summary>
-    private static void BarBehind(ImDrawListPtr dl, float left, float w, float y, float rowH, float fraction, bool you, bool dead)
-    {
-        var x = left + S(6);
-        var fw = (w - S(12)) * Math.Clamp(fraction, 0, 1);
-        if (fw < 1) return;
-        var a = new Vector2(x, y + 1);
-        var b = new Vector2(x + fw, y + rowH - 1);
-        dl.AddRectFilled(a, b, Palette.U32(you ? Palette.EmberWash : Palette.Rgba(255, 255, 255, dead ? 0.03f : 0.055f)));
-        var la = new Vector2(x, b.Y - 1);
-        if (you) Kit.CastGradient(dl, la, b);
-        else dl.AddRectFilled(la, b, Palette.U32(Palette.Rgba(255, 255, 255, dead ? 0.12f : 0.24f)));
     }
 
     /// <summary>The foot (`.mt-f`, 28 tall; 22 compact; mono 11px, 10 compact) at the far edge: the party's number, and what's worth saying on the right.</summary>
@@ -915,7 +913,7 @@ public sealed class MeterWindow : Window
         var gw = GaugeWidth(bars.Length);
         if (to - gw < from) return;
         var gx = to - gw;
-        DrawGauge(dl, new Vector2(gx, y + h / 2), gw, bars, Z.IsCompact ? 4 : 5);
+        DrawGauge(dl, new Vector2(gx, y + h / 2), gw, bars, 5);
         if (Kit.Pointed(new Vector2(gx, y), new Vector2(to, y + h)) && Meter?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
     }
 
@@ -977,9 +975,9 @@ public sealed class MeterWindow : Window
         var footY = live ? 0 : stack.Far(S(z.Foot));
         var nameH = Txt.Natural(Face.SansMedium, 13);
         var subH = Txt.Natural(Face.Sans, 11);
-        var rowH = z.IsCompact ? S(z.DeathRow) : S(6) * 2 + nameH + S(2) + subH;
+        var rowH = S(6) * 2 + nameH + S(2) + subH;
         // Live, "7 alive" and its line sit after the rows (14 off them, 46 for the two; compact, one 22px line).
-        var aliveH = !live ? 0 : z.IsCompact ? S(22) : S(14) + S(19.5f) + S(7.2f) + S(16) + S(6);
+        var aliveH = !live ? 0 : S(14) + S(19.5f) + S(7.2f) + S(16) + S(6);
         var fit = Math.Max(0, (int)MathF.Floor((stack.Room - aliveH + 1) / rowH));
         var n = Math.Min(deaths.Count, fit);
         var cut = deaths.Count - n;
@@ -991,8 +989,7 @@ public sealed class MeterWindow : Window
             for (var i = 0; i < n; i++)
             {
                 var y = stack.Row(i, rowH);
-                if (z.IsCompact) DeathLine(dl, left, y, w, rowH, e, i);
-                else DeathRow(dl, left, y, w, rowH, nameH, e, i);
+                DeathRow(dl, left, y, w, rowH, nameH, e, i);
             }
         }
         finally
@@ -1004,11 +1001,6 @@ public sealed class MeterWindow : Window
         {
             var by = stack.Up ? listEnd - aliveH : listEnd;
             var t1 = AliveLine(said.Alive, cut);
-            if (z.IsCompact)
-            {
-                Txt.Line(dl, new Vector2(left + (w - Txt.Width(t1, Face.Sans, 12)) / 2, by), t1, Face.Sans, 12, Palette.Muted, 22);
-                return;
-            }
             var c = new Vector2(left + w / 2, by + S(14));
             Txt.Draw(dl, new Vector2(c.X - Txt.Width(t1, Face.Sans, 13) / 2, c.Y), t1, Face.Sans, 13, Palette.Muted);
             var t2 = deaths.Count > 0 ? "A death's recap opens from its row" : "No deaths yet";
@@ -1018,7 +1010,7 @@ public sealed class MeterWindow : Window
         if (deaths.Count == 0)
         {
             var t = said.Wipe > 0 ? "No deaths but the wipe" : "Nobody died";
-            var px = z.IsCompact ? 12 : 13;
+            const int px = 13;
             var ty = stack.Up ? listEnd - S(14) - Txt.Natural(Face.Sans, px) : listEnd + S(14);
             Txt.Draw(dl, new Vector2(left + (w - Txt.Width(t, Face.Sans, px)) / 2, ty), t, Face.Sans, px, Palette.Muted);
         }
@@ -1041,7 +1033,7 @@ public sealed class MeterWindow : Window
         if (clicked) OpenDetail?.Invoke(MeterTab.Deaths, e.Id, d.PartyId, IndexIn(e.Deaths, d));
         var x = left + S(12);
         var row = RowOf(e, d.PartyId);
-        Kit.Spot(dl, new Vector2(x + S(9), y + S(6) + nameH / 2), 18, d.Slot, Palette.RoleColor(row?.Role), 1.5f);
+        PlateArt.JobBadge(dl, new Vector2(x + S(9), y + S(6) + nameH / 2), 18, row?.Job, row?.Role, config.MeterRoleColours, false, d.Slot);
         var nx = x + S(18) + S(8);
         var job = row?.Job ?? string.Empty;
         var name = config.MeterJobsOnly ? job : d.Name;
@@ -1049,35 +1041,6 @@ public sealed class MeterWindow : Window
         if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(nx + nw + S(5), y + S(6) + (nameH - Txt.Natural(Face.Mono, 10)) / 2), Caps(job), Face.Mono, 10, Palette.Faint, 0.06f);
         Txt.LineRight(dl, left + w - S(12), y + S(6), said.DeathTimes[i], Face.MonoSemibold, 12, Palette.Danger, nameH / S(1));
         Txt.Draw(dl, new Vector2(nx, y + S(6) + nameH + S(2)), Txt.Fit(said.DeathLines[i], Face.Sans, 11, left + w - S(12) - nx), Face.Sans, 11, Palette.Muted);
-    }
-
-    /// <summary>Compact's death, one 20px line: the spot, the name, the job, what killed them and how big (muted, cut to fit), its time in red.</summary>
-    private void DeathLine(ImDrawListPtr dl, float left, float y, float w, float h, MeterEncounter e, int i)
-    {
-        var z = Z;
-        var d = said.Deaths[i];
-        var min = new Vector2(left, y);
-        var max = new Vector2(left + w, y + h);
-        var (clicked, hovered, _) = Kit.Hit(said.DeathIds[i], min, max - min);
-        if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
-        if (clicked) OpenDetail?.Invoke(MeterTab.Deaths, e.Id, d.PartyId, IndexIn(e.Deaths, d));
-        var row = RowOf(e, d.PartyId);
-        var x = left + S(z.Pad);
-        Kit.Spot(dl, new Vector2(x + S(z.Spot) / 2, y + h / 2), z.Spot, d.Slot, Palette.RoleColor(row?.Role), 1.5f);
-        x += S(z.Spot) + S(z.Gap);
-        var right = left + w - S(z.Pad);
-        var tw = Txt.LineRight(dl, right, y, said.DeathTimes[i], Face.MonoSemibold, 11, Palette.Danger, z.DeathRow);
-        var room = right - tw - S(8);
-        var job = row?.Job ?? string.Empty;
-        var name = config.MeterJobsOnly ? job : d.Name;
-        x += Txt.Line(dl, new Vector2(x, y), Txt.Fit(name, Face.SansMedium, z.NamePx, MathF.Max(S(20), (room - x) * 0.55f)), Face.SansMedium, z.NamePx, Palette.White, z.DeathRow);
-        if (!config.MeterJobsOnly && x + S(30) < room)
-        {
-            x += S(5);
-            x += Txt.Spaced(dl, new Vector2(x, y + (h - Txt.Natural(Face.Mono, z.JobPx)) / 2), Caps(job), Face.Mono, z.JobPx, Palette.Faint, 0.06f);
-        }
-        x += S(8);
-        if (room - x > S(24)) Txt.Line(dl, new Vector2(x, y), Txt.Fit(said.DeathLines[i], Face.Sans, 11, room - x), Face.Sans, 11, Palette.Muted, z.DeathRow);
     }
 
     /// <summary>
@@ -1092,7 +1055,7 @@ public sealed class MeterWindow : Window
         var f = Feed(m.Events(e.Id));
         var fh = S(z.Foot);
         var footY = stack.Far(fh);
-        var rowH = S(z.IsCompact ? 20 : 23);
+        var rowH = S(23);
         var n = Math.Min(f.Newest.Count, stack.Fits(rowH));
         var a = MathF.Min(stack.NearEdge, stack.FarEdge);
         var b = MathF.Max(stack.NearEdge, stack.FarEdge);
@@ -1103,7 +1066,7 @@ public sealed class MeterWindow : Window
             if (f.Newest.Count == 0)
             {
                 const string none = "Deaths, raises, interrupts, potions and limit breaks show here.";
-                var px = z.IsCompact ? 11 : 12;
+                const int px = 12;
                 var ty = stack.Up ? stack.NearEdge - S(14) - Txt.Natural(Face.Sans, px) : stack.NearEdge + S(14);
                 var t = Txt.Fit(none, Face.Sans, px, w - S(24));
                 Txt.Draw(dl, new Vector2(left + (w - Txt.Width(t, Face.Sans, px)) / 2, ty), t, Face.Sans, px, Palette.Muted);
@@ -1144,19 +1107,20 @@ public sealed class MeterWindow : Window
         }
         var lineCss = h / S(1);
         var x = left + S(z.Pad);
-        var tpx = z.IsCompact ? 10 : 11;
+        const int tpx = 11;
         Txt.LineRight(dl, x + S(30), y, time, Face.Mono, tpx, Palette.Faint, lineCss);
         x += S(30) + S(8);
-        var mark = S(z.IsCompact ? 12 : 13);
+        var mark = S(13);
         Icons.Draw(dl, EventIcon(ev.Kind), new Vector2(x, y + (h - mark) / 2), mark, ToneColor(MeterText.Tone(ev.Kind)));
         x += mark + S(7);
         if (ev.Slot.Length > 0)
         {
             var spot = z.Spot - 2;
-            Kit.Spot(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, ev.Slot, Palette.SpotColor(ev.Slot), 1.5f);
+            var who = RowOf(e, ev.PartyId);
+            PlateArt.JobBadge(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, who?.Job, who?.Role ?? Format.RoleOfSlot(ev.Slot), config.MeterRoleColours, false, ev.Slot);
             x += S(spot) + S(6);
         }
-        var px = z.IsCompact ? 11 : 12;
+        const int px = 12;
         var room = left + w - S(z.Pad) - x;
         if (room > S(16)) Txt.Line(dl, new Vector2(x, y), Txt.Fit(ev.Text, Face.Sans, px, room), Face.Sans, px, ev.Kind == MeterEventKind.Death ? Palette.DangerName : Palette.Text, lineCss);
     }
@@ -1207,14 +1171,13 @@ public sealed class MeterWindow : Window
     /// <summary>The feed for a list of events: made again only when the source gives a new list (or it grew).</summary>
     private (List<MeterEvent> Newest, List<string> Times, string Foot) Feed(IReadOnlyList<MeterEvent> events)
     {
-        var compact = Z.IsCompact;
-        if (!ReferenceEquals(feed.Of, events) || feed.Count != events.Count || feed.Compact != compact)
+        if (!ReferenceEquals(feed.Of, events) || feed.Count != events.Count)
         {
             var newest = MeterText.Newest(events, EventIds.Length);
             var times = new List<string>(newest.Count);
             foreach (var ev in newest) times.Add(Format.Clock(ev.At));
-            var foot = events.Count == 0 ? "No events yet" : MeterText.Counts(events, compact ? 2 : 3);
-            feed = (events, events.Count, compact, newest, times, foot);
+            var foot = events.Count == 0 ? "No events yet" : MeterText.Counts(events, 3);
+            feed = (events, events.Count, newest, times, foot);
         }
         return (feed.Newest, feed.Times, feed.Foot);
     }
@@ -1289,7 +1252,7 @@ public sealed class MeterWindow : Window
         var z = Z;
         var stack = new MeterStack(top.Y, bottom, Up);
         Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, null, m, "Waiting for the first hit", false);
-        if (!z.IsCompact) TabsRow(dl, top.X, ref stack, w);
+        TabsRow(dl, top.X, ref stack, w);
         Columns(dl, top.X, ref stack, w, MeterTab.Damage);
         var fy = stack.Far(S(z.Foot));
         var g = Grid(top.X, w, z);
@@ -1300,12 +1263,12 @@ public sealed class MeterWindow : Window
         {
             var r = rows![i];
             var y = stack.Row(i, rowH);
-            Kit.Spot(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Slot, Palette.RoleColor(r.Role), 1.5f);
+            PlateArt.JobBadge(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Job, r.Role, config.MeterRoleColours, false, r.Slot);
             Txt.Line(dl, new Vector2(g.Name, y), Txt.Fit(config.MeterJobsOnly ? r.Job : r.Name, Face.SansMedium, z.NamePx, g.Job - S(z.Gap) - g.Name), Face.SansMedium, z.NamePx,
                 Palette.White, z.Row);
             if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(g.Job, y + (rowH - Txt.Natural(Face.Mono, z.JobPx)) / 2), Caps(r.Job), Face.Mono, z.JobPx, Palette.Faint, 0.06f);
             Txt.LineRight(dl, g.ValueRight, y, "–", Face.MonoSemibold, z.ValuePx, Palette.White, z.Row);
-            if (!z.IsCompact) Bar(dl, top.X, w, y + rowH, 0, false, false);
+            Bar(dl, top.X, w, y + rowH, 0, false, false);
         }
         Kit.Rule(dl, top.X, top.X + w, stack.Toward(fy, S(z.Foot)));
         if (last == null) return;
@@ -1340,7 +1303,7 @@ public sealed class MeterWindow : Window
         var total = S(z.Head) + S(z.Tabs) + messageH;
         var stack = new MeterStack(top.Y, top.Y + total, Up);
         Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, pick, m, null, pick != null);
-        if (!z.IsCompact) TabsRow(dl, top.X, ref stack, w);
+        TabsRow(dl, top.X, ref stack, w);
         // The message fills what's left, whichever side the head is on.
         var y = stack.Up ? stack.FarEdge : stack.NearEdge;
         var c = new Vector2(top.X + w / 2, y + S(16) + S(20));
@@ -1374,7 +1337,7 @@ public sealed class MeterWindow : Window
         var right = top.X + w - S(6);
         if (SmallButton("##meter-open", new Vector2(right - S(24), cy - S(12)), Icon.ChevronDown, false, "Open it")) unfolded = true;
         var (value, _) = LinesOf(e, MeterTab.Damage, config.MeterRank).Party;
-        var px = z.IsCompact ? 12 : 13;
+        const int px = 13;
         var vw = Txt.Width(value, Face.MonoSemibold, px);
         var rx = right - S(24) - S(8);
         Txt.Line(dl, new Vector2(rx - vw, top.Y), value, Face.MonoSemibold, px, Palette.White, z.Head);
@@ -1402,7 +1365,7 @@ public sealed class MeterWindow : Window
     }
 
     /// <summary>
-    /// Compact's tab menu (`.menu`, 200 wide): Damage, Healing, Taken, Deaths, each with the opened-up
+    /// The tab menu (`.menu`, 200 wide; the tab row's place in a meter too narrow for the five): Damage, Healing, Taken, Deaths, each with the opened-up
     /// window's icon, the one you're on ticked, the deaths counted.
     /// </summary>
     private void DrawTabMenu(float buttonLeft, bool hasFight)
@@ -1507,7 +1470,7 @@ public sealed class MeterWindow : Window
                 config.MeterPace = (PaceAgainst)pace;
                 config.Save();
             }
-            // Compact, as Settings has it: smaller rows and the tabs in a menu.
+            // Compact, as Settings has it (0.7.0's compact meter, in its theme).
             y += lineH + gap;
             Txt.Line(dl, new Vector2(pos.X + S(8.8f), y), "Compact", Face.Sans, 13, Palette.Muted, 28);
             var size = Kit.SwitchSize;

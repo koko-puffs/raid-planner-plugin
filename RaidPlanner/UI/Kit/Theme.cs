@@ -40,7 +40,8 @@ public static class Theme
 
     /// <summary>Before ImGui.Begin: the frame's colours, corners, edge and padding; nothing that sizes the title bar.</summary>
     /// <param name="background">The window's ground (basalt at 96%, or the meter's own see-through one).</param>
-    public static void PushFrame(Vector4? background = null, float radius = Palette.RadiusLg)
+    /// <param name="edge">The window's edge (the white hairline; the compact meter draws its theme's own, so none).</param>
+    public static void PushFrame(Vector4? background = null, float radius = Palette.RadiusLg, Vector4? edge = null)
     {
         var colors = 0;
         var vars = 0;
@@ -56,7 +57,7 @@ public static class Theme
         }
 
         C(ImGuiCol.WindowBg, background ?? Palette.Window);
-        C(ImGuiCol.Border, Palette.WindowEdge);
+        C(ImGuiCol.Border, edge ?? Palette.WindowEdge);
         C(ImGuiCol.BorderShadow, Vector4.Zero);
         C(ImGuiCol.TitleBg, Palette.TitleBar);
         C(ImGuiCol.TitleBgActive, Palette.TitleBar);

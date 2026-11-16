@@ -262,7 +262,7 @@ public sealed partial class MainWindow
                 var nameRoom = max.X - S(8) - countW - x;
                 if (row.Death)
                 {
-                    Kit.Spot(dl, new Vector2(x + S(10), min.Y + rowH / 2), 20, row.DeathSlot!, Palette.SpotColor(row.DeathSlot));
+                    PlateArt.JobBadge(dl, new Vector2(x + S(10), min.Y + rowH / 2), 20, row.DeathJob, Format.RoleOfSlot(row.DeathSlot), MeterRoleColours.Theme, false, row.DeathSlot);
                     x += S(20) + S(9.6f);
                     Txt.Line(dl, new Vector2(x, min.Y), Txt.Fit(row.Name, Face.SansMedium, 14, nameRoom - S(30)), Face.SansMedium, 14, Palette.DangerName, 42);
                 }

@@ -15,10 +15,9 @@ public enum MeterGrows
 }
 
 /// <summary>
-/// The small meter's sizes (CSS px and font sizes), normal or compact. Compact is the same meter
-/// with less air: 20px rows (the spot 16, the name at 12px, the number in mono 600 12px, the share
-/// in mono 10px), the bar drawn as the row's background, a 30px head with the tabs in a menu (so the
-/// tab row's 27px goes), and slimmer pace, column heads, limit break and foot.
+/// The normal meter's sizes (CSS px and font sizes). Until 0.7.0 there was a compact set too (20px
+/// rows, the tabs in a menu); 0.7.0's compact meter is round four's Plate, sized by its theme
+/// (<see cref="PlateSizes"/>).
 /// </summary>
 public sealed record MeterSizes(
     float Head,
@@ -39,23 +38,10 @@ public sealed record MeterSizes(
     int JobPx,
     int ValuePx,
     int SecondPx,
-    int FootPx,
-    float DeathRow)
+    int FootPx)
 {
     /// <summary>The mock-up's meter: a 36px head, 27px tabs, 26px pace, 20px column heads, 25px rows, a 27px limit break, a 28px foot.</summary>
-    public static readonly MeterSizes Normal = new(36, 27, 26, 20, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11, 0);
-
-    /// <summary>
-    /// Compact: a 30px head and no tab row, 22px pace, 16px column heads, 20px rows (one line: the
-    /// name's 12px line is 15.6 of them), a 21px limit break, a 22px foot, 10 in at the sides and 6
-    /// between columns; a death on one 20px line. The number's column stays wide enough for
-    /// "3,912,400" at 12px (64.8).
-    /// </summary>
-    public static readonly MeterSizes Compact = new(30, 0, 22, 16, 20, 21, 22, 10, 6, 16, 26, 66, 34, 13, 12, 9, 12, 10, 10, 20);
-
-    public static MeterSizes Of(bool compact) => compact ? Compact : Normal;
-
-    public bool IsCompact => Tabs <= 0;
+    public static readonly MeterSizes Normal = new(36, 27, 26, 20, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11);
 
     /// <summary>
     /// How tall a fight's content is for a party of <paramref name="rows"/> (CSS px): the head, the

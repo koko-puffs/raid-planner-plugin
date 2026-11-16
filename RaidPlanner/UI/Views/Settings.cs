@@ -42,6 +42,17 @@ public sealed partial class MainWindow
 
     private static readonly string[] WhereItems = { "In duties", "Everywhere" };
 
+    private static readonly string[] RoleItems = { "The theme's", "The game's" };
+
+    private static readonly string[] ThemeIds = { "##theme0", "##theme1", "##theme2", "##theme3", "##theme4", "##theme5" };
+
+    /// <summary>Settings' live preview of the compact meter: the sample fight playing, drawn as the meter draws it (not interactive).</summary>
+    private readonly PlateMeter themePreview = new() { Interactive = false };
+
+    private MeterPreview? themeSample;
+
+    private (LimitBreakGauge? Of, float[] Bars) previewPips = (null, Array.Empty<float>());
+
     /// <summary>The cooldown tracker's sample: on now, and starting or stopping it (set by the plugin).</summary>
     public Func<bool>? CooldownsSampleOn { get; set; }
 
@@ -571,15 +582,38 @@ public sealed partial class MainWindow
             config.MeterGauge = (GaugePlace)gauge;
             config.Save();
         }
-        if (SwitchRow(i++, "##meter-compact", "Compact", "Smaller rows, the tabs in a menu by the lock", config.MeterCompact,
-                "20px rows with smaller words and the bars behind them, and the four tabs as one menu beside the lock: the party in less room. The meter's own menu (the pull picker) has this switch too. The opened-up window stays as it is.",
+        if (SwitchRow(i++, "##meter-compact", "Compact", "The top eight on plates, in a theme; the tabs and pulls in one menu", config.MeterCompact,
+                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them. Off, the normal meter with its tabs, pace bar and column heads. The meter's own menu has this switch too; the opened-up window stays as it is.",
                 pad: 10))
         {
             config.MeterCompact = !config.MeterCompact;
             config.Save();
         }
+        ThemeBlock(i++, !config.MeterCompact);
+        var roles = SegmentRow(i++, "##meter-roles", "Role colours", "The bars' and icons' colours", RoleItems, (int)config.MeterRoleColours, sub: true,
+            tip: "The theme's: a blue, a green and a red-orange told apart with any colour blindness (each theme has its own set). The game's: its own blue, green and red, as the party list has them.");
+        if (roles != (int)config.MeterRoleColours)
+        {
+            config.MeterRoleColours = (MeterRoleColours)roles;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##meter-whole", "Whole numbers", "27,840 instead of 27.8k", config.MeterWholeNumbers,
+                "Three figures (27.8k, 9.05k, 165k) keep still at every snapshot and read at a glance; whole numbers widen the column a little.", sub: true, pad: 10,
+                off: !config.MeterCompact))
+        {
+            config.MeterWholeNumbers = !config.MeterWholeNumbers;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##meter-decor", "Decorations", "Sparkles, scanlines, the horizon, the glitch, the ribbon", config.MeterDecorations,
+                "Each theme's flourishes. Off, the theme keeps its colours, fonts and frame without them.", sub: true, pad: 10, off: !config.MeterCompact))
+        {
+            config.MeterDecorations = !config.MeterDecorations;
+            config.Save();
+        }
         // 20% at the least, as the meter draws it (below that its edge and words would float on nothing).
-        var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", "Rows stay solid", Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
+        var floor = config.MeterCompact ? MeterThemes.Of(config.MeterTheme).Win.Floor : 0;
+        var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", floor > 0 ? $"Rows stay solid; {MeterThemes.Of(config.MeterTheme).Name} keeps {Format.PercentWhole(floor)} at least" : "Rows stay solid",
+            Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
         if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
         {
             config.MeterBackground = bg;
@@ -635,6 +669,106 @@ public sealed partial class MainWindow
         Kit.Gap(12);
         Txt.Note("The meter's numbers and names stay in the plugin. Your logs on the site carry the party's numbers with their names (unless you turn Upload my logs off).");
     }
+
+    /// <summary>
+    /// The compact meter's theme (a sub-row of Compact): its six as tiles (the name and where it sits
+    /// in the range), the one picked edged in ember, its idea under them; beside them the live preview,
+    /// the sample fight playing in the theme, at its real size, as the meter draws it.
+    /// </summary>
+    private void ThemeBlock(int index, bool off)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
+        var theme = MeterThemes.Of(config.MeterTheme);
+        MeterWindow.WantFonts(fonts, theme.Id);
+        var x = at.X + S(34);
+        var y = at.Y + S(12);
+        var old = Palette.Opacity;
+        if (off) Palette.Opacity = old * 0.45f;
+        Txt.Line(dl, new Vector2(x, y), "Theme", Face.SansMedium, 14, Palette.White, 14 * 1.3f);
+        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "The compact meter's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
+        y += S(14 * 1.3f) + S(2) + S(17.4f) + S(10);
+        // The preview on the right, at its real size; the tiles in what's left.
+        var previewW = S(theme.Win.Width);
+        var previewX = at.X + w - S(16) - S(10) - previewW;
+        var tilesW = previewX - S(18) - x;
+        var cols = tilesW >= S(300) ? 2 : 1;
+        var tileW = (tilesW - (cols - 1) * S(8)) / cols;
+        var tileH = S(44);
+        var picked = config.MeterTheme;
+        string? tip = null;
+        for (var k = 0; k < MeterThemes.All.Count; k++)
+        {
+            var t = MeterThemes.All[k];
+            var tmin = new Vector2(x + (k % cols) * (tileW + S(8)), y + (k / cols) * (tileH + S(8)));
+            var tmax = tmin + new Vector2(tileW, tileH);
+            var on = t.Id == picked;
+            var (clicked, hovered, _) = Kit.Hit(ThemeIds[k], tmin, tmax - tmin, off);
+            dl.AddRectFilled(tmin, tmax, Palette.U32(on ? Palette.EmberWash : hovered ? Palette.HoverButton : Palette.Tint), S(Palette.RadiusSm));
+            dl.AddRect(tmin + new Vector2(0.5f), tmax - new Vector2(0.5f), Palette.U32(on ? Palette.Ember : Palette.Line2), S(Palette.RadiusSm), ImDrawFlags.None, 1f);
+            // A swatch of the theme: its ground with its three roles.
+            var sw = new Vector2(tmin.X + S(10), tmin.Y + (tileH - S(24)) / 2);
+            dl.AddRectFilled(sw, sw + new Vector2(S(24)), Palette.U32(t.Win.GradTop ?? t.Win.Bg), S(5));
+            dl.AddRect(sw, sw + new Vector2(S(24)), Palette.U32(t.Win.Edge with { W = MathF.Max(0.4f, t.Win.Edge.W) }), S(5), ImDrawFlags.None, 1f);
+            for (var r = 0; r < 3; r++)
+            {
+                var c = r == 0 ? t.Roles.Tank : r == 1 ? t.Roles.Healer : t.Roles.Dps;
+                dl.AddRectFilled(sw + new Vector2(S(5), S(5) + r * S(5)), sw + new Vector2(S(19), S(8) + r * S(5)), Palette.U32(c), S(1));
+            }
+            var tx = sw.X + S(24) + S(10);
+            var room = tmax.X - S(8) - tx;
+            Txt.Line(dl, new Vector2(tx, tmin.Y + S(5)), Txt.Fit(t.Name, Face.SansMedium, 13, room), Face.SansMedium, 13, Palette.White, 17);
+            Txt.Line(dl, new Vector2(tx, tmin.Y + S(22)), Txt.Fit(t.Kind, Face.Sans, 11, room), Face.Sans, 11, Palette.Muted, 16);
+            if (hovered) tip = t.Blurb;
+            if (clicked && !on)
+            {
+                config.MeterTheme = t.Id;
+                config.MeterCompactWidth = 0;
+                config.Save();
+            }
+        }
+        var rows = (MeterThemes.All.Count + cols - 1) / cols;
+        var tilesH = rows * tileH + (rows - 1) * S(8);
+        var bw = tilesW;
+        OneRun[0] = Run.Note(theme.Blurb);
+        var blurbH = Txt.Flow(new Vector2(x, y + tilesH + S(10)), bw, OneRunList, 18, out _);
+        Palette.Opacity = old;
+        if (tip != null) Kit.Tooltip(tip);
+        // The live preview: the sample fight in the theme picked, as the meter draws it.
+        themeSample ??= new MeterPreview();
+        var e = themeSample.Current;
+        var previewH = 0f;
+        if (e != null)
+        {
+            MeterWindow.Configure(themePreview, config);
+            themePreview.Update(e, themeSample, MeterTab.Damage, config.MeterRank, config.MeterWholeNumbers, Environment.TickCount64 / 1000.0);
+            var g = themeSample.LimitBreak;
+            if (!Equals(previewPips.Of, g)) previewPips = (g, MeterText.Bars(g));
+            themePreview.Pips = config.MeterGauge != GaugePlace.Off ? previewPips.Bars : null;
+            themePreview.Pace = null;
+            if (themeSample.Pace(e.Id, PaceAgainst.Best) is { } pace)
+            {
+                themePreview.Pace = Format.SignedPercent(pace.Ahead);
+                themePreview.PaceAhead = pace.Ahead >= 0;
+            }
+            var party = 0;
+            foreach (var r in e.Rows)
+                if (!r.IsLimitBreak)
+                    party++;
+            previewH = S(themePreview.Needed(party));
+            if (off) Palette.Opacity = old * 0.45f;
+            themePreview.DrawFight(dl, new Vector2(previewX, y - S(4)), previewW, previewH, false);
+            Palette.Opacity = old;
+        }
+        var h = MathF.Max(y - at.Y + tilesH + S(10) + blurbH, y - S(4) - at.Y + previewH) + S(16);
+        Kit.Reserve(at, w, h);
+    }
+
+    private static readonly Run[] OneRun = new Run[1];
+
+    private static IReadOnlyList<Run> OneRunList => OneRun;
 
     private void DrawAccountTab()
     {

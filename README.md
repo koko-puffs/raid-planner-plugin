@@ -33,10 +33,13 @@ Record the fights you're in, then make them into plans on
   a few seconds before it comes, and the next few on screen, counting down to each (with yours: "You:
   Reprisal"), with a sound if you like.
 - **A meter over the fight**: damage, healing, damage taken and deaths for your party, worked out
-  in the game (no names leave it). Pick an earlier pull, pace against your best, open it up for
-  every column and a death's recap, see the fight's events (raises, interrupts, potions, limit
-  breaks, tank swaps) and the limit break gauge, and copy it as text for chat. A cross-world party
-  counts too, outside duties as well (on a target dummy with a friend).
+  in the game (no names leave it). Compact by default: the top eight with their job icons and bars in
+  colours you can tell apart with colour blindness, short steady numbers (27.8k), you pinned at the
+  foot when you're below them, and a details panel when you point at a row; in one of six themes
+  (Ready Check, Mochi, Native, Readout, Neon, Grimoire). Pick an earlier pull, pace against your best,
+  open it up for every column and a death's recap, see the fight's events (raises, interrupts,
+  potions, limit breaks, tank swaps) and the limit break gauge, and copy it as text for chat. A
+  cross-world party counts too, outside duties as well (on a target dummy with a friend).
 - **A party cooldown tracker**: your party's raid buffs, mitigation and Swiftcast, each with the
   time until it's ready (yours from the game's own timers, the others' from when they used them), and
   a cooldown your plan has someone use soon outlined ("planned in 8 s").
@@ -96,7 +99,8 @@ callouts (`unlock`, `preview` or `settings` after either).
   each step (off; one of the game's own), and where and how the window sits.
 - **Meter**: _Show the meter_ (on, in duties or everywhere, folded or hidden out of combat), ENCDPS or
   DPS, names or jobs only, lock and click-through, which way it grows (down, or up with its clock and
-  buttons at the foot), compact (smaller rows, the tabs in a menu), its background, a sample fight to
+  buttons at the foot), compact (on) and its theme with a live preview, role colours (the theme's or
+  the game's), whole numbers, decorations, its background, a sample fight to
   see it mid-fight, when a fight ends, how many pulls it keeps, what pace compares with, and where
   the limit break gauge goes (head, foot or off).
 - **Cooldowns**: _Show the tracker_ (off), in duties or everywhere, yours too, those ready hidden or
@@ -119,5 +123,5 @@ See [DETAILS.md](DETAILS.md) for how it works, and [docs/PUBLISHING.md](docs/PUB
 release it. It's a third-party plugin from its own repository, so Dalamud's team hasn't reviewed
 it, and plugins are against Square Enix's terms of service: use it at your own risk.
 
-Licence: AGPL-3.0 (see LICENSE). The bundled Geist, Geist Mono and Archivo fonts are under the SIL
-Open Font License 1.1.
+Licence: AGPL-3.0 (see LICENSE). The bundled Geist, Geist Mono, Archivo, Zen Maru Gothic and Fraunces
+fonts are under the SIL Open Font License 1.1.
