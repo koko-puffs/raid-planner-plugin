@@ -169,6 +169,9 @@ public sealed class Tally
         }
         if (amount > line.Max) line.Max = amount;
         if (amount > m.MaxHeal) m.MaxHeal = amount;
+        // The healers' limit break has no row on the Healing tab (nor on the site, which leaves it out): its healing
+        // isn't the party's, so the party's line is the sum of the rows shown and the shares add up to 100.
+        if (m == LimitBreak) return;
         PartyHealing += landed;
         PartyOverheal += over;
     }

@@ -268,7 +268,9 @@ public sealed class CombatParser
                 var d = Effects.Decode(effects[j]);
                 if (d.Kind == EffectKind.None) continue;
                 var origin = d.FromTarget ? target : b.Caster;
-                var recipient = d.ToSource ? b.Caster : target;
+                // Damage from the target (retaliation) is always at the caster, whether or not the game also
+                // set the "to the source" bit: from the target onto the target would be it hitting itself.
+                var recipient = d.ToSource || (d.FromTarget && d.Kind == EffectKind.Damage) ? b.Caster : target;
                 var onTarget = recipient == target;
                 var hp = onTarget ? b.Hp[i] : b.CasterHp;
                 var max = onTarget ? b.MaxHp[i] : b.CasterMaxHp;
