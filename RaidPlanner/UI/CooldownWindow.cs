@@ -152,7 +152,7 @@ public sealed class CooldownWindow : OverlayWindow
         }
     }
 
-    /// <summary>A cooldown's row: the recharge behind it, the icon, the spot, the name, the charges and the time to ready.</summary>
+    /// <summary>A cooldown's row: the recharge behind it, the icon, the member's job icon (their spot in its tooltip; since 0.7.0), the name, the charges and the time to ready.</summary>
     private void Row(ImDrawListPtr dl, CooldownLine l, float left, float y, float w, float h, int index)
     {
         var compact = Compact;
@@ -182,7 +182,7 @@ public sealed class CooldownWindow : OverlayWindow
         DrawIcon(dl, l, new Vector2(x, y + (h - S(icon)) / 2), icon);
         x += S(icon) + S(7);
         var spot = compact ? 14 : 16;
-        Kit.Spot(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, l.Who.Slot, Palette.RoleColor(Core.Roles.RoleWord(l.Who.Role)), 1.5f);
+        PlateArt.JobBadge(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, l.Who.Job, Core.Roles.RoleWord(l.Who.Role), Config.MeterRoleColours, false, l.Who.Slot);
         x += S(spot) + S(7);
         var (time, count) = WordsOf(l);
         var right = left + w - S(10);

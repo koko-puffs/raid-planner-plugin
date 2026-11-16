@@ -403,37 +403,12 @@ public class MeterLayoutTests
     public void The_normal_meter_is_the_mock_ups()
     {
         var z = MeterSizes.Normal;
-        Assert.False(z.IsCompact);
         // 36 head + 27 tabs + 26 pace + 20 heads + 8 × 25 rows + 27 limit break + 28 foot.
         Assert.Equal(364, z.Needed(8, true));
         Assert.Equal(338, z.Needed(8, false));
         Assert.Equal(8, z.RowsIn(364, true));
         Assert.Equal(7, z.RowsIn(363 - 1, true));
         Assert.Equal(0, z.RowsIn(10, true));
-    }
-
-    [Fact]
-    public void Compact_fits_more_rows_in_the_same_room_and_stays_readable()
-    {
-        var n = MeterSizes.Normal;
-        var c = MeterSizes.Compact;
-        Assert.True(c.IsCompact);
-        Assert.Equal(0, c.Tabs);
-        // Its own head, pace, heads, rows, limit break and foot are all smaller.
-        Assert.True(c.Head < n.Head && c.Pace < n.Pace && c.Cols < n.Cols && c.Row < n.Row && c.LimitBreak < n.LimitBreak && c.Foot < n.Foot);
-        // The eight and the limit break in 271px, not 364.
-        Assert.Equal(271, c.Needed(8, true));
-        // Where the normal meter shows 8, compact shows 12.
-        Assert.Equal(12, c.RowsIn(n.Needed(8, true), true));
-        // A row is one line of its name's words (Geist's line is 1.3 of its size) with room round it, and the spot fits in it.
-        Assert.True(c.Row >= c.NamePx * 1.3f + 2);
-        Assert.True(c.Spot <= c.Row - 2);
-        Assert.True(c.ValuePx >= 12 && c.SecondPx >= 10 && c.JobPx >= 9);
-        // "3,912,400" in mono 600 at 12px (0.6em a figure) fits its column.
-        Assert.True(9 * 0.6f * c.ValuePx <= c.ValueCol);
-        Assert.True(c.DeathRow >= c.Row);
-        Assert.Same(c, MeterSizes.Of(true));
-        Assert.Same(n, MeterSizes.Of(false));
     }
 
     [Fact]

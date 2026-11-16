@@ -349,7 +349,7 @@ public sealed class MeterDetailWindow : Window
             else if (i > 0 && list[i - 1].PartyId != player) Kit.Rule(dl, min.X, max.X, y - 0.5f);
             Kit.Reticle(dl, $"##xg-ret{r.PartyId}", min, max, picked || hovered);
             if (r.IsLimitBreak) Kit.LimitMark(dl, new Vector2(left, y + (rowH - S(18)) / 2));
-            else Kit.Spot(dl, new Vector2(left + S(10), y + rowH / 2), 20, r.Slot, Palette.RoleColor(r.Role));
+            else PlateArt.JobBadge(dl, new Vector2(left + S(10), y + rowH / 2), 20, r.Job, r.Role, config.MeterRoleColours, r.Dead, r.Slot);
             var name = r.IsLimitBreak ? "Limit break" : config.MeterJobsOnly ? r.Job : r.Name;
             var nameRoom = jobX - S(10) - nameX - (r.Dead ? S(18) : 0);
             var nw = Txt.Line(dl, new Vector2(nameX, y), Txt.Fit(name, Face.SansMedium, 14, nameRoom), Face.SansMedium, 14, r.Dead ? Palette.Muted : Palette.White, 34);
@@ -426,7 +426,7 @@ public sealed class MeterDetailWindow : Window
         var x = at.X + S(8) + S(10);
         var right = at.X + w - S(8) - S(10);
         var y = at.Y + S(12);
-        Kit.Spot(dl, new Vector2(x + S(13), y + S(19)), 26, row.Slot, Palette.RoleColor(row.Role));
+        PlateArt.JobBadge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, config.MeterRoleColours, false, row.Slot);
         var tx = x + S(26) + S(12);
         var total = tab switch
         {
@@ -636,7 +636,8 @@ public sealed class MeterDetailWindow : Window
             x += S(15) + S(10);
             if (ev.Slot.Length > 0)
             {
-                Kit.Spot(dl, new Vector2(x + S(9), min.Y + rowH / 2), 18, ev.Slot, Palette.SpotColor(ev.Slot));
+                var who = e.Rows.FirstOrDefault(r => r.PartyId == ev.PartyId && !r.IsLimitBreak);
+                PlateArt.JobBadge(dl, new Vector2(x + S(9), min.Y + rowH / 2), 18, who?.Job, who?.Role ?? Format.RoleOfSlot(ev.Slot), config.MeterRoleColours, false, ev.Slot);
                 x += S(18) + S(8);
             }
             var kind = Txt.Caps(MeterText.KindWord(ev.Kind));
@@ -683,8 +684,8 @@ public sealed class MeterDetailWindow : Window
             if (picked || hovered) dl.AddRectFilled(min, max, Palette.U32(picked ? Palette.Rgba(255, 255, 255, 0.06f) : Palette.Hover), S(Palette.RadiusSm));
             Kit.Reticle(dl, $"##dd-ret{index}", min, max, picked || hovered);
             var x = min.X + S(12);
-            var role = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId)?.Role;
-            Kit.Spot(dl, new Vector2(x + S(10), y + rowH / 2), 20, d.Slot, Palette.RoleColor(role));
+            var dr = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId && !r.IsLimitBreak);
+            PlateArt.JobBadge(dl, new Vector2(x + S(10), y + rowH / 2), 20, dr?.Job, dr?.Role, config.MeterRoleColours, false, d.Slot);
             x += S(20) + S(10);
             var name = config.MeterJobsOnly ? d.Slot : d.Name;
             var color = d.PartOfWipe ? Palette.Muted : Palette.White;
@@ -713,8 +714,8 @@ public sealed class MeterDetailWindow : Window
         var x = at.X + S(18);
         var inner = w - S(36);
         var y = at.Y + S(14);
-        var role = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId)?.Role;
-        Kit.Spot(dl, new Vector2(x + S(13), y + S(18)), 26, d.Slot, Palette.RoleColor(role));
+        var dr = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId && !r.IsLimitBreak);
+        PlateArt.JobBadge(dl, new Vector2(x + S(13), y + S(18)), 26, dr?.Job, dr?.Role, config.MeterRoleColours, false, d.Slot);
         var tx = x + S(26) + S(12);
         var who = config.MeterJobsOnly ? d.Slot : d.Name;
         var th = Kit.Callout(dl, new Vector2(tx, y), $"{who} died at {Format.Clock(d.At)}", 17, inner - S(38), 1, 1.05f);

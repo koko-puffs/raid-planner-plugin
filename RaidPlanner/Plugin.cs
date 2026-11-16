@@ -67,7 +67,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         pluginInterface.Create<Services>();
         config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-        // Settings saved by 0.5.x (version 1): Upload my logs on, from now (0.6.0); a new one starts from now too.
+        // Settings saved by 0.5.x (version 1): Upload my logs on, from now (0.6.0); a new one starts from now too. Before 0.7.0: the meter compact.
         if (config.Migrate(DateTimeOffset.Now)) config.Save();
         try
         {

@@ -51,10 +51,19 @@ public static class Txt
     /// <summary>
     /// The face text is drawn in: on a Japanese client the mono (Geist Mono, which has no kana or
     /// kanji) gives way to the sans (Dalamud's font there) for text with Japanese in it, as a duty's
-    /// name in an eyebrow or a job's abbreviation in the meter.
+    /// name in an eyebrow or a job's abbreviation in the meter. The meter's themes' latin faces (Zen Maru
+    /// Gothic, Fraunces) give way to the sans for such text on every client.
     /// </summary>
     public static Face For(Face face, ReadOnlySpan<char> text)
     {
+        // A theme's shipped faces are latin: Chinese, Korean and Japanese words fall back to the sans (as the rest of the windows draw them).
+        if (face is Face.Round or Face.RoundBlack or Face.Serif or Face.SerifSemibold)
+        {
+            foreach (var c in text)
+                if (c >= '⺀')
+                    return face is Face.RoundBlack or Face.SerifSemibold ? Face.SansSemibold : Face.SansMedium;
+            return face;
+        }
         if (face is not (Face.Mono or Face.MonoSemibold) || !Fonts.Japanese) return face;
         foreach (var c in text)
             if (c >= '⺀')

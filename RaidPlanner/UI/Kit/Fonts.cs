@@ -3,31 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Dalamud.Game;
+using Dalamud.Interface.GameFonts;
 using Dalamud.Interface.ManagedFontAtlas;
 
 namespace RaidPlanner.UI;
-
-/// <summary>Ready Check's three voices, by weight: the read (Geist), the count (Geist Mono), the callout (Archivo).</summary>
-public enum Face
-{
-    /// <summary>Geist 400: what you read.</summary>
-    Sans,
-
-    /// <summary>Geist 500 (the site's 550): buttons, names in lists, tabs, a setting's name.</summary>
-    SansMedium,
-
-    /// <summary>Geist 600 (and the site's 650 and 700): small headings, the telegraph's words, a cast's name, a spot's label.</summary>
-    SansSemibold,
-
-    /// <summary>Geist Mono 500: eyebrows, tags, times and counts that line up.</summary>
-    Mono,
-
-    /// <summary>Geist Mono 600: the clock, values, the meter's numbers.</summary>
-    MonoSemibold,
-
-    /// <summary>Archivo Expanded ExtraBold (wdth 125, 800), in capitals: the callout, what a raid lead says.</summary>
-    Callout,
-}
 
 /// <summary>
 /// The faces at the sizes the windows use, loaded through Dalamud's font atlas (so they follow
@@ -52,6 +31,12 @@ public enum Face
 /// The extra glyphs of Dalamud's language (Chinese, Korean: tens of thousands each) are added only to
 /// the faces that draw a plan's own words (<see cref="PlanText"/>): on the global client everything
 /// else the windows show is the game's (English, German, French, Japanese) or their own.
+///
+/// Since 0.7.0 the compact meter's theme brings its own faces, loaded only while it's picked
+/// (<see cref="Want"/>, the others let go): Zen Maru Gothic 700 and 900 (Mochi) and Fraunces 500 and
+/// 600 at opsz 14 (Grimoire), static latin and latin-ext instances made with fontTools (OFL); the
+/// game's Axis, MiedingerMid and Jupiter (Native) through Dalamud's game fonts, nothing shipped; and
+/// the sizes of Geist and Archivo a theme draws at that the windows don't (Neon's 9px capitals).
 /// </summary>
 public sealed class Fonts : IDisposable
 {
@@ -59,6 +44,11 @@ public sealed class Fonts : IDisposable
     private const float GeistLine = 1.3f;
 
     private const float ArchivoLine = 1.088f;
+
+    /// <summary>Zen Maru Gothic's line (1.448) and Fraunces' (1.233), read from the files as Geist's was.</summary>
+    private const float RoundLine = 1.448f;
+
+    private const float SerifLine = 1.233f;
 
     /// <summary>
     /// The faces a plan's own words are drawn in (written on the site, in any language): the callout
@@ -93,22 +83,19 @@ public sealed class Fonts : IDisposable
     /// <summary>The client is Japanese: callouts and sans words are Dalamud's font, and callouts aren't put in capitals.</summary>
     public bool Japanese { get; }
 
+    /// <summary>A theme's faces built while it's picked (<see cref="Want"/>), each (face, size) to its font.</summary>
+    private readonly Dictionary<(Face, int), IFontHandle> themed = new();
+
+    private readonly IFontAtlas atlas;
+
     public Fonts()
     {
-        var atlas = Services.PluginInterface.UiBuilder.FontAtlas;
+        atlas = Services.PluginInterface.UiBuilder.FontAtlas;
         Japanese = Services.ClientState.ClientLanguage == ClientLanguage.Japanese;
         var alike = new Dictionary<(string File, float Size, bool Languages), IFontHandle>();
         foreach (var (face, px) in Wanted)
         {
-            var (file, ratio) = face switch
-            {
-                Face.Sans => ("Geist-Regular.ttf", GeistLine),
-                Face.SansMedium => ("Geist-Medium.ttf", GeistLine),
-                Face.SansSemibold => ("Geist-SemiBold.ttf", GeistLine),
-                Face.Mono => ("GeistMono-Medium.ttf", GeistLine),
-                Face.MonoSemibold => ("GeistMono-SemiBold.ttf", GeistLine),
-                _ => ("ArchivoExpanded-ExtraBold.ttf", ArchivoLine),
-            };
+            var (file, ratio) = FileOf(face);
             var mono = face is Face.Mono or Face.MonoSemibold;
             var dalamudFont = Japanese && !mono && px >= 11;
             // Dalamud's font is drawn at Geist's line for its size, so it sits in the same line boxes.
@@ -126,14 +113,77 @@ public sealed class Fonts : IDisposable
         }
     }
 
+    /// <summary>A face's file and its line's ratio to its size.</summary>
+    private static (string File, float Ratio) FileOf(Face face) => face switch
+    {
+        Face.Sans => ("Geist-Regular.ttf", GeistLine),
+        Face.SansMedium => ("Geist-Medium.ttf", GeistLine),
+        Face.SansSemibold => ("Geist-SemiBold.ttf", GeistLine),
+        Face.Mono => ("GeistMono-Medium.ttf", GeistLine),
+        Face.MonoSemibold => ("GeistMono-SemiBold.ttf", GeistLine),
+        Face.Round => ("ZenMaruGothic-Bold.ttf", RoundLine),
+        Face.RoundBlack => ("ZenMaruGothic-Black.ttf", RoundLine),
+        Face.Serif => ("Fraunces14-Medium.ttf", SerifLine),
+        Face.SerifSemibold => ("Fraunces14-SemiBold.ttf", SerifLine),
+        _ => ("ArchivoExpanded-ExtraBold.ttf", ArchivoLine),
+    };
+
+    /// <summary>
+    /// The faces a theme draws in, loaded (those the windows don't load already), and the faces of the
+    /// theme before let go: a theme's fonts are in the atlas only while it's picked. Cheap when nothing changes.
+    /// </summary>
+    public void Want(IEnumerable<(Face Face, int Px)> faces)
+    {
+        var wanted = new HashSet<(Face, int)>();
+        foreach (var f in faces)
+            if (!handles.ContainsKey(f))
+                wanted.Add(f);
+        if (wanted.SetEquals(themed.Keys)) return;
+        foreach (var key in themed.Keys.ToList())
+        {
+            if (wanted.Contains(key)) continue;
+            themed[key].Dispose();
+            themed.Remove(key);
+        }
+        foreach (var (face, px) in wanted)
+            if (!themed.ContainsKey((face, px)))
+                themed[(face, px)] = MakeThemed(face, px);
+        nearest.Clear();
+    }
+
+    /// <summary>A theme's face: the game's through Dalamud, else a shipped file at its line's size.</summary>
+    private IFontHandle MakeThemed(Face face, int px)
+    {
+        var family = face switch
+        {
+            Face.GameAxis => GameFontFamily.Axis,
+            Face.GameNumbers => GameFontFamily.MiedingerMid,
+            Face.GameTitle => GameFontFamily.Jupiter,
+            _ => GameFontFamily.Undefined,
+        };
+        // The game's fonts at Geist's line for the size, so they sit in the same line boxes.
+        if (family != GameFontFamily.Undefined) return atlas.NewGameFontHandle(new GameFontStyle(family, px * GeistLine));
+        var (file, ratio) = FileOf(face);
+        return Make(atlas, file, px * ratio, false, false);
+    }
+
     /// <summary>Pushes a face at a CSS size (the nearest loaded size when that one isn't).</summary>
     public IDisposable Push(Face face, int px) => Handle(face, px).Push();
 
     public IFontHandle Handle(Face face, int px)
     {
         if (handles.TryGetValue((face, px), out var h)) return h;
+        if (themed.TryGetValue((face, px), out h)) return h;
         if (nearest.TryGetValue((face, px), out h)) return h;
-        var best = handles.Keys.Where(k => k.Item1 == face).OrderBy(k => Math.Abs(k.Item2 - px)).FirstOrDefault();
+        // A theme's face not loaded (its theme isn't picked): the windows' own nearest in spirit.
+        var stand = face switch
+        {
+            Face.Round or Face.Serif or Face.GameAxis or Face.GameTitle => Face.SansMedium,
+            Face.RoundBlack or Face.SerifSemibold => Face.SansSemibold,
+            Face.GameNumbers => Face.MonoSemibold,
+            _ => face,
+        };
+        var best = handles.Keys.Where(k => k.Item1 == stand).OrderBy(k => Math.Abs(k.Item2 - px)).FirstOrDefault();
         h = handles.TryGetValue(best, out var found) ? found : handles[(Face.Sans, 14)];
         nearest[(face, px)] = h;
         return h;
@@ -173,6 +223,8 @@ public sealed class Fonts : IDisposable
         // Each built font once (faces built alike share one).
         foreach (var h in built) h.Dispose();
         built.Clear();
+        foreach (var h in themed.Values) h.Dispose();
+        themed.Clear();
         handles.Clear();
         nearest.Clear();
     }

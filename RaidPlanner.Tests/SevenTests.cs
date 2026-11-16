@@ -1,0 +1,282 @@
+using System.Numerics;
+using RaidPlanner.Core.Meter;
+using RaidPlanner.UI;
+using RaidPlanner.UI.Model;
+using Xunit;
+
+namespace RaidPlanner.Tests;
+
+/// <summary>0.7.0's compact meter (round four's Plate) and its themes: the numbers, the rows shown, the ranks' hold, the sizes, the tokens, the job icons, the settings moved.</summary>
+public class SevenTests
+{
+    [Theory]
+    [InlineData(27840, "27.8k")]
+    [InlineData(26910, "26.9k")]
+    [InlineData(23480, "23.5k")]
+    [InlineData(12460, "12.5k")]
+    [InlineData(9050, "9.05k")]
+    [InlineData(7000, "7.00k")]
+    [InlineData(165000, "165k")]
+    [InlineData(999, "999")]
+    [InlineData(0, "0")]
+    [InlineData(999.6, "1.00k")]
+    [InlineData(9996, "10.0k")]
+    [InlineData(99960, "100k")]
+    [InlineData(999_600, "1.00M")]
+    [InlineData(5_317_440, "5.32M")]
+    [InlineData(13_103_000, "13.1M")]
+    [InlineData(131_000_000, "131M")]
+    [InlineData(1_234_567_890, "1.23B")]
+    public void Numbers_are_three_figures(double v, string text) => Assert.Equal(text, MeterNumber.Short(v));
+
+    [Fact]
+    public void Numbers_whole_as_a_setting_and_never_more_than_three_figures()
+    {
+        Assert.Equal("27,840", MeterNumber.Text(27840, whole: true));
+        Assert.Equal("27.8k", MeterNumber.Text(27840, whole: false));
+        Assert.Equal("0", MeterNumber.Short(double.NaN));
+        Assert.Equal("−1.20k", MeterNumber.Short(-1200));
+        // Every number from 1 to 10 billion (on a log sweep) in three figures: at most five characters, the column fixed.
+        for (var v = 1.0; v < 1e10; v *= 1.013)
+        {
+            var s = MeterNumber.Short(v);
+            Assert.True(s.Length <= 5, $"{v} → {s}");
+            if (v >= 99.5) Assert.Equal(3, s.Count(char.IsDigit));
+        }
+    }
+
+    [Fact]
+    public void The_top_eight_and_you_pinned_when_below_them()
+    {
+        var into = new List<PlateSlot>();
+        // Eight, you sixth: all eight, nothing pinned.
+        PlateRows.Select(8, 5, 8, into);
+        Assert.Equal(Enumerable.Range(0, 8), into.Select(s => s.Index));
+        Assert.DoesNotContain(into, s => s.Pinned);
+        // Cut to five rows, you sixth: the top four, then you pinned with your real rank.
+        PlateRows.Select(8, 5, 5, into);
+        Assert.Equal(new[] { 0, 1, 2, 3, 5 }, into.Select(s => s.Index));
+        Assert.Equal(new[] { 1, 2, 3, 4, 6 }, into.Select(s => s.Rank));
+        Assert.True(into[^1].Pinned);
+        // Twelve (more than a party), you tenth: never more than eight rows; the eighth is you, #10.
+        PlateRows.Select(12, 9, 20, into);
+        Assert.Equal(8, into.Count);
+        Assert.Equal(new PlateSlot(9, 10, true), into[^1]);
+        Assert.Equal(7, into.Count(s => !s.Pinned));
+        // You eighth of twelve: in the top eight, nothing pinned.
+        PlateRows.Select(12, 7, 8, into);
+        Assert.Equal(Enumerable.Range(0, 8), into.Select(s => s.Index));
+        // Not in the party (a sample, a kept fight of another's): the top ones.
+        PlateRows.Select(4, -1, 8, into);
+        Assert.Equal(4, into.Count);
+        PlateRows.Select(4, 2, 0, into);
+        Assert.Empty(into);
+        // One row of room and you below it: you alone, with your rank.
+        PlateRows.Select(8, 6, 1, into);
+        Assert.Equal(new[] { new PlateSlot(6, 7, true) }, into);
+    }
+
+    [Fact]
+    public void Ranks_swap_only_once_a_lead_has_held_a_second()
+    {
+        var hold = new RankHold();
+        int[] ids = { 1, 2, 3 };
+        // The first snapshot is the true order.
+        Assert.Equal(new[] { 1, 2, 3 }, hold.Update(ids, new double[] { 300, 200, 100 }, 0));
+        // 2 passes 1: not yet.
+        Assert.Equal(new[] { 1, 2, 3 }, hold.Update(new[] { 2, 1, 3 }, new double[] { 310, 305, 100 }, 0.25));
+        Assert.Equal(new[] { 1, 2, 3 }, hold.Update(new[] { 2, 1, 3 }, new double[] { 320, 310, 100 }, 0.75));
+        // Held a second: they swap.
+        Assert.Equal(new[] { 2, 1, 3 }, hold.Update(new[] { 2, 1, 3 }, new double[] { 330, 315, 100 }, 1.25));
+        // Back and forth a few hundred apart, four times a second: no flicker.
+        for (var i = 0; i < 8; i++)
+        {
+            var t = 1.5 + i * 0.25;
+            var flip = i % 2 == 0;
+            var order = hold.Update(flip ? new[] { 1, 2, 3 } : new[] { 2, 1, 3 }, flip ? new double[] { 340, 339, 100 } : new double[] { 341, 340, 100 }, t);
+            Assert.Equal(new[] { 2, 1, 3 }, order);
+        }
+        // 3 races past both and holds: it moves past both at once.
+        hold.Update(new[] { 3, 2, 1 }, new double[] { 500, 341, 340 }, 4);
+        Assert.Equal(new[] { 3, 2, 1 }, hold.Update(new[] { 3, 2, 1 }, new double[] { 510, 342, 341 }, 5.1));
+        // A member joining goes in at their place at once; one leaving is dropped.
+        Assert.Equal(new[] { 3, 9, 2 }, hold.Update(new[] { 3, 9, 2 }, new double[] { 510, 400, 342 }, 5.2));
+        // A new fight (reset): the true order.
+        hold.Reset();
+        Assert.Equal(new[] { 1, 2 }, hold.Update(new[] { 1, 2 }, new double[] { 2, 1 }, 6));
+    }
+
+    [Fact]
+    public void Ranks_held_allocate_nothing_once_warm()
+    {
+        var hold = new RankHold();
+        int[] a = { 1, 2, 3, 4, 5, 6, 7, 8 };
+        int[] b = { 2, 1, 3, 4, 5, 6, 8, 7 };
+        double[] va = { 8, 7, 6, 5, 4, 3, 2, 1 };
+        double[] vb = { 8.5, 8, 6, 5, 4, 3, 2.5, 2 };
+        for (var i = 0; i < 20; i++) hold.Update(i % 2 == 0 ? a : b, i % 2 == 0 ? va : vb, i * 0.25);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 20; i < 220; i++) hold.Update(i % 2 == 0 ? a : b, i % 2 == 0 ? va : vb, i * 0.25);
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+    }
+
+    [Fact]
+    public void Its_heights_are_the_mock_ups()
+    {
+        var t = MeterThemes.ReadyCheck;
+        // Eight and the limit break: 238 (today's compact was 272); a light party with no limit break yet: 133.
+        Assert.Equal(238, PlateSizes.Needed(t, 8, true));
+        Assert.Equal(133, PlateSizes.Needed(t, 4, false));
+        // Never more than eight rows.
+        Assert.Equal(PlateSizes.Needed(t, 8, true), PlateSizes.Needed(t, 24, true));
+        Assert.Equal(PlateSizes.Needed(t, 8, true) + PlateSizes.PinRule, PlateSizes.Needed(t, 8, true, pinned: true));
+        Assert.Equal(8, PlateSizes.RowsIn(t, 238, true));
+        // The last row needs no gap after it, and a pixel of slack (as the normal meter has).
+        Assert.Equal(8, PlateSizes.RowsIn(t, 236, true));
+        Assert.Equal(7, PlateSizes.RowsIn(t, 235, true));
+        Assert.Equal(1, PlateSizes.RowsIn(t, 10, true));
+        foreach (var theme in MeterThemes.All)
+        {
+            for (var n = 1; n <= 8; n++) Assert.Equal(n, PlateSizes.RowsIn(theme, PlateSizes.Needed(theme, n, true), true));
+            // The one line is shorter than a head and a row.
+            Assert.True(theme.Win.CollapsedH < theme.Win.HeadH + theme.Row.H + 8);
+        }
+    }
+
+    [Fact]
+    public void The_six_themes_are_a_table_in_their_order()
+    {
+        Assert.Equal(6, MeterThemes.All.Count);
+        for (var i = 0; i < MeterThemes.All.Count; i++)
+        {
+            Assert.Equal((MeterThemeId)i, MeterThemes.All[i].Id);
+            Assert.Same(MeterThemes.All[i], MeterThemes.Of((MeterThemeId)i));
+        }
+        Assert.Same(MeterThemes.ReadyCheck, MeterThemes.Of((MeterThemeId)99));
+        Assert.Equal(new[] { "Ready Check", "Mochi", "Native", "Readout", "Neon", "Grimoire" }, MeterThemes.All.Select(t => t.Name));
+        // Their bars, marks for you and the dead, as the mock-ups have them.
+        Assert.Equal(new[] { BarStyle.Fill, BarStyle.Pill, BarStyle.Hp, BarStyle.Segments, BarStyle.Glow, BarStyle.Underline }, MeterThemes.All.Select(t => t.Bar.Style));
+        Assert.Equal(new[] { YouStyle.Notch, YouStyle.Heart, YouStyle.Gold, YouStyle.Invert, YouStyle.White, YouStyle.Ribbon }, MeterThemes.All.Select(t => t.YouStyle));
+        Assert.Equal(new[] { DeathStyle.Skull, DeathStyle.Broken, DeathStyle.Cross, DeathStyle.Tag, DeathStyle.Glitch, DeathStyle.Dagger }, MeterThemes.All.Select(t => t.DeathStyle));
+        Assert.Equal(new[] { 248f, 256, 262, 248, 256, 268 }, MeterThemes.All.Select(t => t.Win.Width));
+        Assert.Equal(new[] { 20f, 22, 22, 17, 20, 21 }, MeterThemes.All.Select(t => t.Row.H));
+        // Ready Check's tokens, the default.
+        var r = MeterThemes.ReadyCheck;
+        Assert.Equal(Rgb.Hex(0x7c85de), r.Roles.Tank);
+        Assert.Equal(Rgb.Hex(0x47e19e), r.Roles.Healer);
+        Assert.Equal(Rgb.Hex(0xe8402f), r.Roles.Dps);
+        Assert.Equal(Rgb.Hex(0xff8a3d), r.You);
+        Assert.Equal(0.92f, r.Row.PlateAlpha);
+        Assert.Equal(0.3f, r.Bar.Alpha);
+        Assert.Equal(Face.SansMedium, r.Font.Name.Face);
+        Assert.Equal(Face.MonoSemibold, r.Font.Num.Face);
+        // The faces each theme ships or borrows: Mochi Zen Maru Gothic, Grimoire Fraunces (digits in cells), Native the game's, outlined.
+        Assert.All(MeterThemes.Mochi.Font.All(), f => Assert.True(f.Face is Face.Round or Face.RoundBlack));
+        Assert.All(MeterThemes.Grimoire.Font.All(), f => Assert.True(f.Face is Face.Serif or Face.SerifSemibold));
+        Assert.True(MeterThemes.Grimoire.Font.Num.Cells > 0 && MeterThemes.Mochi.Font.Num.Cells > 0);
+        Assert.All(MeterThemes.Native.Font.All(), f => Assert.True(f.Face is Face.GameAxis or Face.GameNumbers or Face.GameTitle));
+        Assert.True(MeterThemes.Native.Font.Name.Outline && MeterThemes.Native.Font.Num.Outline);
+        Assert.All(MeterThemes.Readout.Font.All(), f => Assert.True(f.Face is Face.Mono or Face.MonoSemibold));
+        Assert.True(MeterThemes.Neon.Font.Head.Caps && MeterThemes.Neon.Font.Head.Face == Face.Callout);
+        Assert.Contains((Face.RoundBlack, 12), MeterThemes.FacesOf(MeterThemes.Mochi));
+        Assert.Contains((Face.SerifSemibold, 19), MeterThemes.FacesOf(MeterThemes.Grimoire));
+        // Whole numbers widen the column by 10.
+        Assert.Equal(48, r.ValueWidth(true));
+        Assert.Equal(38, r.ValueWidth(false));
+    }
+
+    [Fact]
+    public void A_plate_less_theme_keeps_its_floor_over_a_bright_arena()
+    {
+        // Mochi 90%, Readout 82%, Grimoire 92%: the Background slider can't take them lower.
+        Assert.Equal(new[] { 0f, 0.9f, 0, 0.82f, 0, 0.92f }, MeterThemes.All.Select(t => t.Win.Floor));
+        Assert.Equal(0.82f, MeterThemes.Readout.Alpha(0.45f));
+        Assert.Equal(0.45f, MeterThemes.ReadyCheck.Alpha(0.45f));
+        Assert.Equal(0.2f, MeterThemes.ReadyCheck.Alpha(0.05f));
+        // Every theme's names read over its rows, over a black arena and a white one, at the slider's lowest (4.5:1, WCAG AA).
+        foreach (var t in MeterThemes.All)
+            foreach (var behind in new[] { Vector4.One, new Vector4(0, 0, 0, 1) })
+            {
+                var ground = Rgb.Over(t.Win.GradBottom ?? t.Win.Bg, t.Alpha(0.2f), behind);
+                var plate = t.Row.PlateAlpha > 0 ? Rgb.Over(t.Row.Plate, t.Row.PlateAlpha, ground) : ground;
+                Assert.True(ColorMath.Contrast(t.Row.Text, plate) >= 4.5f, $"{t.Name} over {behind}: {ColorMath.Contrast(t.Row.Text, plate)}");
+                Assert.True(ColorMath.Contrast(t.Row.Num, plate) >= 4.5f, t.Name);
+            }
+    }
+
+    [Fact]
+    public void The_roles_are_told_apart_with_colour_blindness()
+    {
+        // The mock-ups' figures (CIE76 ΔE, Machado 2009): Ready Check's set at least 40 apart under all three; the game's red and green 14 apart for a deutan.
+        for (var k = 0; k < 3; k++) Assert.True(ColorMath.RolesApart(MeterThemes.ReadyCheck.Roles, k) >= 40, $"kind {k}");
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.GameRoles, 1), 13, 15);
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.Mochi.Roles, 1), 47, 49);
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.Native.Roles, 1), 30, 32);
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.Readout.Roles, 1), 27, 29);
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.Neon.Roles, 1), 38, 40);
+        Assert.InRange(ColorMath.RolesApart(MeterThemes.Grimoire.Roles, 1), 58, 60);
+        // Every theme's set is further apart for a deutan than the game's.
+        foreach (var t in MeterThemes.All) Assert.True(ColorMath.RolesApart(t.Roles, 1) > ColorMath.RolesApart(MeterThemes.GameRoles, 1) * 1.9f, t.Name);
+        // The setting: the theme's, or the game's own.
+        Assert.Equal(MeterThemes.Neon.Roles.Tank, MeterThemes.Neon.RoleColor("tank", MeterRoleColours.Theme));
+        Assert.Equal(MeterThemes.GameRoles.Healer, MeterThemes.Neon.RoleColor("healer", MeterRoleColours.Game));
+        Assert.Equal(MeterThemes.Neon.Roles.Dps, MeterThemes.Neon.RoleColor("dps", MeterRoleColours.Theme));
+    }
+
+    [Fact]
+    public void Decorations_off_keeps_the_theme_without_its_flourishes()
+    {
+        foreach (var t in MeterThemes.All) Assert.Equal(Ornaments.None, t.Drawn(false));
+        Assert.True((MeterThemes.Mochi.Drawn(true) & Ornaments.Sparkles) != 0);
+        Assert.True((MeterThemes.Readout.Drawn(true) & Ornaments.Scanlines) != 0);
+        Assert.True((MeterThemes.Neon.Drawn(true) & Ornaments.Horizon) != 0);
+        Assert.Equal(YouStyle.Ribbon, MeterThemes.Grimoire.YouDrawn(true));
+        Assert.Equal(YouStyle.Gold, MeterThemes.Grimoire.YouDrawn(false));
+        Assert.Equal(YouStyle.Gold, MeterThemes.Mochi.YouDrawn(false));
+        Assert.Equal(YouStyle.Notch, MeterThemes.ReadyCheck.YouDrawn(false));
+        Assert.Equal(DeathStyle.Glitch, MeterThemes.Neon.DeathDrawn(true));
+        Assert.Equal(DeathStyle.Cross, MeterThemes.Neon.DeathDrawn(false));
+        Assert.Equal(DeathStyle.Dagger, MeterThemes.Grimoire.DeathDrawn(false));
+    }
+
+    [Theory]
+    [InlineData("PLD", 19u, 62119u)]
+    [InlineData("DRG", 22u, 62122u)]
+    [InlineData("whm", 24u, 62124u)]
+    [InlineData("SGE", 40u, 62140u)]
+    [InlineData("PCT", 42u, 62142u)]
+    [InlineData("GLA", 1u, 62101u)]
+    [InlineData("XYZ", 0u, 0u)]
+    [InlineData("", 0u, 0u)]
+    [InlineData(null, 0u, 0u)]
+    public void Job_icons_by_job(string? job, uint row, uint icon)
+    {
+        Assert.Equal(row, JobIcons.ClassJob(job));
+        Assert.Equal(icon, JobIcons.Icon(job));
+    }
+
+    [Fact]
+    public void A_configuration_from_before_lands_on_compact()
+    {
+        // 0.6 and before (no MeterLook): compact, whatever it had, the old compact's height let go.
+        Assert.Equal((1, true, 0f), MeterLook.Migrate(0, false, 180));
+        Assert.Equal((1, true, 0f), MeterLook.Migrate(0, true, 271));
+        // Once moved, it's yours: normal stays normal.
+        Assert.Equal((1, false, 180f), MeterLook.Migrate(1, false, 180));
+        Assert.Equal((2, false, 0f), MeterLook.Migrate(2, false, 0));
+    }
+
+    [Fact]
+    public void Its_small_words()
+    {
+        Assert.Equal(("P2 · 0:41", "P2", "P2+0:41", "Phase 2"), PlateWords.Phase("P2", 41));
+        Assert.Equal(("Adds · 0:05", "Adds", "Adds+0:05", "Adds"), PlateWords.Phase("Adds", 5.2));
+        Assert.Null(PlateWords.Phase(null, 10));
+        Assert.Null(PlateWords.Phase("", 10));
+        Assert.Equal("DPS", PlateWords.TabWord(MeterTab.Damage));
+        Assert.Equal("HPS", PlateWords.TabWord(MeterTab.Healing));
+        Assert.Equal("Taken", PlateWords.TabWord(MeterTab.Taken));
+        Assert.Equal("0:20", PlateWords.DeadFor(171, 191));
+        Assert.Equal("0:00", PlateWords.DeadFor(191, 180));
+    }
+}
