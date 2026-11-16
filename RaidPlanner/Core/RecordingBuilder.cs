@@ -317,6 +317,10 @@ public sealed class RecordingBuilder
     /// <summary>The turn events kept (since 0.7.4).</summary>
     public int Turns => turns;
 
+    /// <summary>An auto-attack (its ActionCategory, 1), as the Action sheet has it: not a mechanic (<see cref="Hit"/>).</summary>
+    private bool AutoAttack(uint action) =>
+        CombatLists.IsAutoAttack((recording.Actions.TryGetValue(action, out var known) ? known : actionInfo(action))?.Category ?? 0);
+
     /// <summary>The enemy is at a mechanic until at least <paramref name="until"/> (its cast's end, its hit) and <see cref="TurnLinger"/> more.</summary>
     private void Busy(int actor, double until)
     {
@@ -327,8 +331,9 @@ public sealed class RecordingBuilder
 
     /// <summary>
     /// An enemy (a boss, an add or a helper) as it stands this frame (since 0.7.4), <paramref name="casting"/> when its cast bar
-    /// is up. While it's at a mechanic (casting, or within <see cref="TurnLinger"/> of its cast's end or its last hit) a turn of
-    /// <see cref="TurnStep"/> or more, or a move of <see cref="TurnMove"/>, from how it last stood is a <c>turn</c> event (at most
+    /// is up. While it's at a mechanic (casting, or within <see cref="TurnLinger"/> of its cast's end or its last hit; an
+    /// auto-attack isn't one) a turn of <see cref="TurnStep"/> or more, or a move of <see cref="TurnMove"/>, from how it last
+    /// stood is a <c>turn</c> event (at most
     /// every <see cref="TurnEvery"/> each, <see cref="MaxTurns"/> in all); how it stood as it began is only remembered (its cast
     /// has its facing). What shows a rotating mechanic's steps: a boss turning between cleaves, a helper's heading over its cast.
     /// </summary>
@@ -389,7 +394,9 @@ public sealed class RecordingBuilder
         IReadOnlyList<float>? px = null, IReadOnlyList<float>? pz = null)
     {
         if (source == 0 || action == 0) return;
-        Busy(source, t);
+        // An auto-attack isn't a mechanic: a boss swinging at its tank as it follows them round would keep it "at a
+        // mechanic" most of a pull, and its turns would fill MaxTurns long before the mechanics late in a long pull.
+        if (!AutoAttack(action)) Busy(source, t);
         if (!Room) return;
         Remember(action);
         if (damage != null && damage.Count != targets.Count) damage = null;

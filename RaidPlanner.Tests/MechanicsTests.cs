@@ -73,6 +73,30 @@ public class MechanicsTests
     }
 
     [Fact]
+    public void A_boss_following_its_tank_between_auto_attacks_isnt_at_a_mechanic()
+    {
+        // Action 7 an auto-attack (ActionCategory 1), 8 a mechanic's hit with no cast.
+        var b = new RecordingBuilder(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, true, "0.7.4",
+            id => new ActionInfo(id == 7 ? "attack" : "Slash", 1, 0, 0, string.Empty, 0, id == 7 ? 1 : 2));
+        var boss = b.Actor(900, "Boss", 5, 1);
+        b.Facing(0, boss, 100, 100, 0, false);
+        // Its tank moves: the boss swings and turns after them, a while, which is no mechanic (the frames have it).
+        for (var i = 1; i <= 20; i++)
+        {
+            if (i % 5 == 1) b.Hit(i * 0.5, boss, 7, 100, 100, 0, 100, 105, new[] { 1 });
+            b.Facing(i * 0.5, boss, 100, 100, Deg(i * 5), false);
+        }
+        // A hit that is a mechanic still keeps it there a moment: its turn after it is kept.
+        b.Hit(11, boss, 8, 100, 100, 0, 100, 105, new[] { 1 });
+        b.Facing(11, boss, 100, 100, 0, false);
+        b.Facing(11.5, boss, 100, 100, Deg(30), false);
+        var r = b.Finish(20, Outcome.Wipe);
+        Assert.Equal(new[] { 11.5 }, r.Events.OfType<TurnEvent>().Select(x => x.T));
+        // The auto-attacks are still hits in the file.
+        Assert.Equal(4, r.Events.OfType<HitEvent>().Count(h => h.Action == 7));
+    }
+
+    [Fact]
     public void A_cast_stopped_ends_its_mechanic_soon_after()
     {
         var b = Builder();

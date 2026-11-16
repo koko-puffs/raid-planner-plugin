@@ -123,9 +123,9 @@ Every frame while it goes (on the framework thread):
   before it): the game takes a hit's damage off a moment after it says it landed, so a bleed's small
   tick can come between a lethal hit and the HP reaching 0, and that tick isn't the cause.
 - **Turns** (since 0.7.4): each enemy (bosses, adds and helpers) while it's at a mechanic: its cast bar up, or within
-  1.5 seconds (`TurnLinger`) of its cast's end or its last hit (a stopped cast's mechanic ends 1.5 seconds after it
-  stopped). Its first frame there is only remembered; then a turn of 2° (`TurnStep`) or a move of a yalm (`TurnMove`)
-  from how it last stood is a `turn` event with its facing and place, at most every tenth of a second each and 3,000 a
+  1.5 seconds (`TurnLinger`) of its cast's end or its last hit (an auto-attack isn't a mechanic; a stopped cast's
+  mechanic ends 1.5 seconds after it stopped). Its first frame there is only remembered; then a turn of 2°
+  (`TurnStep`) or a move of a yalm (`TurnMove`) from how it last stood is a `turn` event with its facing and place, at most every tenth of a second each and 3,000 a
   pull (`MaxTurns`, apart from the 20,000 events'). What shows a rotation's steps (a boss turning between cleaves, a
   cone or line turning over its cast) and a helper's heading, which the frames don't keep. Away from a mechanic a boss
   turning to its tank isn't kept (the frames have that).
@@ -1899,8 +1899,8 @@ entry).
 - **No keys.** The plugin reads no keys at all, so nothing can clash with your binds: a confirmation's Escape is gone
   (press No or Yes).
 - **Rotating mechanics, recorded whole.** An enemy at a mechanic (its cast going, or within 1.5 seconds of its cast's
-  end or its last hit) turning 2° or moving a yalm is a `turn` event every frame it does (at most ten a second each,
-  3,000 a pull, not counted towards the events' cap): a boss turning step by step through a rotation, and a helper's
+  end or its last hit, an auto-attack not counted) turning 2° or moving a yalm is a `turn` event every frame it does
+  (at most ten a second each, 3,000 a pull, not counted towards the events' cap): a boss turning step by step through a rotation, and a helper's
   heading over its cast, which the half-second frames missed or (a helper's, not in the frames) never had. A head
   marker over a helper the frames hadn't met yet (one come between them, as a rotation's "clockwise" over its helper
   often is) was dropped; it's taken in now as a hit's is, and every marker keeps whom the game says it points at
