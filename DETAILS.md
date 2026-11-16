@@ -1131,7 +1131,17 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   first and the tags only drawn as far as they fit before them. Locked, it has no title
   bar and can't be moved or sized (its tabs and picker still answer); click-through, the mouse goes
   to the game (`/raidcodex meter unlock` or Settings gives it back); open, Dalamud's title bar comes
-  back with its menu, its × and the resize grip. Five tabs (27 tall, the ember bar under the one
+  back with its menu, its × and the resize grip. Dalamud has ImGui resize a window from every edge
+  and both bottom corners (`ConfigWindowsResizeFromEdges`), and ImGui takes a press there in Begin,
+  before the window's buttons; so its buttons are kept out of that reach (`Model/ResizeZones`,
+  `UI/Kit/ResizeGuard.cs`, tested): `ResizeReach` works out ImGui 1.88's grip (drawn
+  `floor(max(font × 1.35, rounding + 1 + font × 0.2))` big at the font at Begin, taking a press three
+  quarters of that in from the corner; the edges 4px either side), and a button level with a bottom
+  grip sits the grip's reach and 4px more in from the side (growing up, the head at the foot: the lock
+  about 20px in at 100%, the picker beside it; the foot's _Preview_ tag growing down), one by an edge
+  clear of its band; and while the mouse is over one of the head's or foot's buttons (where they were
+  last frame, and not mid-drag) the window gets `NoResize` that frame, so a press on them is theirs;
+  everywhere else it sizes as ever. Five tabs (27 tall, the ember bar under the one
   you're on; a meter too narrow for the five has a tab menu in their row): **Damage** (ENCDPS, or DPS in Settings, and the share; pace from 10 s into a phase
   against the picked pull: "PACE · P2 +0:41", a 3px bar with this pull in ember and the other's tick
   in white, "on pull 4 +3.4%"), **Healing** (HPS and overheal %), **Taken** (damage taken and its
@@ -1188,7 +1198,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   (`MeterSizes.Needed`: the head, the tabs, pace's room when pace is on, the column heads, a row
   each, the limit break's room and the foot, so it doesn't jump when pace or the limit break comes:
   364 for eight, the title bar's height on top when it shows), and never taller than the height you
-  gave it by its edge (`MeterHeight`; compact's own, above, `MeterCompactHeight`; kept once you let go: none
+  gave it by its edge (`MeterHeight`; kept once you let go: none
   until you do; one taller than the party needs goes back to what they need, and rows past one
   shorter are cut; 0.3.0 kept 382, the height it first opened to, by itself, so a 382 saved by it is
   read as none). A bigger party makes it taller, a smaller one shorter (a member joining mid-fight
@@ -1232,7 +1242,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     _Pace against_, _Compact_ and _One line_. It replaces the tab row, the picker's button, pace's row and
     the column heads.
   - **The rows**: at most eight, the top eight; when you're ranked below the last row shown (ninth or
-    lower, or the window cut shorter by its edge), the last row is you, pinned under a dashed rule, with
+    lower: the window is never shorter than its eight), the last row is you, pinned under a dashed rule, with
     your real rank after your name ("#9"); no alliance view (`PlateRows.Select`). Each row (20 tall, 1
     apart, 4px corners) sits on a near-solid plate (#18181d at 92%, whatever the Background), so its
     words never touch the game; the bar fills the plate from its left to its share of the top player's,
@@ -1264,12 +1274,15 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     icon, name, what killed them and how big (cut to fit), its time in the death colour; an event's time,
     its kind's mark in the theme's colours (bad, good, accent, muted), the member's icon and words. The
     foot counts them. Pressed, as the normal meter's.
-  - **Its size**: as wide as its theme (248, below) until you size it by its edge (`MeterCompactWidth`,
-    kept once you let go; picking a theme lets it go), as tall as its rows need (`PlateSizes.Needed`:
-    Ready Check's eight and the limit break 238, against the old compact's 272 and the normal meter's
-    364; a light party with no limit break yet 133), at most the height you gave it
-    (`MeterCompactHeight`; rows past it are cut, you pinned). Grows down or up as the normal meter (up,
-    the head at the foot and everything else the other way up from it); its anchor is shared.
+  - **Its size**: never set by hand: its window can't be resized, unlocked or locked
+    (`MeterLayout.Resizable`, tested; `ImGuiWindowFlags.NoResize`: a size given it would only snap
+    back). As wide as its theme (248, below), as tall as its rows need (`PlateSizes.Needed`: Ready
+    Check's eight and the limit break 238, against the old compact's 272 and the normal meter's 364; a
+    light party with no limit break yet 133), the title bar's height on top when it shows. A height
+    the old compact was given (`MeterCompactHeight`, 0.4.0 to 0.6.0) or a width 0.7.0's test builds
+    let you give it (`MeterCompactWidth`) is still read from the settings but ignored, and cleared once
+    (`Configuration.Migrate`). Grows down or up as the normal meter (up, the head at the foot and
+    everything else the other way up from it); its anchor is shared, and it's moved by its title bar.
   - **One line** (`MeterCollapsed`, the menu's _One line_; and between pulls, folded, as the normal
     meter folds; and before any fight): one 26px line on a plate: the dot and the clock (the outcome when
     it's over, else the phase), then on the right you ("You #6" with an ember bar and your number), the
@@ -1339,7 +1352,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   (a switch) at its foot. While the sample is on, _Stop the sample_ first.
 - **The sample fight** (`Model/MeterPreview`): Settings → Meter's _Show a sample fight_, the empty
   meter's _See a sample_, or `/raidcodex meter preview` show the meter mid-fight with made-up numbers,
-  to place and size it: the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
+  to place it (and size the normal meter): the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
   its clock running and its numbers moving four times a second (bursts in the buffs at the pull and
   at 2:00, a raidwide every 24 seconds, each player's rate rising and falling with their rotation;
   ENCDPS at 3:11 is the mock-ups'), the limit break used at 0:58, P2 from 2:30, pace against pull 4
@@ -1392,7 +1405,8 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
 - **Settings → Meter**: _Show the meter_ (`/raidcodex meter` too) with _Where_ (In duties,
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
-  (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it; _Grows_
+  (Names, Jobs only); _Lock it where it is_ (its tooltip: compact is never sized by hand) with
+  _Click-through when locked_ under it; _Grows_
   (Down, Up: which edge stays put, the head going with it); _Limit break gauge_ (Head, Foot, Off;
   0.4.0; compact's pips are in its head, or none with Off); _Compact_ (on at first since 0.7.0) with, under it, _Theme_
   (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
@@ -1422,7 +1436,9 @@ the screen, the tracker at the left a third down). Unlocked, Dalamud's title bar
 or sizing; click-through when locked, the mouse goes to the game (`/raidcodex cooldowns unlock`,
 `/raidcodex callouts unlock`). They never take focus, make no window sounds and ignore Escape; while
 you hold one (unlocked) it's neither placed nor sized. A sample of each shows under a _Preview_ tag
-(pressed, it stops), from Settings or `… preview`. Each has its settings apart in the config
+(pressed, it stops), from Settings or `… preview`; the tag is kept clear of the resizing edges and
+grips as the meter's buttons are (`ResizeGuard`: moved in when it would be in their reach, and the
+window not resizable while the mouse is over it). Each has its settings apart in the config
 (`Configuration.Cooldowns`, `.CalloutOverlay`: shown, where, locked, click-through, Grows, compact,
 background, width, anchor), and the plugin keeps each window open while it's shown or sampled.
 
@@ -1698,10 +1714,15 @@ entry).
   window (Mochi's sticker shadow and stars, Neon's glow) and the window's own corners matching its theme with the
   title bar showing; the details panel as a tooltip beside the meter, on the left when there's no room on the
   right, and never in the way of the menu; the menu off the head (down, and up growing up); growing up (the head
-  at the foot, the rows mirrored, the limit break and foot at the top); you pinned when the meter is sized
-  shorter; the rank hold over a real fight (four snapshots a second); the fresh death's flash; the one line between
-  pulls and by hand; sizing its width by its edge and a theme change letting it go; a 0.6 configuration landing on
-  compact once; frame time with eight rows in each theme.
+  at the foot, the rows mirrored, the limit break and foot at the top); you pinned when you're ninth or lower; the
+  rank hold over a real fight (four snapshots a second); the fresh death's flash; the one line between pulls and by
+  hand; compact unlocked showing no resize grip and not sizing from any edge or corner (moved by its title bar), its
+  lock and menu pressed at once growing down and up; the normal meter's lock and picker growing up (in the
+  bottom-right corner, moved in out of the grip) and the foot's _Preview_ tag growing down taking every press on
+  them, while its edges and corners still size it right beside them (and a resize dragged across them not cut
+  short), at 100% and a bigger Dalamud scale; the same for the plan window's Previous and Next and the overlays'
+  _Preview_ tags; a 0.6 configuration landing on compact once (and an old compact height or a test build's width
+  ignored); frame time with eight rows in each theme.
 
 ## Release notes
 
@@ -1716,7 +1737,13 @@ entry).
   Pointed at, a row opens a details panel beside the meter (the figures, the top abilities, deaths, GCDs, potions);
   pressed, the opened-up window as before. _One line_ (its menu) folds it to the clock, the phase, you and your rank,
   the deaths and the pips. It replaces the old compact; your settings move to it once (the normal meter is a switch
-  away, unchanged).
+  away, unchanged). It sizes itself, so it can't be resized by hand (it only snapped back): its width is its
+  theme's, its height its rows'; a height given the old compact is let go.
+- **The lock is easy to press again.** Dalamud lets a window be resized from every edge and corner, and the press
+  went to the resize when a button sat in that reach (the meter's lock growing up, in the bottom-right corner). The
+  meter's, the plan window's and the overlays' buttons are now kept out of it (worked out from the font and the
+  window's corners, not guessed), and the window isn't resizable while the mouse is over one of them; it still sizes
+  from everywhere else.
 - **Six themes** (Settings → Meter → _Theme_, with a live preview): Ready Check (the plugin's look, the default),
   Mochi (cute: a cream sticker, pastel pills, hearts and sparkles), Native (the game's own windows and fonts), Readout
   (a terminal), Neon (synthwave) and Grimoire (a parchment tome). _Decorations_ (on) turns their sparkles, scanlines,

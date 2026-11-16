@@ -279,4 +279,65 @@ public class SevenTests
         Assert.Equal("0:20", PlateWords.DeadFor(171, 191));
         Assert.Equal("0:00", PlateWords.DeadFor(191, 180));
     }
+
+    [Fact]
+    public void Compact_is_never_resizable()
+    {
+        // Compact's width is its theme's and its height its rows': unlocked or locked, it can't be sized by hand.
+        Assert.False(MeterLayout.Resizable(compact: true, locked: false));
+        Assert.False(MeterLayout.Resizable(compact: true, locked: true));
+        // The normal meter can, unlocked.
+        Assert.True(MeterLayout.Resizable(compact: false, locked: false));
+        Assert.False(MeterLayout.Resizable(compact: false, locked: true));
+    }
+
+    [Fact]
+    public void The_resize_grips_reach_as_ImGui_works_it_out()
+    {
+        // Dalamud's 17px font, 6.4px corners: the grip is drawn floor(17 × 1.35) = 22 and takes a press 16 in; the edges 4 either side.
+        var r = ResizeReach.Of(17, 6.4f, fromEdges: true);
+        Assert.Equal(new ResizeReach(4, 16, true), r);
+        Assert.Equal(20, r.CornerInset);
+        // It grows with the font (Dalamud's scale): 34px, drawn 45, 33 in.
+        Assert.Equal(33, ResizeReach.Of(34, 6.4f, true).Corner);
+        // Big corners make a bigger grip: floor(30 + 1 + 3.2) = 34, 25 in.
+        Assert.Equal(25, ResizeReach.Of(16, 30, true).Corner);
+        // A bigger touch padding widens the edges; without resizing from the edges there are none.
+        Assert.Equal(6, ResizeReach.Of(17, 0, true, touchPadding: 6).Border);
+        Assert.Equal(new ResizeReach(0, 12, false), ResizeReach.Of(13, 0, false));
+    }
+
+    [Fact]
+    public void A_lock_in_a_corner_is_moved_out_of_the_grip()
+    {
+        var r = ResizeReach.Of(17, 6.4f, true);
+        var wmin = new Vector2(100, 100);
+        var wmax = new Vector2(430, 482);
+        // The normal meter growing up: its head at the foot, the 24px lock 6 in from the right and the bottom: under the bottom-right grip.
+        var min = new Vector2(400, 452);
+        var max = new Vector2(424, 476);
+        Assert.True(ResizeZones.Hits(wmin, wmax, min, max, r));
+        var shift = ResizeZones.ShiftLeft(wmin, wmax, min, max, r);
+        Assert.Equal(14, shift);
+        var at = new Vector2(shift, 0);
+        Assert.False(ResizeZones.Hits(wmin, wmax, min - at, max - at, r));
+        // It ends the grip's reach and 4 more in from the side.
+        Assert.Equal(wmax.X - r.Corner - ResizeReach.HoverPadding, max.X - shift);
+        // Growing down (the head under the title bar, at the top-right): no grip there, clear of the right edge, left where it is.
+        Assert.Equal(0, ResizeZones.ShiftLeft(wmin, wmax, new Vector2(400, 132), new Vector2(424, 156), r));
+        Assert.False(ResizeZones.Hits(wmin, wmax, new Vector2(400, 132), new Vector2(424, 156), r));
+        // On the right edge's band, moved just off it.
+        Assert.Equal(2, ResizeZones.ShiftLeft(wmin, wmax, new Vector2(404, 200), new Vector2(428, 224), r));
+        // A button in the bottom-left corner (the plan window's Previous) moves right out of that grip.
+        Assert.Equal(14, ResizeZones.ShiftRight(wmin, wmax, new Vector2(106, 452), new Vector2(130, 476), r));
+        Assert.Equal(0, ResizeZones.ShiftRight(wmin, wmax, new Vector2(106, 200), new Vector2(130, 224), r));
+        // Without resizing from the edges only the bottom-right grip is there.
+        var one = ResizeReach.Of(17, 6.4f, false);
+        Assert.False(ResizeZones.Hits(wmin, wmax, new Vector2(100, 452), new Vector2(124, 482), one));
+        Assert.Equal(0, ResizeZones.ShiftRight(wmin, wmax, new Vector2(100, 452), new Vector2(124, 482), one));
+        Assert.True(ResizeZones.Hits(wmin, wmax, min, max, one));
+        Assert.False(ResizeZones.Hits(wmin, wmax, min, max, ResizeReach.None));
+        Assert.True(ResizeZones.Inside(new Vector2(400, 452), min, max));
+        Assert.False(ResizeZones.Inside(new Vector2(399, 452), min, max));
+    }
 }

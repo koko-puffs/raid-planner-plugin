@@ -213,7 +213,8 @@ public static class JobIcons
 /// <summary>
 /// The meter's look across versions (the configuration's <c>MeterLook</c>): 0 before 0.7.0, 1 since. 0.7.0's compact
 /// meter (round four's Plate) is the default, and replaces the old compact: a configuration from before it lands on
-/// compact (whichever it had), with the old compact's height let go (its rows and head were other sizes).
+/// compact (whichever it had), with the old compact's height let go (its rows and head were other sizes; and since
+/// 0.7.0 the compact meter isn't sized by hand at all: <c>Configuration.Migrate</c> clears any size given it).
 /// </summary>
 public static class MeterLook
 {
