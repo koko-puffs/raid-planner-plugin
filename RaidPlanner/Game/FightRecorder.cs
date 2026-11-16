@@ -37,6 +37,8 @@ namespace RaidPlanner.Game;
 /// Since 0.4.0, every frame of a pull also: each targetable enemy's target, the party's MP and barriers,
 /// the limit break gauge; once a second the recording player's target's enmity list and the head signs;
 /// whether an enemy's cast can be interrupted; and from the hooks a cast stopped (<see cref="OnCancel"/>).
+/// Since 0.7.4 also each enemy's facing and place while it's at a mechanic (<see cref="RecordingBuilder.Facing"/>: a
+/// rotation's steps, a helper's heading), and a head marker over a helper not met yet.
 /// Since 0.5.0 the party is <see cref="PartyMembers"/>'s (a cross-world party's group counts outside a duty), and a pull
 /// recorded keeps your gear and attributes as it begins (<see cref="GearReader"/>).
 /// Out of a pull in a duty it records, the hooks stay on and the party's uses of the last 30 seconds
@@ -754,7 +756,9 @@ public sealed unsafe class FightRecorder : IDisposable
                 b.Targetable(t, id, targetable);
                 // Whom it's on (the low half of its target's id is the entity id; 0 none, or someone not in the recording).
                 if (targetable) b.Aggro(t, id, (uint)npc.TargetObjectId is var aim and not (0 or InvalidId) ? b.Who(aim) : 0);
-                ReadCast(b, t, id, npc);
+                var castingNow = ReadCast(b, t, id, npc);
+                // Its facing and place every frame while it's at a mechanic (since 0.7.4: a rotation's steps, a helper's heading).
+                b.Facing(t, id, npc.Position.X, npc.Position.Z, npc.Rotation, castingNow);
                 if (hp != null) hp[id] = npc.CurrentHp;
             }
             else continue;
@@ -889,19 +893,19 @@ public sealed unsafe class FightRecorder : IDisposable
         return dx * dx + dz * dz <= HelperNear * HelperNear;
     }
 
-    /// <summary>A cast that's begun since the last frame: recorded once, from when it began.</summary>
-    private void ReadCast(RecordingBuilder b, double t, int id, IBattleNpc npc)
+    /// <summary>A cast that's begun since the last frame: recorded once, from when it began. Whether its cast bar is up.</summary>
+    private bool ReadCast(RecordingBuilder b, double t, int id, IBattleNpc npc)
     {
         var bc = (BattleChara*)npc.Address;
-        if (bc == null) return;
+        if (bc == null) return false;
         var cast = bc->GetCastInfo();
         if (cast == null || !cast->IsCasting || cast->ActionType != 1 || cast->ActionId == 0)
         {
             casting.Remove(id);
-            return;
+            return false;
         }
         var start = t - cast->CurrentCastTime;
-        if (casting.TryGetValue(id, out var had) && had.Action == cast->ActionId && Math.Abs(had.Start - start) < 0.3) return;
+        if (casting.TryGetValue(id, out var had) && had.Action == cast->ActionId && Math.Abs(had.Start - start) < 0.3) return true;
         casting[id] = (cast->ActionId, start);
         var target = cast->TargetId.ObjectId is var tid and not 0 and not 0xE0000000 ? b.Who(tid) : 0;
         var loc = cast->TargetLocation;
@@ -921,6 +925,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 ListenerFailed(ex);
             }
         }
+        return true;
     }
 
     /// <summary>
@@ -1234,14 +1239,34 @@ public sealed unsafe class FightRecorder : IDisposable
         }
     }
 
-    /// <summary>A head marker appeared over someone.</summary>
-    internal void OnMarker(uint entityId, uint icon)
+    /// <summary>
+    /// A head marker appeared over someone: a party member, or an enemy or helper (a rotation's "clockwise" over the boss; since
+    /// 0.7.4 also over a helper the frames haven't met yet, come and gone between them, taken in as <see cref="OnHit"/> takes one),
+    /// with the one the game says it points at (<paramref name="targetId"/>, [verify]: the message's second argument, BossMod's).
+    /// </summary>
+    internal void OnMarker(uint entityId, uint icon, uint targetId)
     {
         if (disposed) return;
         var b = current;
-        if (b == null) return;
+        if (b == null || entityId is 0 or InvalidId) return;
         var on = b.Who(entityId);
-        if (on != 0) b.Marker(Elapsed, on, icon);
+        if (on == 0 && EnemyNotSeen(b, entityId) is { } added) on = added;
+        if (on == 0) return;
+        var target = targetId is 0 or InvalidId ? 0 : b.Who(targetId);
+        b.Marker(Elapsed, on, icon, target);
+    }
+
+    /// <summary>
+    /// An enemy or helper the recording hasn't met (a marker over it came between frames): taken in when it's a combatant or a part
+    /// of one, no one's pet, and (in a field zone) within <see cref="HelperNear"/> of you; else 0.
+    /// </summary>
+    private int? EnemyNotSeen(RecordingBuilder b, uint entityId)
+    {
+        if (Services.Objects.SearchByEntityId(entityId) is not IBattleNpc npc) return null;
+        if (npc.BattleNpcKind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) return null;
+        if (npc.OwnerId is not (0 or InvalidId)) return null;
+        if (onlyEngaged && !(Services.Objects.LocalPlayer?.Position is { } you && Near(you, npc.Position))) return null;
+        return b.Actor(entityId, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId);
     }
 
     /// <summary>

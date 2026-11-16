@@ -122,6 +122,13 @@ Every frame while it goes (on the framework thread):
   Of those, the last that could kill comes first (an instant death, or as much as the HP they had
   before it): the game takes a hit's damage off a moment after it says it landed, so a bleed's small
   tick can come between a lethal hit and the HP reaching 0, and that tick isn't the cause.
+- **Turns** (since 0.7.4): each enemy (bosses, adds and helpers) while it's at a mechanic: its cast bar up, or within
+  1.5 seconds (`TurnLinger`) of its cast's end or its last hit (a stopped cast's mechanic ends 1.5 seconds after it
+  stopped). Its first frame there is only remembered; then a turn of 2° (`TurnStep`) or a move of a yalm (`TurnMove`)
+  from how it last stood is a `turn` event with its facing and place, at most every tenth of a second each and 3,000 a
+  pull (`MaxTurns`, apart from the 20,000 events'). What shows a rotation's steps (a boss turning between cleaves, a
+  cone or line turning over its cast) and a helper's heading, which the frames don't keep. Away from a mechanic a boss
+  turning to its tank isn't kept (the frames have that).
 - **Targetability**: an enemy becoming targetable (the first time too, so the site sees a new boss
   come in), and one that has been targetable going untargetable (dead, gone, or a phase change);
   one that leaves the game is untargetable. One never targetable (a helper) isn't recorded. The
@@ -149,7 +156,10 @@ own function first and changes nothing):
   `CharacterManager.LookupBattleCharaByEntityId`) only for a party member, someone the party heals
   and a lifesteal's caster.
 - **`PacketDispatcher.HandleActorControlPacket`**, category 34: a head marker over someone (its
-  icon number, read after the game has unscrambled it, as BossMod reads it); since 0.3.0 category
+  icon number, read after the game has unscrambled it, as BossMod reads it): a party member, or an enemy or helper (a
+  rotation's "clockwise" over the boss); since 0.7.4 one over a helper the frames haven't met yet is taken in (a
+  combatant or part with no owner; in a field zone within 70 yalms of you), and the message's second argument, whom
+  it points at ([verify]: BossMod's reading), is kept when it's someone in the recording; since 0.3.0 category
   23, a DoT's or HoT's tick (its target, status, 3 damage or 4 a heal, amount and source, in the
   order of FFXIVClientStructs' `StatusManager.ProcessHotDot`), with the target's HP read for a heal
   or a party member, to the parser: the combat block's `tick` (that HP its `h`), and a bleed's
@@ -359,6 +369,13 @@ and 12 rings, 13 the soul crystal), `id` the Item sheet's row, `name` the item's
 language; a stat is written only when above 0. Read back leniently (`Gear.Read`): an item with a place
 outside 0–13 (or a second at a place), no id, or a stat not a whole number above 0 or not one of the
 twelve keys is left out; `gear` that isn't an object reads as none.
+
+Since 0.7.4 (the mechanics sweep; still version 1, every key optional):
+
+- `{ "k": "turn", "t", "actor": actorId, "rot": radians, "x", "z" }`: an enemy turning or moving at a mechanic (What's
+  recorded, Turns); facing to 3 decimals, its place to 2. None in a pull before 0.7.4.
+- `marker`: `tgt` (a party or actor id), whom the game says it points at; left out for none, someone not in the
+  recording, or the marked one itself.
 
 `Recording.Parse` reads all of it back leniently: a hit's lists not as long as its targets, or a
 combat table whose columns aren't all arrays of the same length, are left out; an optional column not
@@ -1807,6 +1824,16 @@ entry).
   ignored); frame time with eight rows in each theme.
 
 ## Release notes
+
+### 0.7.4 (not released yet)
+
+- **Rotating mechanics, recorded whole.** An enemy at a mechanic (its cast going, or within 1.5 seconds of its cast's
+  end or its last hit) turning 2° or moving a yalm is a `turn` event every frame it does (at most ten a second each,
+  3,000 a pull, not counted towards the events' cap): a boss turning step by step through a rotation, and a helper's
+  heading over its cast, which the half-second frames missed or (a helper's, not in the frames) never had. A head
+  marker over a helper the frames hadn't met yet (one come between them, as a rotation's "clockwise" over its helper
+  often is) was dropped; it's taken in now as a hit's is, and every marker keeps whom the game says it points at
+  (`tgt` [verify]). The site finds the rotation, its way round, step and timing, and draws it.
 
 ### 0.7.3 (not released yet)
 

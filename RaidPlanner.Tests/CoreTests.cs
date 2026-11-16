@@ -238,7 +238,13 @@ public class RecordingTests
         b.Hit(27, helper, 300, 90, 90, 0, 107, 105, new[] { 7, 8, 1, 2 }, Each(20_000, 4), new int[4], Hp(new[] { 7, 8, 1, 2 }));
         b.Cast(29, boss, 400, 3, 100, 100, 0, 0, null, null);
         foreach (var i in all) b.Hit(32, helper, 400, 90, 90, 0, 100 + i, 105, new[] { i }, new long[] { 15_000 }, new[] { 0 }, new[] { party[i - 1].MaxHp });
+        // Since 0.7.4: the game's "rotate clockwise" marker over the boss (icon 167, pointing at no one), and the boss turning
+        // clockwise in two steps of 30° as it casts the buster (turn events: the first frame of its cast only remembered).
+        b.Marker(34, boss, 167);
         b.Cast(35, boss, 600, 5, 100, 100, 0, 1, null, null);
+        b.Facing(35, boss, 100, 100, 0, true);
+        b.Facing(36, boss, 100, 100, -0.524f, true);
+        b.Facing(37, boss, 100, 100, -1.047f, true);
         b.Hit(40, boss, 600, 100, 100, 0, 101, 105, new[] { 1 }, new long[] { 90_000 }, new[] { Effects.FxAbsorbed }, new long[] { 100_000 }, new[] { 20 },
             new[] { 101.25f }, new[] { 105.5f });
         for (var k = 0; k < 5; k++)
