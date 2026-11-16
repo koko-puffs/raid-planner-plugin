@@ -35,6 +35,9 @@ public sealed partial class MainWindow : Window, IDisposable
     private readonly SiteSession site;
     private readonly PlanService plans;
     private readonly Uploads uploads;
+
+    /// <summary>Upload my logs (since 0.6.0): Settings shows how it goes.</summary>
+    private readonly LogUploader logs;
     private readonly Fonts fonts;
     private readonly FileDialogManager dialogs = new();
     private readonly List<Action> later = new();
@@ -46,7 +49,8 @@ public sealed partial class MainWindow : Window, IDisposable
     private DateTime dialogFailedAt;
     private DateTime drawFailedAt;
 
-    public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, PlanService plans, Uploads uploads, Fonts fonts)
+    public MainWindow(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, PlanService plans, Uploads uploads, LogUploader logs,
+        Fonts fonts)
         : base("Raid Codex###RaidPlannerMain")
     {
         this.config = config;
@@ -55,6 +59,7 @@ public sealed partial class MainWindow : Window, IDisposable
         this.site = site;
         this.plans = plans;
         this.uploads = uploads;
+        this.logs = logs;
         this.fonts = fonts;
         Txt.Fonts = fonts;
 

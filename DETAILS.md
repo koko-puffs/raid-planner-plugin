@@ -70,6 +70,17 @@ own, before any level sync, while the attributes are as the game had them (synce
 throws gives no gear (logged); the pull is recorded as ever. With Diagnostics on, what was read goes
 to the file (`gear`).
 
+**Names, worlds, the game and the server's time** (since 0.6.0, for the site's logs): as a pull starts,
+each member's character name, home world (`PartyMembers`: the party list's `World`, the cross-world
+party's `HomeWorld`, your own `HomeWorld`; the row's name from the World sheet in English, `GameData.WorldName`)
+and level go into the recording with their spot; never their content id. The game's version
+(`Game/GameClock.cs`: `Framework.GameVersionString`, read once) and the server's time
+(`Framework.GetServerTime`, whole seconds, made exact by `Core/ServerClock.cs`: the recorder watches it
+each frame, and the moment it ticks over to the next second is that second's start on the computer's
+clock, so the server's time is the computer's plus that offset, within a frame) [verify: both, in the
+game]. Each is left out when it can't be read (a member's name or world unread, the server's time more
+than a day off the computer's).
+
 Unloading the plugin mid-pull (an update, a reload), or while one is held, keeps what was
 recorded; the hooks are let go of first. A frame that can't be read is skipped (logged at most
 every 10 seconds) and never stops the pull from ending.
@@ -177,7 +188,7 @@ The party is `PartyMembers`' (the party list, or since 0.5.0 a cross-world party
 duty; just you alone: above), each given a spot from their job's role
 (`Core/Roles.cs`): tanks MT then OT, healers H1 then H2, melee M1 then M2, ranged R1 then R2, in
 the list's order; a fourth melee takes a free ranged spot (and the other way round), past eight
-P9, P10…
+P9, P10… Since 0.6.0 each also keeps their name, home world and level (above).
 
 Each action's data is looked up once from the game's Action sheet (`Game/GameData.cs`): name,
 cast type, reach, width, floor marker path and cast time, and since 0.3.0 its ActionCategory and
@@ -329,6 +340,16 @@ optional; `combat.v` stays 1):
   `use`, `tick`. A combat block read from an older file (none of the new tables) is written back
   without them (`CombatLog.Extended`), so it never seems to say its party used nothing.
 
+Since 0.6.0 (logs phase 2, the site's SPEC10 contract §2; still version 1, every key optional and left
+out when not read): on each `party[]` member `name` (the character's, as the game shows it), `world`
+(their home world's name) and `lvl` (their level as the pull began), each cut to 40 characters
+(`PartyMember.Clean`); top level `game` (the game's version, "2026.10.30.0000.0000") and `startedAt`
+(the game server's time as the pull began, ISO 8601 UTC with milliseconds, "2026-11-02T19:59:58.640Z":
+the same for the whole party, so the site tells two players' recordings of one pull from two pulls;
+`recordedAt` stays the computer's clock, to the second). The logs' Worker adds `party[].char` (its
+character id) to what it stores; the plugin reads it as nothing. Names are in the file, so a file
+saved or shared carries them (the site blanks them in its own copies while names aren't public).
+
 Since 0.5.0 (round six, SPEC5 §3.6; still version 1, one new optional top-level key): `gear`, the
 recording player's as the pull began (above), left out when it couldn't be read:
 `{ "job", "ilvl", "items": [{ "slot", "id", "hq", "name" }], "stats": { "str", "dex", "vit", "int",
@@ -404,9 +425,13 @@ drive or the index), and unloading waits a few seconds for pulls still being wri
 recording, a duplicate key, a value of the wrong kind) is left out of the list, never the list
 itself, and so is an index entry.
 
-Past _Keep the last_, as each new pull is kept, the oldest sent one the site still has goes first
-(the site keeps a person's newest 30 sends, so a sent pull older than those counts as unsent here),
-and only then the oldest of the rest. Lowering the number in Settings deletes nothing
+Past _Keep the last_, as each new pull is kept, the oldest one the site has (sent or uploaded: since
+0.6.0 it keeps them all; before, only a person's newest 30 sends, so an older sent pull counted as
+unsent) goes first, and only then the oldest of the rest. Since 0.6.0 a pull still to be uploaded
+(`RecordingStore.Waiting`, the uploader's: Upload my logs on, linked, not sent, not refused, since Upload
+since) isn't let go of until there are 200 (`MostHeld`), and then the oldest goes. `marks.json` also
+keeps the pulls the logs refused for good (`refused`: file → why), so they're never tried again, and the
+index has it too (`uploadRefused`). Lowering the number in Settings deletes nothing
 then and there. The window reads the list without waiting: the store hands out a copy made at
 each change, and a pull's file is written outside its lock.
 
@@ -430,6 +455,9 @@ or the plugin unloaded. The functions, and their limits on the site (per person,
 | `rp_plugin_live` | the step you're on | calls within 200 ms of the last are ignored |
 | `rp_plugin_pull` | a pull's summary | 120 an hour |
 | `rp_plugin_roster` | your party's names | replaces your roster |
+
+Since 0.6.0 one call goes elsewhere: a pull's upload goes to the logs' Worker (`https://logs.kokos-tools.com/v1/upload`,
+below), with the token as `Authorization: Bearer` (the Worker's contract; still never in the address, never logged).
 
 `Core/Pacing.cs` has the two pacers: `Backoff` (5 seconds doubling to 5 minutes, say, back to none
 after a success) and `LiveShare` (below).
@@ -462,9 +490,51 @@ gets the send again without it. The send reads the file and posts from a worker;
 minute and a quarter more for each MB, and stops when the plugin unloads (the list isn't touched
 after).
 
-With _Send each pull_ on (and linked), each kept pull is sent by itself as it's kept, the same way
-(a failure is said in chat); `/raidcodex send last` sends the newest kept pull and says in chat how
-it went.
+`/raidcodex send last` sends the newest kept pull and says in chat how it went. Since 0.6.0 _Send each
+pull_ is gone: _Upload my logs_ (below) sends every pull. A pull sent by hand and uploaded too is kept
+once on the site (the same client id; the upload's answer is `duplicate`).
+
+## Uploading (`Core/LogUpload.cs`, `Game/LogUploader.cs`; since 0.6.0)
+
+With _Upload my logs_ on (the default) and linked, every kept pull goes whole to your logs on the site:
+`POST https://logs.kokos-tools.com/v1/upload` (the site's SPEC10 contract §1), `Authorization: Bearer <token>`
+(the same token; 0.5.x-era tokens work), `Content-Type: application/json`, `Content-Encoding: gzip`,
+`User-Agent: RaidPlanner/<version>`, the body gzipped JSON `{ "v": 1, "clientId", "name", "summary",
+"recording" }`: `clientId` the pull's own (`SiteLink.ClientId`, the one its summary goes to `rp_plugin_pull`
+with, so the site joins them), `name` the pull's (≤ 120), `summary` the summary made as the pull was kept
+(kept in memory for the newest 40; null for one kept before the plugin loaded: the server makes its own
+anyway), `recording` the file as written (copied in unparsed, as a send's). Whole: thinned as a send is
+(`SiteLink.Fit`, the same order) only past 8 MB less 64 KB (`LogUpload.MaxRecording`; the site takes 8 MB
+ungzipped, 10 MB gzipped: its Worker has 128 MB, and a recording read there takes several times its size),
+which no ordinary pull comes near (a ten-minute savage pull is under 1 MB). The file is read, gzipped and sent on a worker;
+it waits half a minute and a quarter more for each MB, and stops when the plugin unloads.
+
+What's waiting is worked out each time from the kept pulls, never kept apart (`UploadQueue`): those not sent
+(no `SentId`; an upload's answer is the same inbox id a send's is, so an uploaded pull is marked sent, shows
+the tick and opens with _Open it_), not refused, and ended at or after _Upload since_ (`UploadPrefs.Wants`). So
+it's the same after a restart, and pulls kept offline go when the site's back. One at a time, the oldest first,
+checked four times a second on the framework thread. The answers (contract §1):
+
+| Answer | Then |
+| --- | --- |
+| 200 `ok` (or `duplicate`: there already) | marked sent with its `id`; the next |
+| 400 / 413 / 415 (`recording`, `size`) | marked refused (`marks.json`), never tried again; the next |
+| 401 `token`, 403 `full` | every upload stops (said once in chat; Settings shows why) until linked again, Upload my logs turned on again, or Upload my older pulls |
+| 403 `off` | everything waits half an hour |
+| 429 `rate` (60 sends an hour, shared with `rp_plugin_send`) | waits its `Retry-After` (1 s to 65 min) |
+| 503 `busy` | waits its `Retry-After`, and longer each time |
+| other, no connection, no answer | 30 seconds doubling to 15 minutes (`Backoff`) |
+
+A pull that fails three times in a row (no answer, or the site busy or erring: not the hourly limit or saving
+off) is set aside half an hour, doubling to six hours each time it fails again, and the next pull goes first
+(`UploadQueue.Aside`), so one pull the site can't take never holds up the rest; a success or Resume forgets it.
+A clock set back by more than a wait counts as waited. An answer for a call made before the token changed is
+ignored. _Upload since_ (`Configuration.UploadSince`) is set when 0.6.0 first loads (a 0.5 configuration,
+version 1, is moved to version 2: Upload my logs on, from then on; `UploadPrefs.Migrate`) and each time _Upload
+my logs_ is turned on, so pulls kept before (or while it was off) go only with _Upload my older pulls_, which sets
+it to the beginning of time. The site's answer says whether a pull is public now (`public`); the plugin only logs
+it. Your logs are public on the site, with your party's names and worlds, unless you make them private there
+(Settings → Your logs, `SiteLink.LogsSettingsUrl`); Settings → Recording says so and links there.
 
 ## Progress and your roster (`Game/Uploads.cs`, `Core/PullSummary.cs`)
 
@@ -900,7 +970,9 @@ above, 18 below), a footer on the basalt band where a screen has one.
   the text colour ("Link your account first: Account", the link going there). **Recording**: _Record
   fights by themselves_, _In every duty_ (a sub-row), _Record where the party stands_ with _Smoother
   replays_ under it (0.4.0; off while places aren't kept), _Keep the
-  last_, _Send each pull_ and _Track my progress_ (both waiting for a link), _Show it in the server
+  last_, _Upload my logs_ (0.6.0; waiting for a link) with, while it's on, the sub-rows _Upload my older
+  pulls_ · Upload (its line what's waiting, what holds it up, or why it stopped) and _Who sees your logs_
+  · Open (the site's Settings → Your logs), _Track my progress_ (waiting for a link), _Show it in the server
   info bar_, _Recordings folder_ · Open; a hook the game hides is said in an amber warning box.
   **Plan window**: _Show my plan in duties_, _Lock it where it is_, _Say each step in chat_ (the
   setting once called Callouts: on the site a callout is the step's big words), _Share my step with
@@ -1357,6 +1429,8 @@ RaidPlanner/
   Plugin.cs, Services.cs, Configuration.cs
   Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), the
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
+              uploading to the logs (LogUpload: the body, the answers, UploadQueue, UploadPrefs),
+              the server's clock (ServerClock),
               plans (Plan, a real arena's rings: Rings, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
               the roster and the diagnostics file (DiagnosticsLog), who the party is (PartyPick),
               the gear (Recording: Gear); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
@@ -1364,8 +1438,9 @@ RaidPlanner/
               which is which (CombatLists, CombatKinds), who interrupted, the moments before a pull
               and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
-              in the game (PlanService), summaries and the roster (Uploads), the party (PartyMembers)
-              and your gear (GearReader)
+              in the game (PlanService), summaries and the roster (Uploads), uploading every pull
+              (LogUploader), the party (PartyMembers), your gear (GearReader), and the game's version
+              and server time (GameClock)
   UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
               (PlanBoard, BoardArt), MeterWindow and MeterDetailWindow, the overlays (OverlayWindow:
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
@@ -1489,11 +1564,29 @@ entry).
   window shows, synced in a synced duty), and the average item level as the character window works it
   out (a two-handed weapon counted twice). And the windows: the plan window's cooldown rows, the
   callouts' "You:" line and the tracker's ember outline, against a real plan with cooldowns.
-- Summaries waiting to be sent are lost when the game closes.
+- Summaries waiting to be sent are lost when the game closes (pulls waiting to be uploaded aren't: they're the kept
+  pulls not sent yet).
+- The 0.6.0 readings want checking in the game: `Framework.GameVersionString` ("2025.07.17.0000.0000"), `Framework.GetServerTime`
+  (Unix seconds, ticking over with the server: `startedAt`'s milliseconds rest on it), the party list's `World` as the home
+  world, the cross-world party's `HomeWorld`, and the World sheet's names.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
 
 ## Release notes
+
+### 0.6.0 (not released yet)
+
+- **Every pull goes to your logs.** _Upload my logs_ (Settings → Recording; on, once linked) uploads each pull whole to
+  your logs on the Raid Codex as soon as it's kept: gzipped, in the background, one at a time, the oldest first. Pulls
+  kept while you're offline, or when the game closed first, go at the next chance; the site's hourly limit (60), its
+  being busy or saving being off are waited out; a refused token or full logs stop it with a message. Pulls still to go
+  are held past _Keep the last_ (up to 200). _Upload my older pulls_ sends the ones kept before. It replaces _Send each
+  pull_ (your setting moves over: uploads start from the day you update). Your link's token from 0.5 works as it is.
+- **Your logs are public on the site** with your party's names and home worlds, as on FFLogs; _Who sees your logs_ opens
+  the site's Settings → Your logs, where you can make yours private (and unranked) or hide your character.
+- **The recording keeps the party's names, home worlds and levels**, the game's version and the server's time as the
+  pull began (for the logs: who, which patch, and two players' recordings of one pull told apart). Still format version 1.
+- The progress summary (_Track my progress_) goes as before. "The site keeps your newest 30 sends" is gone: it keeps them all.
 
 ### 0.5.1 (not released yet)
 

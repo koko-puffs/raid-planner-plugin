@@ -13,7 +13,8 @@ namespace RaidPlanner.Core;
 /// <summary>
 /// A kept pull, as the window lists it without reading its whole file: its file, duty, pull,
 /// when, how long, how it ended, its mechanics, whether the party's places are in it, and the
-/// site's id for it once it's been sent.
+/// site's id for it once it's been sent (or uploaded: since 0.6.0 an upload's id is the same kind); since 0.6.0 why
+/// the site's logs refused it for good (<paramref name="UploadRefused"/>: never uploaded again).
 /// </summary>
 public sealed record RecordingInfo(
     string File,
@@ -25,7 +26,8 @@ public sealed record RecordingInfo(
     int Mechanics,
     bool PartyPositions,
     string? SentId = null,
-    DateTimeOffset? SentAt = null)
+    DateTimeOffset? SentAt = null,
+    string? UploadRefused = null)
 {
     public string Name => Words.PullName(Duty, Pull);
 }
@@ -33,9 +35,10 @@ public sealed record RecordingInfo(
 /// <summary>
 /// The pulls the plugin keeps: one file each in its folder (the plugin's own, under Dalamud's
 /// config), an index of them (index.json) so the list opens without reading every file, and the
-/// marks that can't be made again from the files (marks.json: which were sent, and which couldn't
-/// be deleted yet). The newest first; past <see cref="Keep"/> the oldest sent ones go, and only
-/// then the oldest unsent. Writes go to a temporary file, flushed to the disk, then put in place,
+/// marks that can't be made again from the files (marks.json: which were sent, which the site's logs
+/// refused, and which couldn't be deleted yet). The newest first; past <see cref="Keep"/> the oldest
+/// sent ones go, and only then the oldest unsent (since 0.6.0 those still to be uploaded are held, up
+/// to <see cref="MostHeld"/>). Writes go to a temporary file, flushed to the disk, then put in place,
 /// so a crash or a power cut mid-write never leaves half a file. Safe to call from any thread;
 /// <see cref="All"/> and <see cref="Find"/> never wait (the window reads them every frame).
 /// </summary>
@@ -45,8 +48,17 @@ public sealed class RecordingStore
 
     public const string MarksFile = "marks.json";
 
-    /// <summary>How many sent pulls the site keeps waiting for a person (its newest; older ones go there).</summary>
-    public const int SiteKeeps = 30;
+    /// <summary>The most pulls kept while some are still to be uploaded (<see cref="Waiting"/>): past it the oldest go even so.</summary>
+    public const int MostHeld = 200;
+
+    /// <summary>
+    /// Since 0.6.0: a pull still to be uploaded (Upload my logs; set by the uploader, asked on any thread). Past
+    /// <see cref="Keep"/>, such pulls aren't let go of until there are <see cref="MostHeld"/>.
+    /// </summary>
+    public Func<RecordingInfo, bool>? Waiting { get; set; }
+
+    /// <summary>The most kept while some are still to be uploaded (<see cref="MostHeld"/>; lower in tests).</summary>
+    public int HoldUpTo { get; set; } = MostHeld;
 
     private readonly object gate = new();
     private List<RecordingInfo> items = new();
@@ -123,6 +135,8 @@ public sealed class RecordingStore
             {
                 if (list[i].SentId == null && marks.Sent.TryGetValue(list[i].File, out var sent))
                     list[i] = list[i] with { SentId = sent.Id, SentAt = sent.At };
+                if (list[i].UploadRefused == null && marks.Refused.TryGetValue(list[i].File, out var why))
+                    list[i] = list[i] with { UploadRefused = why };
             }
             var count = list.Count;
             items = list
@@ -266,6 +280,21 @@ public sealed class RecordingStore
         }
     }
 
+    /// <summary>Notes that the site's logs refused a pull for good (since 0.6.0; why, in words): it's never uploaded again.</summary>
+    public RecordingInfo? MarkRefused(RecordingInfo info, string why)
+    {
+        lock (gate)
+        {
+            var i = items.FindIndex(x => string.Equals(x.File, info.File, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) return null;
+            items[i] = items[i] with { UploadRefused = string.IsNullOrWhiteSpace(why) ? "Refused." : why.Trim() };
+            WriteMarks();
+            WriteIndex();
+            Changed();
+            return items[i];
+        }
+    }
+
     /// <summary>The entry for a file now (it may have been sent since it was read).</summary>
     public RecordingInfo? Find(string file)
     {
@@ -295,23 +324,45 @@ public sealed class RecordingStore
     }
 
     /// <summary>
-    /// Past <see cref="Keep"/>: the oldest pull the site still has goes first, and only then the
-    /// oldest of the rest, so a run of other pulls doesn't take one you haven't sent while one that's
-    /// safely on the site could go instead. The site keeps a person's newest
-    /// <see cref="SiteKeeps"/> sends, so a sent pull older than those counts as unsent here.
+    /// Past <see cref="Keep"/>: the oldest pull the site has (sent or uploaded) goes first, and only
+    /// then the oldest of the rest, so a run of other pulls doesn't take one you haven't sent while one
+    /// that's safely on the site could go instead (since 0.6.0 the site keeps them all: before, only a
+    /// person's newest 30 sends). A pull still to be uploaded (<see cref="Waiting"/>) isn't let go of
+    /// until there are <see cref="MostHeld"/> (so a night offline loses nothing), and then the oldest goes.
     /// </summary>
     private void Prune()
     {
         var keep = Math.Max(1, Keep);
+        var waiting = Waiting;
         while (items.Count > keep)
         {
-            var onSite = items.Where(i => i.SentId != null).OrderByDescending(i => i.SentAt ?? i.RecordedAt).Take(SiteKeeps)
-                .Select(i => i.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var at = items.FindLastIndex(i => onSite.Contains(i.File));
-            if (at < 0) at = items.Count - 1;
+            var at = items.FindLastIndex(i => i.SentId != null);
+            if (at < 0)
+            {
+                at = waiting == null ? items.Count - 1 : items.FindLastIndex(i => !Held(waiting, i));
+                // Every one left is still to be uploaded: held, up to the most.
+                if (at < 0)
+                {
+                    if (items.Count <= Math.Max(keep, HoldUpTo)) break;
+                    at = items.Count - 1;
+                }
+            }
             var file = items[at].File;
             items.RemoveAt(at);
             Forget(file);
+        }
+    }
+
+    private static bool Held(Func<RecordingInfo, bool> waiting, RecordingInfo i)
+    {
+        if (i.SentId != null || i.UploadRefused != null) return false;
+        try
+        {
+            return waiting(i);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return false;
         }
     }
 
@@ -352,6 +403,7 @@ public sealed class RecordingStore
             };
             if (i.SentId != null) o["sentId"] = i.SentId;
             if (i.SentAt is { } at) o["sentAt"] = at.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
+            if (i.UploadRefused != null) o["uploadRefused"] = i.UploadRefused;
             arr.Add(o);
         }
         try
@@ -387,7 +439,8 @@ public sealed class RecordingStore
                     n["mechanics"]?.GetValue<int>() ?? 0,
                     n["partyPositions"]?.GetValue<bool>() ?? false,
                     n["sentId"]?.GetValue<string>(),
-                    sentAt));
+                    sentAt,
+                    n["uploadRefused"]?.GetValue<string>()));
             }
             catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException or ArgumentException)
             {
@@ -409,13 +462,14 @@ public sealed class RecordingStore
         && file.IndexOfAny(new[] { '/', '\\', ':' }) < 0
         && Path.GetFileName(file) == file;
 
-    // ---------- marks.json: what was sent, and what couldn't be deleted yet ----------
+    // ---------- marks.json: what was sent, what the logs refused, and what couldn't be deleted yet ----------
 
-    private sealed record Marks(Dictionary<string, (string Id, DateTimeOffset? At)> Sent, List<string> Gone);
+    private sealed record Marks(Dictionary<string, (string Id, DateTimeOffset? At)> Sent, List<string> Gone, Dictionary<string, string> Refused);
 
     private Marks ReadMarks()
     {
-        var marks = new Marks(new Dictionary<string, (string, DateTimeOffset?)>(StringComparer.OrdinalIgnoreCase), new List<string>());
+        var marks = new Marks(new Dictionary<string, (string, DateTimeOffset?)>(StringComparer.OrdinalIgnoreCase), new List<string>(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
         try
         {
             var path = Path.Combine(Folder, MarksFile);
@@ -429,6 +483,12 @@ public sealed class RecordingStore
                         && DateTimeOffset.TryParse(a, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
                     marks.Sent[file] = (id, at);
                 }
+            }
+            if (o["refused"] is JsonObject refused)
+            {
+                foreach (var (file, value) in refused)
+                    if (IsOwnName(file) && value is JsonValue rv && rv.TryGetValue<string>(out var why) && !string.IsNullOrWhiteSpace(why))
+                        marks.Refused[file] = why.Length > 300 ? why[..300] : why;
             }
             if (o["gone"] is JsonArray goneList)
             {
@@ -456,11 +516,14 @@ public sealed class RecordingStore
             if (i.SentAt is { } at) o["at"] = at.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
             sent[i.File] = o;
         }
+        var refused = new JsonObject();
+        foreach (var i in items)
+            if (i.UploadRefused != null) refused[i.File] = i.UploadRefused;
         var goneList = new JsonArray();
         foreach (var g in gone) goneList.Add(g);
         try
         {
-            WriteAtomically(Path.Combine(Folder, MarksFile), new JsonObject { ["sent"] = sent, ["gone"] = goneList }.ToJsonString());
+            WriteAtomically(Path.Combine(Folder, MarksFile), new JsonObject { ["sent"] = sent, ["refused"] = refused, ["gone"] = goneList }.ToJsonString());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

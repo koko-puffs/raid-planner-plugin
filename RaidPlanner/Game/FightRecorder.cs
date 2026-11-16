@@ -465,6 +465,8 @@ public sealed unsafe class FightRecorder : IDisposable
 
     private void Tick()
     {
+        // The server's clock against the computer's, each frame (a recording's startedAt to the millisecond; since 0.6.0).
+        GameClock.Observe();
         // Released on time even at the title screen (a held pull is only in memory until then).
         if (held is { } h && Now >= h.Until) ReleaseHeld();
         if (!Services.ClientState.IsLoggedIn || Services.Objects.LocalPlayer == null)
@@ -565,6 +567,8 @@ public sealed unsafe class FightRecorder : IDisposable
         if (Services.Objects.LocalPlayer is { } self) current.SetSelf(self.EntityId);
         // Your gear and attributes as the pull begins (since 0.5.0; guarded: none when it can't be read; a pull only followed keeps nothing).
         if (!follow) current.SetGear(GearReader.Read(data, Diagnostics));
+        // The game's version and its server's time (since 0.6.0; the site's logs tell the patch and the same pull apart by them).
+        if (!follow) current.SetGame(GameClock.Version(), GameClock.ServerTime());
         partyTouched.Clear();
         partyTouching.Clear();
         casting.Clear();
@@ -619,12 +623,13 @@ public sealed unsafe class FightRecorder : IDisposable
         {
             if (m.EntityId is 0 or InvalidId) continue;
             var (job, role) = data.Job(m.ClassJob);
-            list.Add(new Partier(m.EntityId, job, role, m.MaxHp));
+            // Since 0.6.0 with their name, home world and level (the site's logs; never their content id).
+            list.Add(new Partier(m.EntityId, job, role, m.MaxHp, m.Name, data.WorldName(m.HomeWorld), m.Level));
         }
         if (list.Count == 0 && Services.Objects.LocalPlayer is { } me)
         {
             var (job, role) = data.Job(me.ClassJob.RowId);
-            list.Add(new Partier(me.EntityId, job, role, me.MaxHp));
+            list.Add(new Partier(me.EntityId, job, role, me.MaxHp, me.Name.TextValue, data.WorldName(me.HomeWorld.RowId), me.Level));
         }
         return list;
     }

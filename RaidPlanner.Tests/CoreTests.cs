@@ -194,12 +194,15 @@ public class RecordingTests
             // The recording player's own Aurora: two charges at 60 s by the game (its traits).
             OwnRecast = id => id == 16151 ? (60f, 2) : null,
         };
-        var party = new[] { new Partier(11, "PLD", 1, 100_000), new Partier(12, "WAR", 1, 102_000), new Partier(13, "WHM", 4, 80_000),
-            new Partier(14, "SGE", 4, 80_500), new Partier(15, "DRG", 2, 85_000), new Partier(16, "NIN", 2, 84_000), new Partier(17, "BRD", 3, 79_000),
-            new Partier(18, "BLM", 3, 78_000) };
+        // Since 0.6.0 with their names, home worlds and levels (made up: "Tester" names, real worlds), the game's version and the server's time.
+        var party = new[] { new Partier(11, "PLD", 1, 100_000, "Alpha Tester", "Twintania", 100), new Partier(12, "WAR", 1, 102_000, "Bravo Tester", "Lich", 100),
+            new Partier(13, "WHM", 4, 80_000, "Charlie Tester", "Odin", 100), new Partier(14, "SGE", 4, 80_500, "Delta Tester", "Phoenix", 100),
+            new Partier(15, "DRG", 2, 85_000, "Echo Tester", "Shiva", 100), new Partier(16, "NIN", 2, 84_000, "Foxtrot Tester", "Zodiark", 100),
+            new Partier(17, "BRD", 3, 79_000, "Golf Tester", "Cerberus", 100), new Partier(18, "BLM", 3, 78_000, "Hotel Tester", "Louisoix", 99) };
         b.SetParty(party);
         b.SetSelf(18);
         b.SetGear(SampleGear);
+        b.SetGame("2026.10.30.0000.0000", new DateTimeOffset(2026, 11, 2, 19, 59, 58, 640, TimeSpan.Zero));
         var boss = b.Actor(900, "The Boss", 5, 1001);
         var helper = b.Actor(901, "", 0.5f, 1002);
         b.SeenTargetable(boss, 1_000_000);

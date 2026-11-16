@@ -41,6 +41,9 @@ public static class SiteLink
     /// <summary>Where a token is made: Settings → Raid Codex → In-game plugin.</summary>
     public const string TokensUrl = "https://www.kokos-tools.com/raid-codex?settings=raid-plugin";
 
+    /// <summary>Where you make your logs private, and hide your character (since 0.6.0): Settings → Your logs.</summary>
+    public const string LogsSettingsUrl = "https://www.kokos-tools.com/raid-codex?settings=raid-logs";
+
     /// <summary>How long a send waits for the site: half a minute, and a quarter more for each MB (a slow upload).</summary>
     public static TimeSpan TimeoutFor(int bytes) => TimeSpan.FromSeconds(30 + 15.0 * bytes / 1_000_000);
 
@@ -84,9 +87,15 @@ public static class SiteLink
     /// says what it lost (<c>combat.thinned</c>). Null when even that's too big (a pull with more events than
     /// the site takes).
     /// </summary>
-    public static (string Json, bool Thinned)? Fit(string json)
+    public static (string Json, bool Thinned)? Fit(string json) => Fit(json, MaxBytes, ServerSize);
+
+    /// <summary>
+    /// <see cref="Fit(string)"/> to another limit, measured another way (since 0.6.0: an upload's, <see cref="LogUpload.Fit"/>, by its
+    /// UTF-8 bytes up to 8 MB).
+    /// </summary>
+    public static (string Json, bool Thinned)? Fit(string json, int max, Func<string, int> size)
     {
-        if (ServerSize(json) <= MaxBytes) return (json, false);
+        if (size(json) <= max) return (json, false);
         Recording r;
         try
         {
@@ -106,7 +115,7 @@ public static class SiteLink
         {
             frames = ByTime(frames, RecordingBuilder.FrameEvery);
             var two = Try(frames, r.PartyPositions);
-            if (ServerSize(two) <= MaxBytes) return (two, true);
+            if (size(two) <= max) return (two, true);
         }
         // (2), (3) The enmity list, then MP and barriers.
         if (r.Combat != null)
@@ -116,13 +125,13 @@ public static class SiteLink
                 if (Rows(r.Combat, table) == 0) continue;
                 drops.Add(table);
                 var without = Try(frames, r.PartyPositions);
-                if (ServerSize(without) <= MaxBytes) return (without, true);
+                if (size(without) <= max) return (without, true);
             }
         // (4) The frames: every 1, 2, 4 seconds; the enemies only, so; none.
         foreach (var step in new[] { 1.0, 2.0, 4.0 })
         {
             var thinned = Try(ByTime(frames, step), r.PartyPositions);
-            if (ServerSize(thinned) <= MaxBytes) return (thinned, true);
+            if (size(thinned) <= max) return (thinned, true);
         }
         foreach (var step in new[] { 1.0, 2.0, 4.0 })
         {
@@ -135,10 +144,10 @@ public static class SiteLink
                     })
                     .Where(f => f.At.Count > 0),
                 false);
-            if (ServerSize(enemies) <= MaxBytes) return (enemies, true);
+            if (size(enemies) <= max) return (enemies, true);
         }
         var none = Try(Array.Empty<Frame>(), false);
-        if (ServerSize(none) <= MaxBytes) return (none, true);
+        if (size(none) <= max) return (none, true);
         if (r.Combat == null) return null;
         // (5)–(8) Then the ground placements, the casts, the uses, the ticks.
         foreach (var table in new[] { "area", "cast", "use", "tick" })
@@ -146,7 +155,7 @@ public static class SiteLink
             if (Rows(r.Combat, table) == 0) continue;
             drops.Add(table);
             var without = Try(Array.Empty<Frame>(), false);
-            if (ServerSize(without) <= MaxBytes) return (without, true);
+            if (size(without) <= max) return (without, true);
         }
         return null;
     }
