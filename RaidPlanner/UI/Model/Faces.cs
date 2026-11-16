@@ -48,3 +48,23 @@ public enum Face
     /// <summary>The game's Jupiter (Native's title band).</summary>
     GameTitle,
 }
+
+/// <summary>
+/// Centring words by their ink, not their line: a face's line box (ImGui's font size, its ascent to its
+/// descent) puts its capitals at the box's middle only when its ascent and descent are balanced around
+/// them. Geist's are (its 'H' is centred in its line to the unit, Geist Mono's too), Zen Maru Gothic's
+/// aren't (its ascent is tall: centred by the box its capitals sit about 0.086 em low, 1.2px at 14px),
+/// nor the game's own. So each line is drawn with its capitals' ink (ImGui's glyph for 'H': Y0 to Y1,
+/// from the line's top) on the line box's middle: Geist stays where it was, the others line up with it.
+/// </summary>
+public static class InkCentre
+{
+    /// <summary>The ink's middle from the line's top, from a glyph's top and bottom (ImGui's Y0, Y1).</summary>
+    public static float Mid(float inkTop, float inkBottom) => (inkTop + inkBottom) / 2;
+
+    /// <summary>Where the line's top goes so ink with this middle (<see cref="Mid"/>) sits on <paramref name="lineMiddle"/>.</summary>
+    public static float Top(float lineMiddle, float inkMid) => lineMiddle - inkMid;
+
+    /// <summary>How far (px; up negative) centring by the ink moves words from centring by their line box <paramref name="fontSize"/> tall.</summary>
+    public static float Shift(float fontSize, float inkMid) => fontSize / 2 - inkMid;
+}

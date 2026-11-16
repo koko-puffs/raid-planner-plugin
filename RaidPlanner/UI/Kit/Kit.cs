@@ -482,13 +482,16 @@ public static partial class Kit
     /// corners, 5.6px inside), its shadow faked with rings round it (<see cref="Rings(ImDrawListPtr, Vector2, Vector2, float, float, float, float, float)"/>).
     /// Pair with <see cref="EndMenu"/> when true.
     /// </summary>
-    public static bool BeginMenu(string id)
+    /// <param name="ground">Its ground (a theme's: the opened-up meter's picker); null the kit's raised slab.</param>
+    /// <param name="edge">Its hairline; null the kit's.</param>
+    /// <param name="radius">Its corners (CSS px); null the kit's.</param>
+    public static bool BeginMenu(string id, Vector4? ground = null, Vector4? edge = null, float? radius = null)
     {
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(S(5.6f)));
-        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, S(Palette.RadiusLg));
+        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, S(radius ?? Palette.RadiusLg));
         ImGui.PushStyleVar(ImGuiStyleVar.PopupBorderSize, 1f);
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, Palette.Raised);
-        ImGui.PushStyleColor(ImGuiCol.Border, Palette.Line2);
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, ground ?? Palette.Raised);
+        ImGui.PushStyleColor(ImGuiCol.Border, edge ?? Palette.Line2);
         var open = ImGui.BeginPopup(id, ImGuiWindowFlags.NoMove);
         ImGui.PopStyleColor(2);
         ImGui.PopStyleVar(3);
@@ -499,7 +502,7 @@ public static partial class Kit
             // window the menu opens over (all but hidden by its near-solid ground).
             var dl = ImGui.GetWindowDrawList();
             dl.PushClipRectFullScreen();
-            Rings(dl, ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), S(Palette.RadiusLg), 6, 14);
+            Rings(dl, ImGui.GetWindowPos(), ImGui.GetWindowPos() + ImGui.GetWindowSize(), S(radius ?? Palette.RadiusLg), 6, 14);
             dl.PopClipRect();
         }
         return open;

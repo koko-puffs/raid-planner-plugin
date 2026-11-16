@@ -215,10 +215,12 @@ public static class PlateColumns
     /// <summary>
     /// The bar's track (screen px): a row <paramref name="rowWidth"/> wide, less its right padding, what's
     /// kept beside the share (Mochi's heart), the share column and <see cref="TrackGap"/>: a full bar ends
-    /// there, its share of the top's that much of it.
+    /// there, its share of the top's that much of it. With <paramref name="numberWidth"/> (a theme whose
+    /// bar ends before the number: <see cref="ThemeBar.BeforeNumber"/>), the number column and the gap
+    /// before it (<paramref name="columnGap"/>) too: the bars keep their lengths to each other, all shorter.
     /// </summary>
-    public static float Track(float rowWidth, float padRight, float beside, float shareWidth, float scale) =>
-        MathF.Max(0, rowWidth - padRight - beside - shareWidth - TrackGap * scale);
+    public static float Track(float rowWidth, float padRight, float beside, float shareWidth, float scale, float numberWidth = 0, float columnGap = 0) =>
+        MathF.Max(0, rowWidth - padRight - beside - shareWidth - (numberWidth > 0 ? columnGap + numberWidth : 0) - TrackGap * scale);
 
     private static float Widest(float atLeast, string[] samples, ThemeFont f, Func<string, ThemeFont, float> measure)
     {

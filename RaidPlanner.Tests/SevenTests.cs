@@ -390,4 +390,93 @@ public class SevenTests
         var shareLeft = 246 - 5 - 32;
         Assert.True(PlateColumns.Track(246, 5, 0, 32, 1) < shareLeft);
     }
+
+    [Fact]
+    public void A_bar_with_a_hard_end_stops_before_the_number_too()
+    {
+        // Native's HP bar, Mochi's pill, Neon's cap: their track ends before the number column (and its gap) as well.
+        Assert.Equal(new[] { false, true, true, false, true, false }, MeterThemes.All.Select(t => t.Bar.BeforeNumber));
+        // A 246px row, 5 in, a 32px share, a 46px number 6 before it: 246 − 5 − 32 − 6 − 46 − 3 = 154.
+        Assert.Equal(154, PlateColumns.Track(246, 5, 0, 32, 1, numberWidth: 46, columnGap: 6));
+        // The bars keep their lengths to each other: only the track is shorter.
+        var full = PlateColumns.Track(246, 5, 0, 32, 1, 46, 6);
+        Assert.Equal(0.5f * full, 0.5f * PlateColumns.Track(246, 5, 0, 32, 1, 46, 6));
+        Assert.True(full < PlateColumns.Track(246, 5, 0, 32, 1));
+    }
+
+    [Theory]
+    // Geist (and Geist Mono): ascent 1005, descent 295, 'H' 0–710 of 1000: its capitals are centred in its line: no shift.
+    [InlineData(1005, 295, 710, 1000, 14 * 1.3f, 0f)]
+    // Zen Maru Gothic: ascent 1160, descent 288, 'H' 0–700: 0.086 em low by its line, so up 1.2px at 14px.
+    [InlineData(1160, 288, 700, 1000, 14 * 1.448f, -1.204f)]
+    // Fraunces at opsz 14: 0.0115 em low, a sixth of a pixel at 13px.
+    [InlineData(1956, 510, 1400, 2000, 13 * 1.233f, -0.150f)]
+    public void Words_are_centred_by_their_capitals_ink(float ascent, float descent, float capHeight, float em, float fontSize, float shift)
+    {
+        // ImGui's glyph for 'H' from the line's top (a font sized by its line, ascent to descent).
+        var k = fontSize / (ascent + descent);
+        var top = (ascent - capHeight) * k;
+        var bottom = ascent * k;
+        var mid = InkCentre.Mid(top, bottom);
+        Assert.Equal(shift, InkCentre.Shift(fontSize, mid), 2);
+        // Drawn on a line's middle: the ink's middle is on it.
+        Assert.Equal(50, InkCentre.Top(50, mid) + mid, 3);
+        _ = em;
+    }
+
+    [Fact]
+    public void The_opened_up_window_takes_the_themes_faces()
+    {
+        // Ready Check: the window as it was.
+        var rc = DetailFonts.For(MeterThemes.ReadyCheck);
+        Assert.Same(DetailFonts.ReadyCheck, rc);
+        Assert.Equal(new ThemeFont(Face.SansMedium, 14), rc.Name);
+        Assert.Equal(new ThemeFont(Face.Mono, 13), rc.Num);
+        Assert.Equal(new ThemeFont(Face.MonoSemibold, 13), rc.NumStrong);
+        Assert.Equal(new ThemeFont(Face.Mono, 10, Caps: true), rc.Head);
+        Assert.Equal(new ThemeFont(Face.MonoSemibold, 18), rc.Clock);
+        // Mochi: its words two steps up (Zen Maru reads small), its numbers Geist SemiBold a step up, as its compact faces are.
+        var mochi = DetailFonts.For(MeterThemes.Mochi);
+        Assert.Equal((Face.Round, 16), (mochi.Name.Face, mochi.Name.Px));
+        Assert.Equal((Face.RoundBlack, 17), (mochi.Title.Face, mochi.Title.Px));
+        Assert.Equal((Face.SansSemibold, 14), (mochi.Num.Face, mochi.Num.Px));
+        Assert.Equal((Face.SansSemibold, 13), (mochi.Small.Face, mochi.Small.Px));
+        Assert.True(mochi.Head.Caps && mochi.Head.Cells == 0);
+        // Native: outlined Axis, never MiedingerMid; its clock in its numbers' face.
+        var native = DetailFonts.For(MeterThemes.Native);
+        Assert.All(native.All(), f => Assert.NotEqual(Face.GameNumbers, f.Face));
+        Assert.True(native.Num.Outline && native.Name.Outline);
+        Assert.Equal(Face.GameAxis, native.Clock.Face);
+        // Every theme's faces are loaded with it.
+        foreach (var t in MeterThemes.All)
+            Assert.All(DetailFonts.For(t).All(), f => Assert.Contains((f.Face, f.Px), DetailFonts.For(t).Faces()));
+    }
+
+    [Fact]
+    public void A_tables_columns_are_as_wide_as_what_they_show()
+    {
+        // "1,337,000" (the limit break's biggest hit) in a face 8px a character: wider than its 68px column, so the column widens.
+        float Eight(string s, ThemeFont f) => s.Length * 8;
+        var into = new float[3];
+        var css = new[] { 44f, 68f, 40f };
+        var heads = new[] { "DH", "Max hit", "Deaths" };
+        var fonts = new[] { new ThemeFont(Face.Mono, 13), new ThemeFont(Face.Mono, 13), new ThemeFont(Face.Mono, 13) };
+        var rows = new List<string[]> { new[] { "–", "1,337,000", string.Empty }, new[] { "18.2", "61,400", "1" } };
+        DetailColumns.Widths(into, css, 1, heads, new ThemeFont(Face.Mono, 10, Caps: true), fonts, rows, Eight);
+        Assert.Equal(new[] { 44f, 72f, 48f }, into);
+        // At 150% the CSS widths scale; a column is never narrower than them.
+        DetailColumns.Widths(into, css, 1.5f, heads, new ThemeFont(Face.Mono, 10, Caps: true), fonts, rows, (s, f) => 1);
+        Assert.Equal(new[] { 66f, 102f, 60f }, into);
+    }
+
+    [Fact]
+    public void A_dropdowns_chevron_keeps_its_gap()
+    {
+        // 11.2 in, the words (80), 6, the chevron (15), 11.2.
+        Assert.Equal(123.4f, Dropdown.Width(80, 15, 11.2f, 1), 3);
+        Assert.Equal(97.2f, Dropdown.ChevronAt(80, 11.2f, 1), 3);
+        // The chevron ends where the padding starts; the gap scales.
+        Assert.Equal(Dropdown.Width(80, 15, 11.2f, 1) - 11.2f, Dropdown.ChevronAt(80, 11.2f, 1) + 15, 3);
+        Assert.Equal(80 + 9f, Dropdown.ChevronAt(80, 0, 1.5f), 3);
+    }
 }

@@ -699,8 +699,8 @@ public sealed partial class MeterWindow : Window
         return clicked;
     }
 
-    /// <summary>A dropdown's button's width (`.mt-pick`): 8 in, the words (550 12px), 4, the chevron (13), 4.</summary>
-    private static float DropWidth(string label) => S(8) + Txt.Width(label, Face.SansMedium, 12) + S(4) + S(13) + S(4);
+    /// <summary>A dropdown's button's width (`.mt-pick`): 8 in, the words (550 12px), 6 (<see cref="Dropdown.Gap"/>), the chevron (13), 8.</summary>
+    private static float DropWidth(string label) => Dropdown.Width(Txt.Width(label, Face.SansMedium, 12), S(13), S(8), S(1));
 
     /// <summary>A dropdown's button (`.mt-pick`, the picker's and compact's tab menu): 24 tall, 6px corners, a hairline, its words and a chevron.</summary>
     private static bool DropButton(string id, Vector2 pos, float width, string label)
@@ -710,9 +710,8 @@ public sealed partial class MeterWindow : Window
         var (clicked, hovered, _) = Kit.Hit(id, pos, size);
         if (hovered) dl.AddRectFilled(pos, pos + size, Palette.U32(Palette.Hover), S(6));
         dl.AddRect(pos + new Vector2(0.5f), pos + size - new Vector2(0.5f), Palette.U32(Palette.Line2), S(6), ImDrawFlags.None, 1f);
-        var tx = pos.X + S(8);
-        tx += Txt.Line(dl, new Vector2(tx, pos.Y), label, Face.SansMedium, 12, Palette.Text, 24) + S(4);
-        Icons.Draw(dl, Icon.ChevronDown, new Vector2(tx, pos.Y + (size.Y - S(13)) / 2), S(13), Palette.Faint);
+        var lw = Txt.Line(dl, new Vector2(pos.X + S(8), pos.Y), label, Face.SansMedium, 12, Palette.Text, 24);
+        Icons.Draw(dl, Icon.ChevronDown, new Vector2(pos.X + Dropdown.ChevronAt(lw, S(8), S(1)), pos.Y + (size.Y - S(13)) / 2), S(13), Palette.Faint);
         Kit.FocusRing(pos, pos + size, S(6));
         return clicked;
     }
