@@ -17,7 +17,12 @@ Record the fights you're in, then make them into plans on
   and everyone's HP, and your party's own hits, heals and buffs, for the site's numbers; every action
   and potion your party used (the moments before the pull too), raises, interrupts and stuns, whom the
   boss was on and its enmity list, MP, barriers and the limit break gauge, for the site's replay,
-  timelines and events; and your own gear and stats as the pull began. Names are never kept, only jobs.
+  timelines and events; your own gear and stats as the pull began; and your party's names, home
+  worlds and levels, the game's version and the server's time, for your logs.
+- **Uploads every pull to your logs** on the Raid Codex as it ends, once you've linked your account
+  (in the background, one at a time; pulls kept while you're offline go when you're back). Your
+  logs are **public on the site**, with your party's names and worlds, as on FFLogs; you can make
+  yours private there (Settings → Your logs), or turn _Upload my logs_ off.
 - **Sends a pull to the Raid Codex** with one press, once you've linked your account. It waits
   on the Raid Codex's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
@@ -75,8 +80,11 @@ callouts (`unlock`, `preview` or `settings` after either).
   Crescent).
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
   working out your own strats. _Smoother replays_ (off) keeps their places four times a second.
-- **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first.
-- **Send each pull**: off. On, each pull is sent to the Raid Codex by itself.
+- **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first; pulls still to
+  be uploaded are held (up to 200).
+- **Upload my logs**: on (once linked). Every pull goes whole to your logs on the Raid Codex as it
+  ends. _Upload my older pulls_ sends the ones kept from before; _Who sees your logs_ opens the
+  site's Settings → Your logs, where you can make yours private.
 - **Track my progress**: on. How far each pull got, who died to what, the boss's HP left and each
   spot's damage, healing and fails (spots and jobs, no names).
 - **Show it in the server info bar**: on.

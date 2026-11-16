@@ -32,11 +32,27 @@ public sealed record DutyInfo(string Name, uint Territory, uint Content, bool Fi
 
 /// <summary>
 /// One player in the party, as the plan will have them: a spot (MT, OT, H1…), their job and role.
-/// Names are never kept. <paramref name="Id"/> is the recording's own number for them (1 to 8, or more in an alliance);
+/// <paramref name="Id"/> is the recording's own number for them (1 to 8, or more in an alliance);
 /// <paramref name="MaxHp"/> their max HP as the pull began (0 unknown; since 0.3.0); <paramref name="Self"/> the
 /// spot of the player who recorded it (since 0.4.0: the summary's <c>slots[].self</c>, the site's personal bests).
+/// Since 0.6.0, for the site's logs: their character's <paramref name="Name"/> and home <paramref name="World"/>
+/// (its name; each null when it couldn't be read, and then not written) and their <paramref name="Level"/> then
+/// (0 unknown). Never their content id.
 /// </summary>
-public sealed record PartyMember(int Id, string Slot, string Job, string Role, long MaxHp = 0, bool Self = false);
+public sealed record PartyMember(int Id, string Slot, string Job, string Role, long MaxHp = 0, bool Self = false, string? Name = null,
+    string? World = null, int Level = 0)
+{
+    /// <summary>The longest name or world kept (the site's limit; the game's names are at most 21 characters, its worlds' shorter).</summary>
+    public const int MostName = 40;
+
+    /// <summary>A name or world as it's kept: trimmed and cut to <see cref="MostName"/>; null when there's nothing.</summary>
+    public static string? Clean(string? s)
+    {
+        var t = s?.Trim();
+        if (string.IsNullOrEmpty(t)) return null;
+        return t.Length > MostName ? t[..MostName].TrimEnd() : t;
+    }
+}
 
 /// <summary>
 /// One piece of the recording player's gear (since 0.5.0): its place in the game's equipped-items container
@@ -523,6 +539,17 @@ public sealed class Recording
     /// <summary>The recording player's gear as the pull began (since 0.5.0), or null (older files; it couldn't be read).</summary>
     public Gear? Gear { get; set; }
 
+    /// <summary>The game's version as the pull began (since 0.6.0, <c>game</c>: "2025.07.17.0000.0000"), or null (older files; not read).</summary>
+    public string? GameVersion { get; set; }
+
+    /// <summary>
+    /// The game server's time as the pull began (since 0.6.0, <c>startedAt</c>, to the millisecond as <see cref="ServerClock"/> works it
+    /// out), or null (older files; not read).
+    /// <see cref="RecordedAt"/> is the computer's clock, which can be off by minutes; the server's is the same for the whole
+    /// party, so the site can tell two players' recordings of one pull apart from two pulls.
+    /// </summary>
+    public DateTimeOffset? StartedAt { get; set; }
+
     /// <summary>The mechanics in it: the enemies' casts, and their hits that came without one.</summary>
     public int MechanicCount => Timeline.Build(this).Count;
 
@@ -541,10 +568,12 @@ public sealed class Recording
         w.WriteString("format", FormatName);
         w.WriteNumber("version", FormatVersion);
         w.WriteString("plugin", PluginVersion);
-        w.WriteString("recordedAt", RecordedAt.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+        w.WriteString("recordedAt", Stamp(RecordedAt));
         w.WriteNumber("duration", CastEvent.Round(Duration, 2));
         w.WriteString("outcome", Words.OutcomeKey(Outcome));
         w.WriteNumber("pull", Pull);
+        if (!string.IsNullOrWhiteSpace(GameVersion)) w.WriteString("game", GameVersion);
+        if (StartedAt is { } started) w.WriteString("startedAt", started.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture));
 
         w.WriteStartObject("duty");
         w.WriteString("name", Duty.Name);
@@ -564,6 +593,9 @@ public sealed class Recording
             w.WriteString("role", p.Role);
             if (p.MaxHp > 0) w.WriteNumber("maxHp", p.MaxHp);
             if (p.Self) w.WriteBoolean("self", true);
+            if (PartyMember.Clean(p.Name) is { } name) w.WriteString("name", name);
+            if (PartyMember.Clean(p.World) is { } world) w.WriteString("world", world);
+            if (p.Level > 0) w.WriteNumber("lvl", p.Level);
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -671,6 +703,9 @@ public sealed class Recording
         }
     }
 
+    /// <summary>A time as the file writes it: UTC, to the second ("2026-11-16T20:31:05Z").</summary>
+    public static string Stamp(DateTimeOffset at) => at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+
     /// <summary>A copy with other frames (the rest shared): what's sent when the whole is too big.</summary>
     public Recording WithFrames(IEnumerable<Frame> frames, bool partyPositions) => With(frames, partyPositions, Combat);
 
@@ -686,6 +721,8 @@ public sealed class Recording
             Pull = Pull,
             Duty = Duty,
             PartyPositions = partyPositions,
+            GameVersion = GameVersion,
+            StartedAt = StartedAt,
         };
         r.Party.AddRange(Party);
         r.Actors.AddRange(Actors);
@@ -722,13 +759,17 @@ public sealed class Recording
             Outcome = Words.OutcomeFromKey(Str(o["outcome"])),
             Pull = Int(o["pull"]) ?? 1,
             PartyPositions = o["partyPositions"] is JsonValue pv && pv.TryGetValue<bool>(out var b) && b,
+            GameVersion = Str(o["game"]) is { } game && !string.IsNullOrWhiteSpace(game) ? (game.Length > 40 ? game[..40] : game).Trim() : null,
+            StartedAt = Str(o["startedAt"]) is { } started
+                && DateTimeOffset.TryParse(started, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var serverAt) ? serverAt : null,
         };
         if (o["duty"] is JsonObject d)
             r.Duty = new DutyInfo(Str(d["name"]) ?? "Unknown duty", (UInt(d["territory"]) ?? 0), (UInt(d["content"]) ?? 0),
                 d["field"] is JsonValue fv && fv.TryGetValue<bool>(out var field) && field);
         if (o["party"] is JsonArray party)
             foreach (var p in party.OfType<JsonObject>())
-                r.Party.Add(new PartyMember(Int(p["id"]) ?? 0, Str(p["slot"]) ?? "", Str(p["job"]) ?? "", Str(p["role"]) ?? "dps", Hp(p["maxHp"]) ?? 0, Bool(p["self"])));
+                r.Party.Add(new PartyMember(Int(p["id"]) ?? 0, Str(p["slot"]) ?? "", Str(p["job"]) ?? "", Str(p["role"]) ?? "dps", Hp(p["maxHp"]) ?? 0, Bool(p["self"]),
+                    PartyMember.Clean(Str(p["name"])), PartyMember.Clean(Str(p["world"])), Int(p["lvl"]) is { } lvl && lvl is > 0 and <= 1000 ? lvl : 0));
         if (o["actors"] is JsonArray actors)
             foreach (var a in actors.OfType<JsonObject>())
                 r.Actors.Add(new Actor(Int(a["id"]) ?? 0, Str(a["name"]) ?? "", Enum.TryParse<ActorKind>(Str(a["kind"]), true, out var k) ? k : ActorKind.Add,

@@ -341,6 +341,22 @@ public sealed class GameData
         jobs[classJob] = result;
         return result;
     }
+
+    private readonly Dictionary<uint, string?> worlds = new();
+
+    /// <summary>
+    /// A world's name ("Twintania") from its World sheet row (since 0.6.0: a party member's home world, for the recording), in
+    /// English (worlds have one name in every language); null for row 0 or one the sheet doesn't have.
+    /// </summary>
+    public string? WorldName(uint world)
+    {
+        if (world == 0) return null;
+        if (worlds.TryGetValue(world, out var known)) return known;
+        var name = Services.Data.GetExcelSheet<World>(ClientLanguage.English).TryGetRow(world, out var row) ? row.Name.ExtractText() : null;
+        name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        worlds[world] = name;
+        return name;
+    }
 }
 
 /// <summary>What the Item sheet says about a piece of gear (since 0.5.0): its name, item level, and whether it takes both hands.</summary>

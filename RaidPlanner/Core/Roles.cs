@@ -6,7 +6,10 @@ namespace RaidPlanner.Core;
 /// <summary>A player as the game lists them in the party: a key to find them again, their job, and the job's role.</summary>
 /// <param name="Role">The game's ClassJob role: 1 tank, 2 melee, 3 ranged (physical or magic), 4 healer.</param>
 /// <param name="MaxHp">Their max HP (0 unknown): the recording keeps it from the pull's start.</param>
-public sealed record Partier(ulong Key, string Job, byte Role, long MaxHp = 0);
+/// <param name="Name">Their character's name (null not read): since 0.6.0 the recording keeps it, for the site's logs.</param>
+/// <param name="World">Their home world's name (null not read), as <paramref name="Name"/>.</param>
+/// <param name="Level">Their level (0 unknown), as <paramref name="Name"/>.</param>
+public sealed record Partier(ulong Key, string Job, byte Role, long MaxHp = 0, string? Name = null, string? World = null, int Level = 0);
 
 /// <summary>
 /// The plan's spots for a party: tanks MT then OT, healers H1 then H2, melee M1 then M2, ranged R1

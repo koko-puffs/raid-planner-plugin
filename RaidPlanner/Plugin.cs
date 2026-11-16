@@ -34,6 +34,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly SiteSession site;
     private readonly PlanService plans;
     private readonly Uploads uploads;
+
+    /// <summary>Upload my logs (since 0.6.0): each kept pull whole to the site's logs.</summary>
+    private readonly LogUploader logs;
     private readonly Fonts fonts;
     private readonly WindowSystem windows = new("RaidPlanner");
     private readonly MainWindow window;
@@ -64,6 +67,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         pluginInterface.Create<Services>();
         config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        // Settings saved by 0.5.x (version 1): Upload my logs on, from now (0.6.0); a new one starts from now too.
+        if (config.Migrate(DateTimeOffset.Now)) config.Save();
         try
         {
             var version = typeof(Plugin).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
@@ -87,9 +92,10 @@ public sealed class Plugin : IDalamudPlugin
             site = new SiteSession(() => config.SiteToken);
             plans = new PlanService(config, data, recorder, site);
             uploads = new Uploads(config, data, recorder, site);
+            logs = new LogUploader(config, store, recorder, site, version);
 
             fonts = new Fonts();
-            window = new MainWindow(config, store, recorder, site, plans, uploads, fonts);
+            window = new MainWindow(config, store, recorder, site, plans, uploads, logs, fonts);
             planWindow = new PlanWindow(config, plans, recorder, data, fonts);
             meterWindow = new MeterWindow(config, fonts);
             meterDetail = new MeterDetailWindow(config, fonts);
@@ -281,11 +287,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnKept(RecordingInfo info)
     {
         justKept = (info, DateTime.UtcNow + TimeSpan.FromSeconds(10));
-        // Send each pull: by itself, quietly (the window says how it went).
-        if (config.SendEachPull && site.Linked) window.SendPull(info, r =>
-        {
-            if (!r.Sent) PlanService.Print($"Couldn't send pull {info.Pull}: {r.Why}");
-        });
+        // Since 0.6.0 Upload my logs sends it (LogUploader: it's in the store now, so it's waiting there).
     }
 
     /// <summary>/raidcodex send last: the newest kept pull to the Raid Codex, said in chat.</summary>
@@ -398,6 +400,7 @@ public sealed class Plugin : IDalamudPlugin
         Safely(windows.RemoveAllWindows);
         Safely(() => plans?.Dispose());
         Safely(() => uploads?.Dispose());
+        Safely(() => logs?.Dispose());
         // Calls to the site under way stop here; a pull being saved is still waited for below.
         Safely(() => site?.Dispose());
         Safely(() => cooldowns?.Dispose());

@@ -51,7 +51,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Sends a kept pull to your Raid Codex (Send each pull, /raidcodex send last); <paramref name="done"/>
+    /// Sends a kept pull to your Raid Codex (its Send button, /raidcodex send last); <paramref name="done"/>
     /// hears how it went, on the framework thread. False when it can't go now (not linked, already going).
     /// </summary>
     public bool SendPull(RecordingInfo info, Action<SendResult>? done = null)

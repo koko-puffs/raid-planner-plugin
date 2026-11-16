@@ -205,7 +205,8 @@ public sealed class RecordingBuilder
         {
             if (partyIds.ContainsKey(who.Key)) continue;
             partyIds[who.Key] = id;
-            recording.Party.Add(new PartyMember(id, slot, who.Job, Roles.RoleWord(who.Role), Math.Max(0, who.MaxHp)));
+            recording.Party.Add(new PartyMember(id, slot, who.Job, Roles.RoleWord(who.Role), Math.Max(0, who.MaxHp), false,
+                PartyMember.Clean(who.Name), PartyMember.Clean(who.World), Math.Max(0, who.Level)));
             id++;
         }
     }
@@ -220,6 +221,16 @@ public sealed class RecordingBuilder
 
     /// <summary>The recording player's gear as the pull began (since 0.5.0; null: not read).</summary>
     public void SetGear(Gear? gear) => recording.Gear = gear;
+
+    /// <summary>
+    /// The game's version and its server's time as the pull began (since 0.6.0; each null when not read): the file's <c>game</c>
+    /// and <c>startedAt</c>.
+    /// </summary>
+    public void SetGame(string? version, DateTimeOffset? serverTime)
+    {
+        recording.GameVersion = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        recording.StartedAt = serverTime;
+    }
 
     /// <summary>The recording player's party id (0 not known).</summary>
     public int SelfId => recording.Party.FirstOrDefault(p => p.Self)?.Id ?? 0;

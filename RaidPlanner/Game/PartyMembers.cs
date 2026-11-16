@@ -11,9 +11,10 @@ namespace RaidPlanner.Game;
 /// A party member as <see cref="PartyMembers"/> has them this frame: their entity id (0 when it isn't known: a cross-world
 /// member the game gave none for and who isn't near), name, ClassJob row and level; their HP (the party list's, at any
 /// distance; a cross-world member's from their character, when near), whether they're near (in the game's character list)
-/// and in combat; and whether it's you.
+/// and in combat; whether it's you; and (since 0.6.0) their home world's row (0 not known).
 /// </summary>
-public readonly record struct PartyMember(uint EntityId, ulong ContentId, string Name, uint ClassJob, byte Level, uint Hp, uint MaxHp, bool Near, bool InCombat, bool IsYou)
+public readonly record struct PartyMember(uint EntityId, ulong ContentId, string Name, uint ClassJob, byte Level, uint Hp, uint MaxHp, bool Near, bool InCombat, bool IsYou,
+    ushort HomeWorld = 0)
 {
     /// <summary>A key to find them again (their entity id, else their content id): what <see cref="Partier.Key"/> holds.</summary>
     public ulong Key => PartyPick.Valid(EntityId) ? EntityId : ContentId;
@@ -137,13 +138,13 @@ public static unsafe class PartyMembers
             listed |= PartyPick.Valid(m.EntityId);
             i++;
         }
-        var self = new PartySeat(me.EntityId, ContentIdOf(me.Address), me.Name.TextValue, me.ClassJob.RowId, me.Level);
+        var self = new PartySeat(me.EntityId, ContentIdOf(me.Address), me.Name.TextValue, me.ClassJob.RowId, me.Level, (ushort)me.HomeWorld.RowId);
         // The cross-world party only when the party list has nobody (it's the list's otherwise, even in a duty).
         var cross = listed ? null : ReadCrossWorld();
         choice = PartyPick.Choose(listBuffer, cross, self, Resolve);
         members.Clear();
         foreach (var s in choice.Members)
-            members.Add(new PartyMember(s.EntityId, s.ContentId, s.Name, s.ClassJob, s.Level, 0, 0, false, false, s.EntityId == me.EntityId));
+            members.Add(new PartyMember(s.EntityId, s.ContentId, s.Name, s.ClassJob, s.Level, 0, 0, false, false, s.EntityId == me.EntityId, s.HomeWorld));
         Log(cross);
     }
 

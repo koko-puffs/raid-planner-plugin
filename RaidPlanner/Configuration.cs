@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Dalamud.Configuration;
+using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
 using RaidPlanner.UI.Model;
 
@@ -10,7 +11,8 @@ namespace RaidPlanner;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    /// <summary>The settings' version: 2 since 0.6.0 (<see cref="Migrate"/>).</summary>
+    public int Version { get; set; } = UploadPrefs.Current;
 
     /// <summary>Record every fight in a duty by itself, from the pull until combat ends.</summary>
     public bool AutoRecord { get; set; } = true;
@@ -36,8 +38,17 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>"● Rec 2:31" in the server info bar while a pull is recorded.</summary>
     public bool ShowInBar { get; set; } = true;
 
-    /// <summary>Each kept pull is sent to the Raid Codex by itself (when linked).</summary>
-    public bool SendEachPull { get; set; }
+    /// <summary>
+    /// Upload my logs (since 0.6.0; on): every kept pull goes whole to your logs on the Raid Codex as it ends (when linked). Replaces
+    /// 0.5's Send each pull (off by default), which a 0.5 configuration's value is dropped for (<see cref="Migrate"/>).
+    /// </summary>
+    public bool UploadLogs { get; set; } = true;
+
+    /// <summary>
+    /// Since 0.6.0: the pulls uploaded are those that ended since this (set when 0.6.0 first loads, and each time Upload my logs is
+    /// turned on); <see cref="DateTimeOffset.MinValue"/> after Upload my older pulls (every kept pull). Null until first set.
+    /// </summary>
+    public DateTimeOffset? UploadSince { get; set; }
 
     /// <summary>Each kept pull's summary (how far it got, who died to what) goes to the site's progress tracker (when linked).</summary>
     public bool TrackProgress { get; set; } = true;
@@ -172,6 +183,21 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>The token from the site (Settings → Raid Codex → In-game plugin) that sends pulls to your account. Never logged.</summary>
     public string SiteToken { get; set; } = string.Empty;
+
+    /// <summary>What's uploaded, as <see cref="UploadPrefs"/> has it (a method, so it isn't saved with the settings).</summary>
+    public UploadPrefs UploadPrefsNow() => new(Version, UploadLogs, UploadSince);
+
+    /// <summary>Brings settings saved by an older version up to this one (<see cref="UploadPrefs.Migrate"/>); true when anything changed (then save).</summary>
+    public bool Migrate(DateTimeOffset now)
+    {
+        var was = UploadPrefsNow();
+        var to = UploadPrefs.Migrate(was, now);
+        if (to == was) return false;
+        Version = to.Version;
+        UploadLogs = to.UploadLogs;
+        UploadSince = to.UploadSince;
+        return true;
+    }
 
     public void Save() => Services.PluginInterface.SavePluginConfig(this);
 }

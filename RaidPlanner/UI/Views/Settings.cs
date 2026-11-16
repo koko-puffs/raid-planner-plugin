@@ -166,8 +166,8 @@ public sealed partial class MainWindow
             config.RecordAllDuties = !config.RecordAllDuties;
             config.Save();
         }
-        if (SwitchRow(i++, "##party", "Record where the party stands", "Their places come along into the plan. Names are never kept.", config.RecordParty,
-                "On, the plan shows where everyone stood at each mechanic (you can still swap to standard spots on the site). Off, only the enemies and their attacks are kept, for when you'd rather work out your own strats. Names are never kept, only jobs."))
+        if (SwitchRow(i++, "##party", "Record where the party stands", "Their places come along into the plan", config.RecordParty,
+                "On, the plan shows where everyone stood at each mechanic (you can still swap to standard spots on the site). Off, only the enemies and their attacks are kept, for when you'd rather work out your own strats. Each pull keeps the party's jobs, and (since 0.6.0, for your logs) their names, home worlds and levels."))
         {
             config.RecordParty = !config.RecordParty;
             config.Save();
@@ -181,7 +181,7 @@ public sealed partial class MainWindow
         }
         var delta = StepperRow(i++, "##keep", "Keep the last", "Past that, the oldest sent ones go first", config.Keep.ToString(System.Globalization.CultureInfo.InvariantCulture),
             config.Keep > 5, config.Keep < 100,
-            "Pulls are kept in the plugin's folder until there are more than this; then, as each new one is kept, the oldest you've sent goes first (the site keeps your newest 30 sends), and only then the oldest you haven't. Lowering it deletes nothing now.");
+            "Pulls are kept in the plugin's folder until there are more than this; then, as each new one is kept, the oldest already on the site goes first, and only then the oldest that isn't. Pulls still waiting to be uploaded are held (up to 200) until they've gone. Lowering it deletes nothing now.");
         if (delta != 0)
         {
             config.Keep = Math.Clamp(config.Keep + delta * 5, 5, 100);
@@ -189,12 +189,21 @@ public sealed partial class MainWindow
             // Nothing is deleted on a click: the next pull kept lets the extra ones go.
             store.Keep = config.Keep;
         }
-        if (SwitchRow(i++, "##send-each", "Send each pull", "Each kept pull goes to your Raid Codex by itself", config.SendEachPull,
-                "Each pull worth keeping is sent to your Raid Codex as soon as it's kept, so it's waiting under From the game. Off, you send the ones you want.",
+        if (SwitchRow(i++, "##upload", "Upload my logs", "Every pull goes to your logs on the Raid Codex as it ends", config.UploadLogs,
+                "Each pull worth keeping goes whole to your logs on the site as soon as it's kept, in the background, one at a time. Pulls kept while you're offline go when you're back. Your logs are public on the site, with your party's names and home worlds, as on FFLogs; you can make yours private there. Off, nothing is uploaded (you can still send a pull yourself).",
                 off: !Linked, linkFirst: !Linked))
+            logs.SetOn(!config.UploadLogs);
+        if (config.UploadLogs && Linked)
         {
-            config.SendEachPull = !config.SendEachPull;
-            config.Save();
+            var older = logs.OlderCount;
+            if (ButtonRow(i++, "##upload-older", "Upload my older pulls", UploadStatus(older), "Upload", Btn.Outline, older == 0,
+                    older == 0 ? "Every pull kept here is on the site or on its way." : null,
+                    "The pulls kept here from before Upload my logs was on go too, the oldest first (the site takes 60 an hour).", sub: true))
+                logs.UploadOlder();
+            if (ButtonRow(i++, "##logs-private", "Who sees your logs", "Public on the site, with names. Make yours private there.", "Open", Btn.Outline, false, null,
+                    "Your logs are public on the Raid Codex, as on FFLogs: each pull with your party's names and home worlds. In the site's Settings → Your logs you can make yours private (then they're unranked too) or hide your character.",
+                    icon: Icon.ExternalLink, sub: true))
+                Dalamud.Utility.Util.OpenLink(SiteLink.LogsSettingsUrl);
         }
         if (SwitchRow(i++, "##progress", "Track my progress", "How far each pull got, for Progress on the site", config.TrackProgress,
                 "After each kept pull, a few numbers go to your account: the duty, how long it lasted, the furthest phase, the boss's HP left, who died to what and what hit the party (by spot and job, never names). The site charts your progress from them.",
@@ -222,6 +231,21 @@ public sealed partial class MainWindow
             Kit.Gap(12);
             Kit.NoteBox(problem, warn: true);
         }
+    }
+
+    /// <summary>Upload my older pulls' line: what's waiting, why it's held up, or why it stopped.</summary>
+    private string UploadStatus(int older)
+    {
+        if (logs.Stopped is { } stopped) return "Stopped: " + stopped;
+        var waiting = logs.WaitingCount;
+        if (logs.Held is { } held && waiting > 0)
+        {
+            var until = logs.HeldUntil;
+            var left = until > DateTime.UtcNow ? until - DateTime.UtcNow : TimeSpan.Zero;
+            return $"{Words.Count(waiting, "pull")} waiting. {held.TrimEnd('.')}{(left >= TimeSpan.FromMinutes(1) ? $": again in {(int)Math.Ceiling(left.TotalMinutes)} min" : "")}.";
+        }
+        if (waiting > 0) return logs.Uploading ? $"Uploading: {Words.Count(waiting, "pull")} to go" : $"{Words.Count(waiting, "pull")} waiting";
+        return older > 0 ? $"{Words.Count(older, "pull")} kept from before" : "Every pull is on the site";
     }
 
     private void DrawPlansTab()
@@ -275,7 +299,7 @@ public sealed partial class MainWindow
             else Kit.NoteBox(note.Text);
             Kit.Gap(12);
         }
-        Txt.Note("Send my party sends names to your own account only, and only when you press it. Nothing else the plugin sends has names in it.");
+        Txt.Note("Send my party sends names to your own account only, and only when you press it. Your logs (Upload my logs, under Recording) carry your party's names too.");
         Kit.Gap(18);
         DrawCalloutSettings();
     }
@@ -609,7 +633,7 @@ public sealed partial class MainWindow
             Kit.NoteBox(problem, warn: true);
         }
         Kit.Gap(12);
-        Txt.Note("The meter's numbers and names stay in the plugin. The pull you send carries the party's numbers by spot and job, never by name.");
+        Txt.Note("The meter's numbers and names stay in the plugin. Your logs on the site carry the party's numbers with their names (unless you turn Upload my logs off).");
     }
 
     private void DrawAccountTab()
@@ -728,11 +752,11 @@ public sealed partial class MainWindow
 
     /// <summary>A setting with a dense button on the right; true when it's pressed.</summary>
     private bool ButtonRow(int index, string id, string name, string? note, string label, Btn style = Btn.Outline, bool disabled = false,
-        string? buttonTip = null, string? tip = null, bool off = false, bool linkFirst = false, Icon? icon = null, float pad = 11)
+        string? buttonTip = null, string? tip = null, bool off = false, bool linkFirst = false, Icon? icon = null, float pad = 11, bool sub = false)
     {
         var pressed = false;
         SetRow(index, name, note, Kit.ButtonWidth(label, BtnSize.Sm, icon, style), S(HSm),
-            p => pressed = Kit.Button(id, p, label, style, BtnSize.Sm, icon, 0, disabled, buttonTip), tip, off, false, linkFirst, null, pad);
+            p => pressed = Kit.Button(id, p, label, style, BtnSize.Sm, icon, 0, disabled, buttonTip), tip, off, sub, linkFirst, null, pad);
         return pressed;
     }
 }
