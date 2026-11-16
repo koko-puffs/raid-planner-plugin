@@ -582,7 +582,7 @@ public sealed partial class MainWindow
             config.MeterGauge = (GaugePlace)gauge;
             config.Save();
         }
-        // The theme: the compact meter's, the normal meter's and the opened-up window's (since 0.7.2), with its role colours and decorations under it.
+        // The theme: the compact meter's, the normal meter's and the opened-up window's (since 0.7.3), with its role colours and decorations under it.
         ThemeBlock(i++, false);
         var roles = SegmentRow(i++, "##meter-roles", "Role colours", "The bars' and icons' colours", RoleItems, (int)config.MeterRoleColours, sub: true,
             tip: "The theme's: a blue, a green and a red-orange told apart with any colour blindness (each theme has its own set). The game's: its own blue, green and red, as the party list has them.");
