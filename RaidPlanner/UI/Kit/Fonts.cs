@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Dalamud.Game;
 using Dalamud.Interface.GameFonts;
 using Dalamud.Interface.ManagedFontAtlas;
@@ -88,9 +89,19 @@ public sealed class Fonts : IDisposable
 
     private readonly IFontAtlas atlas;
 
+    private int generation;
+
+    /// <summary>
+    /// Counts the atlas's builds (and a theme's faces changing): what was measured in a font before
+    /// (the compact meter's columns) is measured again when it moves. Read from the draw thread; a build
+    /// may step on another.
+    /// </summary>
+    public int Generation => Volatile.Read(ref generation);
+
     public Fonts()
     {
         atlas = Services.PluginInterface.UiBuilder.FontAtlas;
+        atlas.BuildStepChange += OnBuildStep;
         Japanese = Services.ClientState.ClientLanguage == ClientLanguage.Japanese;
         var alike = new Dictionary<(string File, float Size, bool Languages), IFontHandle>();
         foreach (var (face, px) in Wanted)
@@ -149,6 +160,7 @@ public sealed class Fonts : IDisposable
             if (!themed.ContainsKey((face, px)))
                 themed[(face, px)] = MakeThemed(face, px);
         nearest.Clear();
+        Interlocked.Increment(ref generation);
     }
 
     /// <summary>A theme's face: the game's through Dalamud, else a shipped file at its line's size.</summary>
@@ -218,8 +230,11 @@ public sealed class Fonts : IDisposable
         }
     }
 
+    private void OnBuildStep(IFontAtlasBuildToolkit toolkit) => Interlocked.Increment(ref generation);
+
     public void Dispose()
     {
+        atlas.BuildStepChange -= OnBuildStep;
         // Each built font once (faces built alike share one).
         foreach (var h in built) h.Dispose();
         built.Clear();

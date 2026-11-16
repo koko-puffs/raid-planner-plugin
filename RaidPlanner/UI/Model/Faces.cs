@@ -30,7 +30,7 @@ public enum Face
     /// <summary>Zen Maru Gothic 700 (Mochi's names and labels; latin only, OFL). Since 0.7.0.</summary>
     Round,
 
-    /// <summary>Zen Maru Gothic 900 (Mochi's numbers and clock).</summary>
+    /// <summary>Zen Maru Gothic 900 (Mochi's name on your row; its numbers and clock are Geist SemiBold since 0.7.0's test builds).</summary>
     RoundBlack,
 
     /// <summary>Fraunces 500 at opsz 14 (Grimoire's names and labels; latin, OFL).</summary>
@@ -42,7 +42,7 @@ public enum Face
     /// <summary>The game's Axis (Native's names and labels), through Dalamud: nothing shipped, and it has Japanese.</summary>
     GameAxis,
 
-    /// <summary>The game's MiedingerMid (Native's numbers, as the party list's HP).</summary>
+    /// <summary>The game's MiedingerMid (as the party list's HP). Not drawn by a theme: at the meter's sizes it lost its decimal points, so Native's numbers are Axis.</summary>
     GameNumbers,
 
     /// <summary>The game's Jupiter (Native's title band).</summary>

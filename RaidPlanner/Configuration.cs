@@ -117,10 +117,17 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool MeterCompact { get; set; } = true;
 
-    /// <summary>The height you gave the meter in compact (as <see cref="MeterHeight"/>, kept apart: compact is shorter).</summary>
+    /// <summary>
+    /// The height given the old compact meter by hand (0.4.0 to 0.6.0). Ignored since 0.7.0: the
+    /// compact meter can't be resized (its height is its rows'). Still read from older settings, and
+    /// cleared by <see cref="Migrate"/>.
+    /// </summary>
     public float MeterCompactHeight { get; set; }
 
-    /// <summary>The width you gave the compact meter (CSS px; 0: its theme's own, 248 for Ready Check). Since 0.7.0.</summary>
+    /// <summary>
+    /// A width given the compact meter by hand (0.7.0's test builds only). Ignored: the compact meter
+    /// can't be resized (its width is its theme's). Still read, and cleared by <see cref="Migrate"/>.
+    /// </summary>
     public float MeterCompactWidth { get; set; }
 
     /// <summary>The compact meter folded to one line by hand (the clock, the phase, you and your rank, deaths, the LB). Since 0.7.0.</summary>
@@ -230,6 +237,14 @@ public sealed class Configuration : IPluginConfiguration
         if (look != (MeterLook, MeterCompact, MeterCompactHeight))
         {
             (MeterLook, MeterCompact, MeterCompactHeight) = look;
+            changed = true;
+        }
+        // 0.7.0: the compact meter isn't sized by hand (its width is its theme's, its height its rows'):
+        // a height or width given it before is read but ignored, and cleared here.
+        if (MeterCompactHeight != 0 || MeterCompactWidth != 0)
+        {
+            MeterCompactHeight = 0;
+            MeterCompactWidth = 0;
             changed = true;
         }
         return changed;

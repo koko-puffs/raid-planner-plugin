@@ -20,6 +20,9 @@ namespace RaidPlanner.UI;
 /// foot. Compact (since 0.7.0 the default: <see cref="PlateMeter"/>, in MeterWindow.Plate.cs), the top
 /// eight on plates in the theme picked, the tabs and the picker in one menu in its head.
 /// Locked, it has no title bar and can't be moved or sized; click-through, the mouse goes to the game.
+/// Only the normal meter, unlocked, can be sized by hand (<see cref="MeterLayout.Resizable"/>): its
+/// head's buttons are kept out of the reach of its edges and corners, and while the mouse is over one
+/// it isn't resizable that frame (<see cref="ResizeGuard"/>), so a press there is the button's.
 /// In a fight it's as tall as the party needs (at most the height you gave it); out of combat it folds
 /// to one line (as it shrinks to the Boss before any fight, or when the meter has stopped). It stays
 /// put at its anchor as it does: its top edge growing down, its foot growing up (its head at the foot
@@ -121,8 +124,11 @@ public sealed partial class MeterWindow : Window
     /// <summary>The height asked for in a fight last (screen px; NaN before any): a different one while held is one you gave it.</summary>
     private float fightH = float.NaN;
 
-    /// <summary>A height you gave it by its edge (CSS px; 0 none), kept once you let go.</summary>
+    /// <summary>A height you gave the normal meter by its edge (CSS px; 0 none), kept once you let go.</summary>
     private float givenNow;
+
+    /// <summary>The head's and foot's buttons kept clear of the resizing edges (the normal meter's).</summary>
+    private readonly ResizeGuard guard = new();
 
     /// <summary>The anchor moved with you while held: saved once you let go.</summary>
     private bool anchorMoved;
@@ -271,6 +277,8 @@ public sealed partial class MeterWindow : Window
         Theme.PushInside();
         try
         {
+            // Before a font is pushed: the resize grip is sized by the font at Begin.
+            guard.Frame();
             Track();
             using (fonts.Push(Face.Sans, 13))
             {
@@ -353,6 +361,8 @@ public sealed partial class MeterWindow : Window
             Flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
             if (config.MeterClickThrough) Flags |= ImGuiWindowFlags.NoInputs;
         }
+        // Compact is never resized by hand; the normal meter isn't while the mouse is over its buttons (a press there is theirs).
+        if (!MeterLayout.Resizable(config.MeterCompact, config.MeterLocked) || guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = ImGuiHelpers.GlobalScale;
         var chrome = config.MeterLocked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         if (config.MeterCompact)
@@ -437,10 +447,8 @@ public sealed partial class MeterWindow : Window
         {
             SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
             anchorMoved = true;
-            // Sized by its edge in a fight: that's the height you're giving it.
-            if (view is View.Fight or View.Waiting && !PlateOneLine && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / ImGuiHelpers.GlobalScale;
-            // Compact keeps its own width (its theme's until you give it one).
-            if (config.MeterCompact && MathF.Abs(size.X - lastSize.X) > 0.5f) givenWidth = size.X / ImGuiHelpers.GlobalScale;
+            // The normal meter sized by its edge in a fight: that's the height you're giving it (compact can't be sized).
+            if (!config.MeterCompact && view is View.Fight or View.Waiting && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / ImGuiHelpers.GlobalScale;
         }
         lastPos = pos;
         lastSize = size;
@@ -458,16 +466,9 @@ public sealed partial class MeterWindow : Window
     /// <summary>Once you let go: the height you gave it and where you put it, saved once (not every frame of the drag).</summary>
     private void Commit()
     {
-        if (givenWidth > 0)
-        {
-            config.MeterCompactWidth = MathF.Round(givenWidth);
-            givenWidth = 0;
-            anchorMoved = true;
-        }
         if (givenNow > 0)
         {
-            if (config.MeterCompact) config.MeterCompactHeight = MathF.Round(givenNow);
-            else config.MeterHeight = MathF.Round(givenNow);
+            config.MeterHeight = MathF.Round(givenNow);
             givenNow = 0;
             anchorMoved = true;
         }
@@ -598,8 +599,11 @@ public sealed partial class MeterWindow : Window
         headBottom = y + h;
         var cy = y + h / 2;
         var right = left + w - S(6);
-        // The lock (`.mt-ib`): ember-washed when locked, a pointer when click-through, quiet when open.
+        // The lock (`.mt-ib`): ember-washed when locked, a pointer when click-through, quiet when open. Out of
+        // the reach of the window's right edge and (growing up, its head at the foot) its bottom-right grip.
         var lx = right - S(24);
+        lx -= guard.ShiftLeft(new Vector2(lx, cy - S(12)), new Vector2(lx + S(24), cy + S(12)));
+        guard.Keep(new Vector2(lx, cy - S(12)), new Vector2(lx + S(24), cy + S(12)));
         var locked = config.MeterLocked;
         var icon = !locked ? Icon.LockOpen : config.MeterClickThrough ? Icon.MousePointer : Icon.Lock;
         if (SmallButton("##meter-lock", new Vector2(lx, cy - S(12)), icon, locked, locked ? "Locked where it is. Press to move and size it again." : "Lock it where it is"))
@@ -613,6 +617,7 @@ public sealed partial class MeterWindow : Window
             // The picker (`.mt-pick`): 24 tall, 6px corners, a hairline; "Pull 12 ⌄".
             var pw = DropWidth(pick);
             var px = edge - S(8) - pw;
+            guard.Keep(new Vector2(px, cy - S(12)), new Vector2(px + pw, cy + S(12)));
             if (DropButton("##meter-pick", new Vector2(px, cy - S(12)), pw, pick)) ImGui.OpenPopup(Picker);
             DrawPicker(m, px);
             edge = px;
@@ -664,10 +669,20 @@ public sealed partial class MeterWindow : Window
     private void PreviewTag(ImDrawListPtr dl, Vector2 pos)
     {
         var w = Kit.TagWidth("Preview", TagKind.Plain);
+        guard.Keep(pos, pos + new Vector2(w, S(18)));
         var (clicked, hovered, _) = Kit.Hit("##meter-preview", pos, new Vector2(w, S(18)));
         Kit.Tag(dl, pos, "Preview", TagKind.Plain, 18);
         if (hovered) Kit.Tooltip("A sample fight with made-up numbers. Press to stop it; a real fight stops it too.");
         if (clicked) Preview = null;
+    }
+
+    /// <summary>The Preview tag in the foot, its right edge at <paramref name="right"/> (moved in out of the bottom-right grip's reach when the foot is at the bottom), on the foot's middle.</summary>
+    private void FootPreviewTag(ImDrawListPtr dl, float right, float footY, float footH)
+    {
+        var w = Kit.TagWidth("Preview", TagKind.Plain);
+        var pos = new Vector2(right - w, footY + (footH - S(18)) / 2);
+        pos.X -= guard.ShiftLeft(pos, pos + new Vector2(w, S(18)));
+        PreviewTag(dl, pos);
     }
 
     /// <summary>A 24px square icon button (`.mt-ib`): muted, ember-washed when on.</summary>
@@ -890,7 +905,7 @@ public sealed partial class MeterWindow : Window
         var rx = left + w - S(z.Pad);
         if (previewInFoot)
         {
-            PreviewTag(dl, new Vector2(rx - Kit.TagWidth("Preview", TagKind.Plain), y + (h - S(18)) / 2));
+            FootPreviewTag(dl, rx, y, h);
             return;
         }
         var right = DateTime.UtcNow - copiedAt < CopiedFor ? "copied to the clipboard"
@@ -1017,7 +1032,7 @@ public sealed partial class MeterWindow : Window
         var fh = S(z.Foot);
         Kit.Rule(dl, left, left + w, stack.Toward(footY, fh));
         Txt.Line(dl, new Vector2(left + S(z.Pad), footY), DeathFoot(deaths.Count, cut, said.Wipe > 0), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        if (previewInFoot) PreviewTag(dl, new Vector2(left + w - S(z.Pad) - Kit.TagWidth("Preview", TagKind.Plain), footY + (fh - S(18)) / 2));
+        if (previewInFoot) FootPreviewTag(dl, left + w - S(z.Pad), footY, fh);
         else Txt.LineRight(dl, left + w - S(z.Pad), footY, said.PullWord, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
     }
 
@@ -1079,7 +1094,7 @@ public sealed partial class MeterWindow : Window
         Kit.Rule(dl, left, left + w, stack.Toward(footY, fh));
         var lw = Txt.Line(dl, new Vector2(left + S(z.Pad), footY), Txt.Fit(f.Foot, Face.Mono, z.FootPx, w * 0.62f), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
         var rx = left + w - S(z.Pad);
-        if (previewInFoot) PreviewTag(dl, new Vector2(rx - Kit.TagWidth("Preview", TagKind.Plain), footY + (fh - S(18)) / 2));
+        if (previewInFoot) FootPreviewTag(dl, rx, footY, fh);
         else
         {
             var rw = Txt.LineRight(dl, rx, footY, DateTime.UtcNow - copiedAt < CopiedFor ? "copied" : said.PullWord, Face.Mono, z.FootPx, Palette.Muted, z.Foot);

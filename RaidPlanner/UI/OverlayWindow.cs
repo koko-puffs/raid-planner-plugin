@@ -14,8 +14,10 @@ namespace RaidPlanner.UI;
 /// grows (its top edge growing down, its foot growing up: <see cref="MeterLayout"/>), lockable (no title
 /// bar, no moving or sizing) and click-through when locked. You give it its width; its height is its
 /// own. While you hold it (unlocked) it's neither placed nor sized, and its width and anchor are kept
-/// once you let go. It never takes focus, makes no sounds and ignores Escape. Drawing catches what
-/// goes wrong and logs it now and then.
+/// once you let go. Its own buttons (the Preview tag) are kept out of the reach of its resizing edges
+/// and corners, and while the mouse is over one it isn't resizable that frame (<see cref="ResizeGuard"/>).
+/// It never takes focus, makes no sounds and ignores Escape. Drawing catches what goes wrong and logs
+/// it now and then.
 /// </summary>
 public abstract class OverlayWindow : Window
 {
@@ -33,6 +35,9 @@ public abstract class OverlayWindow : Window
     private Vector2 lastSize;
     private bool drawnOnce;
     private bool dirty;
+
+    /// <summary>Its buttons kept clear of the resizing edges.</summary>
+    private readonly ResizeGuard guard = new();
 
     /// <summary>The content's height asked for this frame (screen px), worked out before Begin.</summary>
     private float contentH;
@@ -137,6 +142,8 @@ public abstract class OverlayWindow : Window
             Flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
             if (s.ClickThrough) Flags |= ImGuiWindowFlags.NoInputs;
         }
+        // Not resizable while the mouse is over one of its buttons: a press there is theirs.
+        else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = ImGuiHelpers.GlobalScale;
         var chrome = s.Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         contentH = MathF.Max(S(8), S(Measure(WidthCss)));
@@ -208,6 +215,8 @@ public abstract class OverlayWindow : Window
         Theme.PushInside();
         try
         {
+            // Before a font is pushed: the resize grip is sized by the font at Begin.
+            guard.Frame();
             Track();
             using (Fonts.Push(Face.Sans, 13))
             {
@@ -260,10 +269,12 @@ public abstract class OverlayWindow : Window
         Config.Save();
     }
 
-    /// <summary>The Preview tag (`.tag`), and pressed, the sample stops. Returns its width.</summary>
+    /// <summary>The Preview tag (`.tag`), and pressed, the sample stops; moved in out of the resizing edges' reach. Returns its width.</summary>
     protected float PreviewTag(ImDrawListPtr dl, Vector2 pos, string id)
     {
         var w = Kit.TagWidth("Preview", TagKind.Plain);
+        pos.X -= guard.ShiftLeft(pos, pos + new Vector2(w, S(18)));
+        guard.Keep(pos, pos + new Vector2(w, S(18)));
         var (clicked, hovered, _) = Kit.Hit(id, pos, new Vector2(w, S(18)));
         Kit.Tag(dl, pos, "Preview", TagKind.Plain, 18);
         if (hovered) Kit.Tooltip("A sample with made-up numbers. Press to stop it.");

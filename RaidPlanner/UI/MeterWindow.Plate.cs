@@ -11,9 +11,10 @@ namespace RaidPlanner.UI;
 
 /// <summary>
 /// The meter compact (since 0.7.0 the default; round four's "Plate", <see cref="PlateMeter"/>): sized
-/// for its rows (at most eight and the limit break) in its theme, its width its theme's until you give it
-/// one, one line when folded or collapsed, its one menu ("DPS ⌄": the tabs, the pulls, Copy as text,
-/// Pace against, Compact, One line), the details panel beside it when a row is pointed at.
+/// for its rows (at most eight and the limit break) in its theme, its width its theme's, never by hand
+/// (its window can't be resized: a size given it would only snap back), one line when folded or
+/// collapsed, its one menu ("DPS ⌄": the tabs, the pulls, Copy as text, Pace against, Compact, One
+/// line), the details panel beside it when a row is pointed at.
 /// </summary>
 public sealed partial class MeterWindow
 {
@@ -25,9 +26,6 @@ public sealed partial class MeterWindow
     private static readonly WindowSizeConstraints PlateSizesLimits = new() { MinimumSize = new Vector2(200, 20), MaximumSize = new Vector2(720, 1400) };
 
     private readonly PlateMeter plate = new();
-
-    /// <summary>A width you gave the compact meter by its edge (CSS px; 0 none), kept once you let go.</summary>
-    private float givenWidth;
 
     private float plateMenuH;
 
@@ -79,25 +77,21 @@ public sealed partial class MeterWindow
     private static double Now() => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
 
     /// <summary>
-    /// Before ImGui.Begin, compact: its width (yours, or its theme's), its height (one line, or what its
-    /// rows need, at most the height you gave it) and its place from its anchor.
+    /// Before ImGui.Begin, compact (never resizable: <see cref="MeterLayout.Resizable"/>): its width
+    /// its theme's, its height one line or what its rows need (at most eight and the limit break), and
+    /// its place from its anchor (not while you move it). Sizes given by hand before 0.7.0 are ignored.
     /// </summary>
     private void ArrangePlate(float scale, float chrome)
     {
         var t = PlateTheme;
-        var width = config.MeterCompactWidth > 0 ? config.MeterCompactWidth : t.Win.Width;
+        var width = t.Win.Width;
         SizeConstraints = PlateSizesLimits;
-        if (held)
-        {
-            SizeCondition = ImGuiCond.FirstUseEver;
-            return;
-        }
         float h;
         if (PlateOneLine) h = plate.LineHeight + chrome / scale;
         else
         {
             var needed = plate.Needed(PartyRows(), view == View.Waiting);
-            h = MeterLayout.FightHeight(needed, chrome / scale, config.MeterCompactHeight, 20, Sizes.MaximumSize.Y);
+            h = MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y);
         }
         Size = new Vector2(width, h);
         SizeCondition = ImGuiCond.Always;

@@ -556,7 +556,7 @@ public sealed partial class MainWindow
             config.Save();
         }
         if (SwitchRow(i++, "##meter-lock", "Lock it where it is", null, config.MeterLocked,
-                "Locked, the meter has no title bar and can't be moved or sized; its tabs and the picker still answer the mouse.", pad: 10))
+                "Locked, the meter has no title bar and can't be moved (nor the normal meter sized by its edges); its menu, tabs and picker still answer the mouse. Compact is never sized by hand: its width is its theme's and its height its rows'.", pad: 10))
         {
             config.MeterLocked = !config.MeterLocked;
             config.Save();
@@ -583,7 +583,7 @@ public sealed partial class MainWindow
             config.Save();
         }
         if (SwitchRow(i++, "##meter-compact", "Compact", "The top eight on plates, in a theme; the tabs and pulls in one menu", config.MeterCompact,
-                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them. Off, the normal meter with its tabs, pace bar and column heads. The meter's own menu has this switch too; the opened-up window stays as it is.",
+                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them; its size is its theme's and its rows', not set by hand. Off, the normal meter with its tabs, pace bar and column heads. The meter's own menu has this switch too; the opened-up window stays as it is.",
                 pad: 10))
         {
             config.MeterCompact = !config.MeterCompact;
@@ -625,13 +625,13 @@ public sealed partial class MainWindow
             backgroundDirty = false;
             config.Save();
         }
-        // The meter mid-fight with made-up numbers, to place and size it (and see compact and Grows) without a pull.
+        // The meter mid-fight with made-up numbers, to place it (and see compact and Grows) without a pull.
         var sampleOn = SampleOn?.Invoke() == true;
         var waits = !sampleOn && SampleWaits?.Invoke() == true;
         if (ButtonRow(i++, "##meter-sample", "See it in a fight",
                 waits ? "After this fight: a real one ends a sample" : sampleOn ? "Made-up numbers under a Preview tag, until a fight starts" : "A made-up pull, its clock running, under a Preview tag",
                 sampleOn ? "Stop the sample" : "Show a sample fight", Btn.Outline, waits || ToggleSample == null, null,
-                "Eight players mid-pull, with a limit break, a death, pace and the clock running: the meter as it looks in a fight, to place and size it. Nothing in it is real, it's never mixed with real numbers, and a real fight ends it at once.",
+                "Eight players mid-pull, with a limit break, a death, pace and the clock running: the meter as it looks in a fight, to place it (and size the normal meter). Nothing in it is real, it's never mixed with real numbers, and a real fight ends it at once.",
                 pad: 10))
             ToggleSample?.Invoke();
         var end = StepperRow(i++, "##meter-end", "A fight ends after", "Nobody in combat for this long", $"{config.MeterEndAfter} s", config.MeterEndAfter > 2, config.MeterEndAfter < 15, pad: 10);
@@ -725,7 +725,6 @@ public sealed partial class MainWindow
             if (clicked && !on)
             {
                 config.MeterTheme = t.Id;
-                config.MeterCompactWidth = 0;
                 config.Save();
             }
         }

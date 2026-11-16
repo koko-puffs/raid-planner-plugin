@@ -313,10 +313,12 @@ public static class MeterThemes
     public static readonly MeterTheme Mochi = new(
         MeterThemeId.Mochi, "Mochi", "Cute",
         "A pastel sticker: cream, round pills, a heart on your row and two sparkles. Light, so it also reads over a dark arena.",
-        new ThemeFonts(F(Face.Round, 12), F(Face.RoundBlack, 12, cells: 7.2f), F(Face.Round, 10, cells: 6), F(Face.RoundBlack, 13, cells: 7.6f), F(Face.Round, 11)),
+        // Zen Maru Gothic for the names and labels, a step up from the mock-ups (its small x-height reads small in the game);
+        // the numbers and the clock in Geist SemiBold (Zen Maru's digits are wide and loose there). Rows 24 tall for them.
+        new ThemeFonts(F(Face.Round, 14), F(Face.SansSemibold, 13, cells: 7.4f), F(Face.SansSemibold, 11, cells: 6.3f), F(Face.SansSemibold, 14, cells: 8f), F(Face.Round, 12)),
         new ThemeWindow(Rgb.Hex(0xfff7f2), null, null, 0.9f, 16, 6, Rgb.Hex(0xffffff), 3, Rgb.Hex(0xf3b9cf), null, 0,
-            Array.Empty<Ring>(), new Vector2(0, 4), Rgb.Hex(0xf2a9c6, 0.55f), 30, 2, 6, 256, 32),
-        new ThemeRow(22, 3, 11, Rgb.Hex(0xffffff), 1, Rgb.Hex(0x4b2a45), Rgb.Hex(0x8f7189), Rgb.Hex(0xb49aae), Rgb.Hex(0x4b2a45), Rgb.Hex(0xf6e1ea)),
+            Array.Empty<Ring>(), new Vector2(0, 4), Rgb.Hex(0xf2a9c6, 0.55f), 30, 2, 6, 268, 32),
+        new ThemeRow(24, 3, 12, Rgb.Hex(0xffffff), 1, Rgb.Hex(0x4b2a45), Rgb.Hex(0x8f7189), Rgb.Hex(0xb49aae), Rgb.Hex(0x4b2a45), Rgb.Hex(0xf6e1ea)),
         new ThemeBar(BarStyle.Pill, 0.62f, 0),
         new ThemeRoles(Rgb.Hex(0xa99cff), Rgb.Hex(0x7fe9cf), Rgb.Hex(0xffad6b)),
         Rgb.Hex(0xff4f9a), YouStyle.Heart, Rgb.Hex(0xd63a72), DeathStyle.Broken,
@@ -328,7 +330,8 @@ public static class MeterThemes
     public static readonly MeterTheme Native = new(
         MeterThemeId.Native, "Native", "Fits the game's own windows",
         "Dark translucent slate with a thin gilt frame, a title band, the job icon in a ringed socket and outlined numbers, as the game's own HUD windows are drawn.",
-        new ThemeFonts(F(Face.GameAxis, 12, outline: true), F(Face.GameNumbers, 13, outline: true, cells: 6.6f), F(Face.GameNumbers, 10, outline: true, cells: 5.4f),
+        // The numbers in the game's Axis: MiedingerMid at these sizes drew no decimal point and a 0 like a C ("24.CK").
+        new ThemeFonts(F(Face.GameAxis, 12, outline: true), F(Face.GameAxis, 13, outline: true, cells: 6.6f), F(Face.GameAxis, 10, outline: true, cells: 5.4f),
             F(Face.GameTitle, 13), F(Face.GameAxis, 11)),
         new ThemeWindow(Rgb.Hex(0x1d1d22), Rgb.Hex(0x35353c), Rgb.Hex(0x121215), 0, 5, 5, Rgb.Rgba(0, 0, 0, 0.75f), 1, null, Rgb.Rgba(214, 184, 120, 0.6f), 1,
             Array.Empty<Ring>(), Vector2.Zero, null, 26, 4, 5, 262, 26),

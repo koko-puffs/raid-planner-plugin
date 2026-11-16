@@ -79,14 +79,17 @@ public static class PlateArt
         {
             var spacing = f.Caps ? S(f.Px * 0.06f) : 0;
             var cells = f.Cells > 0 ? MathF.Max(S(f.Cells), DigitWidth(face, f.Px)) : 0;
-            if (cells <= 0 && spacing <= 0)
-            {
-                if (draw) Put(dl, pos, text, color, ink);
-                return ImGui.CalcTextSize(text).X;
-            }
             var font = ImGui.GetFont();
             var size = ImGui.GetFontSize();
-            var x = pos.X;
+            // A face whose first glyph reaches left of its pen, or last right of its advance (the game's
+            // Jupiter), is moved in and measured with it, so the words never run into what's beside them.
+            var (lead, tail) = Overhang(font, size, text, cells > 0);
+            if (cells <= 0 && spacing <= 0)
+            {
+                if (draw) Put(dl, pos + new Vector2(lead, 0), text, color, ink);
+                return lead + ImGui.CalcTextSize(text).X + tail;
+            }
+            var x = pos.X + lead;
             for (var i = 0; i < text.Length; i++)
             {
                 var c = text[i];
@@ -96,8 +99,29 @@ public static class PlateArt
                 if (draw) Put(dl, new Vector2(x + (digit ? (cells - adv) / 2 : 0), pos.Y), text.AsSpan(i, 1), color, ink);
                 x += w + spacing;
             }
-            return MathF.Max(0, x - pos.X - spacing);
+            return MathF.Max(0, x - pos.X - spacing + tail);
         }
+    }
+
+    /// <summary>How far the first glyph's ink reaches left of the pen and the last's right of its advance (screen px; 0 when they don't). A digit in a cell is centred in it, so has none.</summary>
+    private static unsafe (float Lead, float Tail) Overhang(ImFontPtr font, float size, string text, bool cells)
+    {
+        if (text.Length == 0) return (0, 0);
+        var k = size / font.FontSize;
+        float lead = 0, tail = 0;
+        var first = text[0];
+        if (!(cells && first is >= '0' and <= '9'))
+        {
+            var g = font.FindGlyph(first);
+            if (g != null) lead = MathF.Max(0, -g->X0 * k);
+        }
+        var last = text[^1];
+        if (!(cells && last is >= '0' and <= '9'))
+        {
+            var g = font.FindGlyph(last);
+            if (g != null) tail = MathF.Max(0, (g->X1 - g->AdvanceX) * k);
+        }
+        return (MathF.Ceiling(lead), MathF.Ceiling(tail));
     }
 
     private static void Put(ImDrawListPtr dl, Vector2 pos, ReadOnlySpan<char> text, Vector4 color, Vector4? outline)

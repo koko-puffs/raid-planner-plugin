@@ -75,6 +75,9 @@ public sealed class PlanWindow : Window
     private int menuVersion = -1;
 
     private DateTime drawFailedAt;
+
+    /// <summary>Its buttons near an edge (the lock, the list, previous and next) kept clear of the resizing edges.</summary>
+    private readonly ResizeGuard guard = new();
     private bool askedForList;
 
     public PlanWindow(Configuration config, PlanService plans, FightRecorder recorder, GameData data, Fonts fonts)
@@ -101,6 +104,8 @@ public sealed class PlanWindow : Window
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
         // Locked: Dalamud's own moving and resizing are off too.
         if (config.PlanWindowLocked) Flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
+        // Not resizable while the mouse is over one of its buttons: a press there is theirs.
+        else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         Theme.PushFrame();
     }
 
@@ -115,6 +120,8 @@ public sealed class PlanWindow : Window
         Theme.PushInside();
         try
         {
+            // Before a font is pushed: the resize grip is sized by the font at Begin.
+            guard.Frame();
             using (fonts.Push(Face.Sans, 14))
             {
                 try
@@ -295,8 +302,16 @@ public sealed class PlanWindow : Window
         // Previous and next: 32px squares, the count in mono between them.
         if (!small)
         {
-            if (Kit.IconButton("##rp-prev", new Vector2(left, footY), Icon.ChevronLeft, "Previous step", Btn.Outline, BtnSize.Sm, v.Step == 0)) plans.Move(-1);
-            if (Kit.IconButton("##rp-next", new Vector2(left + w - S(HSm), footY), Icon.ChevronRight, "Next step", Btn.Outline, BtnSize.Sm,
+            // In the bottom corners: moved in out of the resize grips' reach.
+            var b = new Vector2(S(HSm));
+            var prev = new Vector2(left, footY);
+            prev.X += guard.ShiftRight(prev, prev + b);
+            var next = new Vector2(left + w - S(HSm), footY);
+            next.X -= guard.ShiftLeft(next, next + b);
+            guard.Keep(prev, prev + b);
+            guard.Keep(next, next + b);
+            if (Kit.IconButton("##rp-prev", prev, Icon.ChevronLeft, "Previous step", Btn.Outline, BtnSize.Sm, v.Step == 0)) plans.Move(-1);
+            if (Kit.IconButton("##rp-next", next, Icon.ChevronRight, "Next step", Btn.Outline, BtnSize.Sm,
                     v.Step >= v.Plan.Steps.Count - 1))
                 plans.Move(1);
             var cw = Txt.Width(v.Count, Face.Mono, 13);
@@ -467,6 +482,8 @@ public sealed class PlanWindow : Window
     private void HeaderButtons(Vector2 pos, bool list, bool lockButton)
     {
         var x = pos.X;
+        var count = (list ? 1 : 0) + (lockButton ? 1 : 0);
+        if (count > 0) guard.Keep(pos, pos + new Vector2(S(HSm) * count + (count > 1 ? S(6.4f) : 0), S(HSm)));
         if (list)
         {
             var open = ImGui.IsPopupOpen(PlansMenu);

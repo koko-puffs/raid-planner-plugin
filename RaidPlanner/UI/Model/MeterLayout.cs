@@ -184,6 +184,13 @@ public static class MeterLayout
     }
 
     /// <summary>
+    /// Whether the meter's window can be resized by its edges: only the normal meter, unlocked. Compact
+    /// (0.7.0) never can, locked or not: its width is its theme's and its height its rows', so a size
+    /// given by hand would only snap back.
+    /// </summary>
+    public static bool Resizable(bool compact, bool locked) => !compact && !locked;
+
+    /// <summary>
     /// Whether a menu opened from the head goes up: away from the edge the meter is anchored at (up
     /// from a head at the foot, down from one on top), the other way when there isn't room for it that
     /// way and there's more the other.

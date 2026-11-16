@@ -1131,7 +1131,17 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   first and the tags only drawn as far as they fit before them. Locked, it has no title
   bar and can't be moved or sized (its tabs and picker still answer); click-through, the mouse goes
   to the game (`/raidcodex meter unlock` or Settings gives it back); open, Dalamud's title bar comes
-  back with its menu, its × and the resize grip. Five tabs (27 tall, the ember bar under the one
+  back with its menu, its × and the resize grip. Dalamud has ImGui resize a window from every edge
+  and both bottom corners (`ConfigWindowsResizeFromEdges`), and ImGui takes a press there in Begin,
+  before the window's buttons; so its buttons are kept out of that reach (`Model/ResizeZones`,
+  `UI/Kit/ResizeGuard.cs`, tested): `ResizeReach` works out ImGui 1.88's grip (drawn
+  `floor(max(font × 1.35, rounding + 1 + font × 0.2))` big at the font at Begin, taking a press three
+  quarters of that in from the corner; the edges 4px either side), and a button level with a bottom
+  grip sits the grip's reach and 4px more in from the side (growing up, the head at the foot: the lock
+  about 20px in at 100%, the picker beside it; the foot's _Preview_ tag growing down), one by an edge
+  clear of its band; and while the mouse is over one of the head's or foot's buttons (where they were
+  last frame, and not mid-drag) the window gets `NoResize` that frame, so a press on them is theirs;
+  everywhere else it sizes as ever. Five tabs (27 tall, the ember bar under the one
   you're on; a meter too narrow for the five has a tab menu in their row): **Damage** (ENCDPS, or DPS in Settings, and the share; pace from 10 s into a phase
   against the picked pull: "PACE · P2 +0:41", a 3px bar with this pull in ember and the other's tick
   in white, "on pull 4 +3.4%"), **Healing** (HPS and overheal %), **Taken** (damage taken and its
@@ -1188,7 +1198,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   (`MeterSizes.Needed`: the head, the tabs, pace's room when pace is on, the column heads, a row
   each, the limit break's room and the foot, so it doesn't jump when pace or the limit break comes:
   364 for eight, the title bar's height on top when it shows), and never taller than the height you
-  gave it by its edge (`MeterHeight`; compact's own, above, `MeterCompactHeight`; kept once you let go: none
+  gave it by its edge (`MeterHeight`; kept once you let go: none
   until you do; one taller than the party needs goes back to what they need, and rows past one
   shorter are cut; 0.3.0 kept 382, the height it first opened to, by itself, so a 382 saved by it is
   read as none). A bigger party makes it taller, a smaller one shorter (a member joining mid-fight
@@ -1232,15 +1242,21 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     _Pace against_, _Compact_ and _One line_. It replaces the tab row, the picker's button, pace's row and
     the column heads.
   - **The rows**: at most eight, the top eight; when you're ranked below the last row shown (ninth or
-    lower, or the window cut shorter by its edge), the last row is you, pinned under a dashed rule, with
+    lower: the window is never shorter than its eight), the last row is you, pinned under a dashed rule, with
     your real rank after your name ("#9"); no alliance view (`PlateRows.Select`). Each row (20 tall, 1
     apart, 4px corners) sits on a near-solid plate (#18181d at 92%, whatever the Background), so its
-    words never touch the game; the bar fills the plate from its left to its share of the top player's,
-    in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
+    words never touch the game; the bar fills its track from the plate's left to its share of the top
+    player's (the track ends 3px before the share column, so a full bar never runs under the share:
+    `PlateColumns.Track`; Mochi keeps its heart's place on every row, so the shares line up; Readout's
+    cells are their own), in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
     `ITextureProvider.GetFromGameIcon(62100 + the ClassJob row)`, `JobIcons`; the role's mark in a
     socket while it loads or for a job it doesn't know), the name (Geist 500 12, cut to fit; yours a
-    weight heavier; _Jobs only_ the job), then in fixed right-aligned columns the number (mono 600 12 in
-    38px) and the share (mono 10 in 32). You: an ember notch at the left and an ember outline at 75%. A
+    weight heavier; _Jobs only_ the job), then in right-aligned columns the number (mono 600 12 in
+    38px) and the share (mono 10 in 32). A column is at least its theme's width and at least as wide as
+    its widest sample measured in the face actually drawn ("88.8k", "8.88M", whole "888,888"; the share
+    "88.8", "100.0", "100%"), and the number's at least the widest number the rows have (`PlateColumns`,
+    tested; measured once a theme, scale, Whole and font build: `Fonts.Generation` counts the atlas's
+    builds), so a face wider in the game than in the mock-ups never runs one number into the next. You: an ember notch at the left and an ember outline at 75%. A
     death: the bar loses its colour, the icon goes grey, the name muted, a red skull and how long they've
     been down ("0:20", to the fight's clock) before the number; for two seconds as it happens the plate
     flashes red at 28%, fading. Pointed at, the row lightens and the details panel opens (below);
@@ -1264,12 +1280,15 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     icon, name, what killed them and how big (cut to fit), its time in the death colour; an event's time,
     its kind's mark in the theme's colours (bad, good, accent, muted), the member's icon and words. The
     foot counts them. Pressed, as the normal meter's.
-  - **Its size**: as wide as its theme (248, below) until you size it by its edge (`MeterCompactWidth`,
-    kept once you let go; picking a theme lets it go), as tall as its rows need (`PlateSizes.Needed`:
-    Ready Check's eight and the limit break 238, against the old compact's 272 and the normal meter's
-    364; a light party with no limit break yet 133), at most the height you gave it
-    (`MeterCompactHeight`; rows past it are cut, you pinned). Grows down or up as the normal meter (up,
-    the head at the foot and everything else the other way up from it); its anchor is shared.
+  - **Its size**: never set by hand: its window can't be resized, unlocked or locked
+    (`MeterLayout.Resizable`, tested; `ImGuiWindowFlags.NoResize`: a size given it would only snap
+    back). As wide as its theme (248, below), as tall as its rows need (`PlateSizes.Needed`: Ready
+    Check's eight and the limit break 238, against the old compact's 272 and the normal meter's 364; a
+    light party with no limit break yet 133), the title bar's height on top when it shows. A height
+    the old compact was given (`MeterCompactHeight`, 0.4.0 to 0.6.0) or a width 0.7.0
+    let you give it (`MeterCompactWidth`) is still read from the settings but ignored, and cleared once
+    (`Configuration.Migrate`). Grows down or up as the normal meter (up, the head at the foot and
+    everything else the other way up from it); its anchor is shared, and it's moved by its title bar.
   - **One line** (`MeterCollapsed`, the menu's _One line_; and between pulls, folded, as the normal
     meter folds; and before any fight): one 26px line on a plate: the dot and the clock (the outcome when
     it's over, else the phase), then on the right you ("You #6" with an ember bar and your number), the
@@ -1297,13 +1316,13 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     | Theme | Width | The idea | Bar | You | A death | Faces |
     | --- | --- | --- | --- | --- | --- | --- |
     | Ready Check | 248 | basalt, white hairlines, ember for you | fill (role at 30%, 2px foot) | ember notch and outline | skull and time down | Geist, Geist Mono |
-    | Mochi | 256 | a cream sticker (white edge, pink line, a pink shadow), a pink pill clock with a heart, sparkles | pastel pill | pink outline and a heart | broken heart | Zen Maru Gothic 700/900 |
-    | Native | 262 | slate gradient, a black edge with a gilt rule, a title band ("◆ Damage 3:11 Phase 2"), every word outlined | HP-bar shading | gold outline | red cross | the game's Axis, MiedingerMid, Jupiter |
+    | Mochi | 268 | a cream sticker (white edge, pink line, a pink shadow), a pink pill clock with a heart, sparkles | pastel pill | pink outline and a heart | broken heart | Zen Maru Gothic 700/900 (names 14, labels 12), the numbers and clock Geist 600 (13, 11, 14) |
+    | Native | 262 | slate gradient, a black edge with a gilt rule, a title band ("◆ Damage 3:11 Phase 2"), every word outlined | HP-bar shading | gold outline | red cross | the game's Axis (names, numbers, labels), Jupiter (the title) |
     | Readout | 248 | a terminal: "> 3:11▌", rank "01" and a role letter on each row, scanlines | 16 lit cells | reverse video | "DEAD 2:51", the name struck | Geist Mono |
-    | Neon | 256 | indigo gradient, a magenta edge with alpha-ring glow, a horizon grid in the head | brightening to a hot cap | white outline with rings | glitch (red and cyan a pixel apart) | Geist, Geist Mono, Archivo Expanded capitals |
-    | Grimoire | 268 | parchment, a brown frame, a gilt rule and corner pips, a red rubric capital ("Damage"), ink rules | ink underline over a wash | a red ribbon bookmark | dagger (†), the name struck | Fraunces 500/600 |
+    | Neon | 256 | indigo gradient, a magenta edge with alpha-ring glow, a horizon grid in the head | brightening to a hot cap | white outline with rings | glitch (faint red and cyan copies a pixel apart, at 35%) | Geist, Geist Mono, Archivo Expanded capitals |
+    | Grimoire | 268 | parchment, a brown frame, a gilt rule and corner pips, a red rubric capital ("Damage"), ink rules | ink underline over a wash | a red ribbon bookmark (6 wide, 2 in; the icon 6 past it) | dagger (†), the name struck | Fraunces 500/600 |
 
-    Rows are 20 tall (Readout 17, Grimoire 21, Mochi and Native 22); the head 24 (Readout 20, Neon 28,
+    Rows are 20 tall (Readout 17, Grimoire 21, Native 22, Mochi 24); the head 24 (Readout 20, Neon 28,
     Mochi 30, Native 26, Grimoire 32). **The floor**: Mochi 90%, Readout 82%, Grimoire 92% (their rows have
     no plate of their own, or a light one): the Background slider can't take them lower, so their words
     stay readable over a bright arena (every theme's names are at least 4.5:1 over its rows at the
@@ -1321,11 +1340,15 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     fontsource's files, OFL (`Resources/Fonts/OFL-ZenMaruGothic.txt`, `OFL-Fraunces.txt`, beside the
     plugin); Chinese, Korean and Japanese words in them fall back to Geist (`Txt.For`), as the rest of
     the windows draw them. Native draws in the game's own fonts through Dalamud (`NewGameFontHandle`:
-    Axis for names and labels, MiedingerMid for numbers, Jupiter for the title), nothing shipped, and they
-    have Japanese.
+    Axis for names, numbers and labels, Jupiter for the title; MiedingerMid, the party list's numbers,
+    drew no decimal point and a 0 like a C at the meter's sizes), nothing shipped, and they have Japanese.
+    Mochi's words are a step up from the mock-ups (Zen Maru Gothic's small x-height read small in the
+    game) and its numbers and clock are Geist SemiBold (Zen Maru's digits were wide and loose).
   - **Drawn** with what ImGui draws (`Kit/PlateArt.cs`): words outlined (eight offsets in black, then the
     words), digits in cells (centred; the cell the theme's or the widest digit, measured once a font
-    build), spaced capitals, filled glyphs from the mock-ups' 16-unit paths cut into triangles once (the
+    build), words whose first glyph reaches left of its pen or last right of its advance (the game's
+    Jupiter) moved in and measured with it, the head's and foot's words drawn only as they fit whole
+    before the buttons (the foot's right side first, the party's line in what's left), spaced capitals, filled glyphs from the mock-ups' 16-unit paths cut into triangles once (the
     roles' marks, hearts, a star, the ribbon, a diamond, the limit break's bars), a rounded rectangle with
     a vertical gradient (its outline's vertices shaded), two-colour gradients on square ends, glows as
     rings of alpha (never a blur). Nothing is allocated in a frame once warm (the words are made once a
@@ -1339,7 +1362,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   (a switch) at its foot. While the sample is on, _Stop the sample_ first.
 - **The sample fight** (`Model/MeterPreview`): Settings → Meter's _Show a sample fight_, the empty
   meter's _See a sample_, or `/raidcodex meter preview` show the meter mid-fight with made-up numbers,
-  to place and size it: the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
+  to place it (and size the normal meter): the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
   its clock running and its numbers moving four times a second (bursts in the buffs at the pull and
   at 2:00, a raidwide every 24 seconds, each player's rate rising and falling with their rotation;
   ENCDPS at 3:11 is the mock-ups'), the limit break used at 0:58, P2 from 2:30, pace against pull 4
@@ -1392,7 +1415,8 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
 - **Settings → Meter**: _Show the meter_ (`/raidcodex meter` too) with _Where_ (In duties,
   Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
   rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
-  (Names, Jobs only); _Lock it where it is_ with _Click-through when locked_ under it; _Grows_
+  (Names, Jobs only); _Lock it where it is_ (its tooltip: compact is never sized by hand) with
+  _Click-through when locked_ under it; _Grows_
   (Down, Up: which edge stays put, the head going with it); _Limit break gauge_ (Head, Foot, Off;
   0.4.0; compact's pips are in its head, or none with Off); _Compact_ (on at first since 0.7.0) with, under it, _Theme_
   (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
@@ -1422,7 +1446,9 @@ the screen, the tracker at the left a third down). Unlocked, Dalamud's title bar
 or sizing; click-through when locked, the mouse goes to the game (`/raidcodex cooldowns unlock`,
 `/raidcodex callouts unlock`). They never take focus, make no window sounds and ignore Escape; while
 you hold one (unlocked) it's neither placed nor sized. A sample of each shows under a _Preview_ tag
-(pressed, it stops), from Settings or `… preview`. Each has its settings apart in the config
+(pressed, it stops), from Settings or `… preview`; the tag is kept clear of the resizing edges and
+grips as the meter's buttons are (`ResizeGuard`: moved in when it would be in their reach, and the
+window not resizable while the mouse is over it). Each has its settings apart in the config
 (`Configuration.Cooldowns`, `.CalloutOverlay`: shown, where, locked, click-through, Grows, compact,
 background, width, anchor), and the plugin keeps each window open while it's shown or sampled.
 
@@ -1690,22 +1716,45 @@ entry).
   world, the cross-world party's `HomeWorld`, and the World sheet's names.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
-- The 0.7.0 compact meter and its themes want checking in the game (the sample fight shows most of it:
+- The compact meter and its themes (0.7.0, with 0.7.1's fixes) want checking in the game (the sample fight shows most of it:
   `/raidcodex meter preview`, then each theme in Settings): the job icons (62100 + the ClassJob row, framed, at
   16px; grey when dead) and their fallback; Zen Maru Gothic and Fraunces built in the atlas and their digits in
-  cells; the game's Axis, MiedingerMid and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
+  cells; no word or number touching another in any theme (Mochi's bigger words, "9.3 ♥" and "💔 0:30"; Native's
+  "◆ DAMAGE 2:32 PHASE 2" and its Axis numbers with their points, "7.66k" in the limit break's row); every bar's
+  end, Neon's cap and Grimoire's underline stopping short of the share; Neon's dead name reading through its
+  glitch; Grimoire's ribbon clear of your job icon; the game's Axis and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
   1.3)`: too big or small?); the outlined words' weight; the ground, edge, rings and sparkles drawn outside the
   window (Mochi's sticker shadow and stars, Neon's glow) and the window's own corners matching its theme with the
   title bar showing; the details panel as a tooltip beside the meter, on the left when there's no room on the
   right, and never in the way of the menu; the menu off the head (down, and up growing up); growing up (the head
-  at the foot, the rows mirrored, the limit break and foot at the top); you pinned when the meter is sized
-  shorter; the rank hold over a real fight (four snapshots a second); the fresh death's flash; the one line between
-  pulls and by hand; sizing its width by its edge and a theme change letting it go; a 0.6 configuration landing on
-  compact once; frame time with eight rows in each theme.
+  at the foot, the rows mirrored, the limit break and foot at the top); you pinned when you're ninth or lower; the
+  rank hold over a real fight (four snapshots a second); the fresh death's flash; the one line between pulls and by
+  hand; compact unlocked showing no resize grip and not sizing from any edge or corner (moved by its title bar), its
+  lock and menu pressed at once growing down and up; the normal meter's lock and picker growing up (in the
+  bottom-right corner, moved in out of the grip) and the foot's _Preview_ tag growing down taking every press on
+  them, while its edges and corners still size it right beside them (and a resize dragged across them not cut
+  short), at 100% and a bigger Dalamud scale; the same for the plan window's Previous and Next and the overlays'
+  _Preview_ tags; a 0.6 configuration landing on compact once (and an old compact height or a test build's width
+  ignored); frame time with eight rows in each theme.
 
 ## Release notes
 
-### 0.7.0 (not released yet)
+### 0.7.1 (not released yet)
+
+- **The compact meter sizes itself.** It can't be resized by hand any more (it only snapped back): its width is its
+  theme's, its height its rows'; a size given it before is let go.
+- **The lock is easy to press again.** Dalamud lets a window be resized from every edge and corner, and the press
+  went to the resize when a button sat in that reach (the meter's lock growing up, in the bottom-right corner). The
+  meter's, the plan window's and the overlays' buttons are now kept out of it (worked out from the font and the
+  window's corners, not guessed), and the window isn't resizable while the mouse is over one of them; it still sizes
+  from everywhere else.
+- **Every theme reads in the game.** The number and share columns are measured in the face the game draws (at
+  least the mock-ups' widths), so a wider face never runs numbers together; the bars end before the share column;
+  the head's and foot's words are drawn only as they fit. Mochi's words are a step bigger (its rows 24 tall, the
+  meter 268 wide) and its numbers Geist SemiBold; Native's numbers are the game's Axis (MiedingerMid lost its
+  decimal points); Neon's dead name glitches more faintly; Grimoire's ribbon is narrower and clear of your icon.
+
+### 0.7.0
 
 - **A new compact meter, and it's the default.** Round four's "Plate": one 24px head (the clock, the phase, the limit
   break's pips, a menu with the tabs, the pulls and pace, the lock), the top eight on near-solid plates that read over
@@ -1729,7 +1778,7 @@ entry).
 - Two fonts travel with the plugin for the themes (Zen Maru Gothic and Fraunces, OFL, latin; about 210 KB), loaded
   only while their theme is picked; Native uses the game's.
 
-### 0.6.0 (not released yet)
+### 0.6.0
 
 - **Every pull goes to your logs.** _Upload my logs_ (Settings → Recording; on, once linked) uploads each pull whole to
   your logs on the Raid Codex as soon as it's kept: gzipped, in the background, one at a time, the oldest first. Pulls
@@ -1743,7 +1792,7 @@ entry).
   pull began (for the logs: who, which patch, and two players' recordings of one pull told apart). Still format version 1.
 - The progress summary (_Track my progress_) goes as before. "The site keeps your newest 30 sends" is gone: it keeps them all.
 
-### 0.5.1 (not released yet)
+### 0.5.1
 
 - **Renamed Raid Codex** (was Raid Planner), as the site's tool is: its name in the plugin installer,
   every window, button, tooltip and chat line. `/raidcodex` is the command; `/raidplan` still works.

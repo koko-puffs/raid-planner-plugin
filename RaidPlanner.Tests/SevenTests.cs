@@ -158,8 +158,9 @@ public class SevenTests
         Assert.Equal(new[] { BarStyle.Fill, BarStyle.Pill, BarStyle.Hp, BarStyle.Segments, BarStyle.Glow, BarStyle.Underline }, MeterThemes.All.Select(t => t.Bar.Style));
         Assert.Equal(new[] { YouStyle.Notch, YouStyle.Heart, YouStyle.Gold, YouStyle.Invert, YouStyle.White, YouStyle.Ribbon }, MeterThemes.All.Select(t => t.YouStyle));
         Assert.Equal(new[] { DeathStyle.Skull, DeathStyle.Broken, DeathStyle.Cross, DeathStyle.Tag, DeathStyle.Glitch, DeathStyle.Dagger }, MeterThemes.All.Select(t => t.DeathStyle));
-        Assert.Equal(new[] { 248f, 256, 262, 248, 256, 268 }, MeterThemes.All.Select(t => t.Win.Width));
-        Assert.Equal(new[] { 20f, 22, 22, 17, 20, 21 }, MeterThemes.All.Select(t => t.Row.H));
+        // Mochi wider and its rows taller than the mock-ups' (256, 22): its words a step up, to read in the game.
+        Assert.Equal(new[] { 248f, 268, 262, 248, 256, 268 }, MeterThemes.All.Select(t => t.Win.Width));
+        Assert.Equal(new[] { 20f, 24, 22, 17, 20, 21 }, MeterThemes.All.Select(t => t.Row.H));
         // Ready Check's tokens, the default.
         var r = MeterThemes.ReadyCheck;
         Assert.Equal(Rgb.Hex(0x7c85de), r.Roles.Tank);
@@ -170,15 +171,24 @@ public class SevenTests
         Assert.Equal(0.3f, r.Bar.Alpha);
         Assert.Equal(Face.SansMedium, r.Font.Name.Face);
         Assert.Equal(Face.MonoSemibold, r.Font.Num.Face);
-        // The faces each theme ships or borrows: Mochi Zen Maru Gothic, Grimoire Fraunces (digits in cells), Native the game's, outlined.
-        Assert.All(MeterThemes.Mochi.Font.All(), f => Assert.True(f.Face is Face.Round or Face.RoundBlack));
+        // The faces each theme ships or borrows: Mochi Zen Maru Gothic for its words, a step up from the mock-ups, and Geist
+        // SemiBold for its numbers and clock; Grimoire Fraunces (digits in cells); Native the game's, outlined.
+        var mochi = MeterThemes.Mochi.Font;
+        Assert.All(new[] { mochi.Name, mochi.Label }, f => Assert.Equal(Face.Round, f.Face));
+        Assert.All(new[] { mochi.Num, mochi.Small, mochi.Head }, f => Assert.Equal(Face.SansSemibold, f.Face));
+        Assert.Equal((14, 12, 13, 11, 14), (mochi.Name.Px, mochi.Label.Px, mochi.Num.Px, mochi.Small.Px, mochi.Head.Px));
         Assert.All(MeterThemes.Grimoire.Font.All(), f => Assert.True(f.Face is Face.Serif or Face.SerifSemibold));
         Assert.True(MeterThemes.Grimoire.Font.Num.Cells > 0 && MeterThemes.Mochi.Font.Num.Cells > 0);
-        Assert.All(MeterThemes.Native.Font.All(), f => Assert.True(f.Face is Face.GameAxis or Face.GameNumbers or Face.GameTitle));
+        Assert.All(MeterThemes.Native.Font.All(), f => Assert.True(f.Face is Face.GameAxis or Face.GameTitle));
+        // Its numbers in Axis (MiedingerMid lost its decimal points at these sizes); Jupiter only for the head's word.
+        Assert.Equal(Face.GameAxis, MeterThemes.Native.Font.Num.Face);
+        Assert.Equal(Face.GameAxis, MeterThemes.Native.Font.Small.Face);
+        Assert.Equal(Face.GameTitle, MeterThemes.Native.Font.Head.Face);
         Assert.True(MeterThemes.Native.Font.Name.Outline && MeterThemes.Native.Font.Num.Outline);
         Assert.All(MeterThemes.Readout.Font.All(), f => Assert.True(f.Face is Face.Mono or Face.MonoSemibold));
         Assert.True(MeterThemes.Neon.Font.Head.Caps && MeterThemes.Neon.Font.Head.Face == Face.Callout);
-        Assert.Contains((Face.RoundBlack, 12), MeterThemes.FacesOf(MeterThemes.Mochi));
+        Assert.Contains((Face.RoundBlack, 14), MeterThemes.FacesOf(MeterThemes.Mochi));
+        Assert.Contains((Face.SansSemibold, 12), MeterThemes.FacesOf(MeterThemes.Mochi));
         Assert.Contains((Face.SerifSemibold, 19), MeterThemes.FacesOf(MeterThemes.Grimoire));
         // Whole numbers widen the column by 10.
         Assert.Equal(48, r.ValueWidth(true));
@@ -278,5 +288,106 @@ public class SevenTests
         Assert.Equal("Taken", PlateWords.TabWord(MeterTab.Taken));
         Assert.Equal("0:20", PlateWords.DeadFor(171, 191));
         Assert.Equal("0:00", PlateWords.DeadFor(191, 180));
+    }
+
+    [Fact]
+    public void Compact_is_never_resizable()
+    {
+        // Compact's width is its theme's and its height its rows': unlocked or locked, it can't be sized by hand.
+        Assert.False(MeterLayout.Resizable(compact: true, locked: false));
+        Assert.False(MeterLayout.Resizable(compact: true, locked: true));
+        // The normal meter can, unlocked.
+        Assert.True(MeterLayout.Resizable(compact: false, locked: false));
+        Assert.False(MeterLayout.Resizable(compact: false, locked: true));
+    }
+
+    [Fact]
+    public void The_resize_grips_reach_as_ImGui_works_it_out()
+    {
+        // Dalamud's 17px font, 6.4px corners: the grip is drawn floor(17 × 1.35) = 22 and takes a press 16 in; the edges 4 either side.
+        var r = ResizeReach.Of(17, 6.4f, fromEdges: true);
+        Assert.Equal(new ResizeReach(4, 16, true), r);
+        Assert.Equal(20, r.CornerInset);
+        // It grows with the font (Dalamud's scale): 34px, drawn 45, 33 in.
+        Assert.Equal(33, ResizeReach.Of(34, 6.4f, true).Corner);
+        // Big corners make a bigger grip: floor(30 + 1 + 3.2) = 34, 25 in.
+        Assert.Equal(25, ResizeReach.Of(16, 30, true).Corner);
+        // A bigger touch padding widens the edges; without resizing from the edges there are none.
+        Assert.Equal(6, ResizeReach.Of(17, 0, true, touchPadding: 6).Border);
+        Assert.Equal(new ResizeReach(0, 12, false), ResizeReach.Of(13, 0, false));
+    }
+
+    [Fact]
+    public void A_lock_in_a_corner_is_moved_out_of_the_grip()
+    {
+        var r = ResizeReach.Of(17, 6.4f, true);
+        var wmin = new Vector2(100, 100);
+        var wmax = new Vector2(430, 482);
+        // The normal meter growing up: its head at the foot, the 24px lock 6 in from the right and the bottom: under the bottom-right grip.
+        var min = new Vector2(400, 452);
+        var max = new Vector2(424, 476);
+        Assert.True(ResizeZones.Hits(wmin, wmax, min, max, r));
+        var shift = ResizeZones.ShiftLeft(wmin, wmax, min, max, r);
+        Assert.Equal(14, shift);
+        var at = new Vector2(shift, 0);
+        Assert.False(ResizeZones.Hits(wmin, wmax, min - at, max - at, r));
+        // It ends the grip's reach and 4 more in from the side.
+        Assert.Equal(wmax.X - r.Corner - ResizeReach.HoverPadding, max.X - shift);
+        // Growing down (the head under the title bar, at the top-right): no grip there, clear of the right edge, left where it is.
+        Assert.Equal(0, ResizeZones.ShiftLeft(wmin, wmax, new Vector2(400, 132), new Vector2(424, 156), r));
+        Assert.False(ResizeZones.Hits(wmin, wmax, new Vector2(400, 132), new Vector2(424, 156), r));
+        // On the right edge's band, moved just off it.
+        Assert.Equal(2, ResizeZones.ShiftLeft(wmin, wmax, new Vector2(404, 200), new Vector2(428, 224), r));
+        // A button in the bottom-left corner (the plan window's Previous) moves right out of that grip.
+        Assert.Equal(14, ResizeZones.ShiftRight(wmin, wmax, new Vector2(106, 452), new Vector2(130, 476), r));
+        Assert.Equal(0, ResizeZones.ShiftRight(wmin, wmax, new Vector2(106, 200), new Vector2(130, 224), r));
+        // Without resizing from the edges only the bottom-right grip is there.
+        var one = ResizeReach.Of(17, 6.4f, false);
+        Assert.False(ResizeZones.Hits(wmin, wmax, new Vector2(100, 452), new Vector2(124, 482), one));
+        Assert.Equal(0, ResizeZones.ShiftRight(wmin, wmax, new Vector2(100, 452), new Vector2(124, 482), one));
+        Assert.True(ResizeZones.Hits(wmin, wmax, min, max, one));
+        Assert.False(ResizeZones.Hits(wmin, wmax, min, max, ResizeReach.None));
+        Assert.True(ResizeZones.Inside(new Vector2(400, 452), min, max));
+        Assert.False(ResizeZones.Inside(new Vector2(399, 452), min, max));
+    }
+
+    [Fact]
+    public void The_columns_are_as_wide_as_their_face_draws_them()
+    {
+        var t = MeterThemes.Mochi;
+        // A narrow face: the mock-ups' widths (CSS px) at the scale.
+        float Narrow(string s, ThemeFont f) => s.Length * 4;
+        Assert.Equal(t.ValueWidth(false) * 1.5f, PlateColumns.Value(t, false, 1.5f, Narrow));
+        Assert.Equal(t.ValueWidth(true), PlateColumns.Value(t, true, 1, Narrow));
+        Assert.Equal(t.ShareCol, PlateColumns.Share(t, 1, Narrow));
+        // A face wider in the game: the widest sample as measured, in the face the column draws in.
+        var asked = new List<(string, ThemeFont)>();
+        float Wide(string s, ThemeFont f)
+        {
+            asked.Add((s, f));
+            return s.Length * 11;
+        }
+        Assert.Equal(5 * 11, PlateColumns.Value(t, false, 1, Wide));
+        Assert.All(asked, a => Assert.Equal(t.Font.Num, a.Item2));
+        Assert.Contains(("8.88M", t.Font.Num), asked);
+        Assert.Equal(7 * 11, PlateColumns.Value(t, true, 1, Wide));
+        asked.Clear();
+        Assert.Equal(5 * 11, PlateColumns.Share(t, 1, Wide));
+        Assert.All(asked, a => Assert.Equal(t.Font.Small, a.Item2));
+        Assert.Contains(("100.0", t.Font.Small), asked);
+    }
+
+    [Fact]
+    public void A_full_bar_ends_before_the_share()
+    {
+        // A 246px row, 5 in on the right, a 32px share column: the track ends 3 before the share (206).
+        Assert.Equal(206, PlateColumns.Track(246, 5, 0, 32, 1));
+        // Mochi keeps its heart's place (12) on every row; at 150% the gap is 4.5.
+        Assert.Equal(246 - 7 - 12 - 32 - 4.5f, PlateColumns.Track(246, 7, 12, 32, 1.5f));
+        // Never below nothing.
+        Assert.Equal(0, PlateColumns.Track(20, 5, 0, 32, 1));
+        // So 100% of the track, from the row's left, stops short of the share column's left edge.
+        var shareLeft = 246 - 5 - 32;
+        Assert.True(PlateColumns.Track(246, 5, 0, 32, 1) < shareLeft);
     }
 }
