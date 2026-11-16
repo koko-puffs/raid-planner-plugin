@@ -182,8 +182,14 @@ public sealed record ThemeRow(
     Vector4? PlateEdge = null,
     Vector4? Rule = null);
 
-/// <summary>A row's bar: its style and alphas (<see cref="Alpha0"/> the glow's start; <see cref="Wash"/> the underline's), its foot line, the cells.</summary>
-public sealed record ThemeBar(BarStyle Style, float Alpha, float Edge, float Alpha0 = 0, float Wash = 0, float Cell = 0, float CellGap = 0, float SegWidth = 0, float SegH = 0);
+/// <summary>
+/// A row's bar: its style and alphas (<see cref="Alpha0"/> the glow's start; <see cref="Wash"/> the underline's), its foot
+/// line, the cells; and whether its track ends before the number column too (<see cref="BeforeNumber"/>: a bar whose end is
+/// a hard edge, Native's HP bar, Mochi's pill, Neon's bright cap, would cut through the number; as the game's party list
+/// has it, the numbers sit on the plate beside the bar).
+/// </summary>
+public sealed record ThemeBar(BarStyle Style, float Alpha, float Edge, float Alpha0 = 0, float Wash = 0, float Cell = 0, float CellGap = 0, float SegWidth = 0, float SegH = 0,
+    bool BeforeNumber = false);
 
 /// <summary>The three roles' colours.</summary>
 public sealed record ThemeRoles(Vector4 Tank, Vector4 Healer, Vector4 Dps)
@@ -319,7 +325,7 @@ public static class MeterThemes
         new ThemeWindow(Rgb.Hex(0xfff7f2), null, null, 0.9f, 16, 6, Rgb.Hex(0xffffff), 3, Rgb.Hex(0xf3b9cf), null, 0,
             Array.Empty<Ring>(), new Vector2(0, 4), Rgb.Hex(0xf2a9c6, 0.55f), 30, 2, 6, 268, 32),
         new ThemeRow(24, 3, 12, Rgb.Hex(0xffffff), 1, Rgb.Hex(0x4b2a45), Rgb.Hex(0x8f7189), Rgb.Hex(0xb49aae), Rgb.Hex(0x4b2a45), Rgb.Hex(0xf6e1ea)),
-        new ThemeBar(BarStyle.Pill, 0.62f, 0),
+        new ThemeBar(BarStyle.Pill, 0.62f, 0, BeforeNumber: true),
         new ThemeRoles(Rgb.Hex(0xa99cff), Rgb.Hex(0x7fe9cf), Rgb.Hex(0xffad6b)),
         Rgb.Hex(0xff4f9a), YouStyle.Heart, Rgb.Hex(0xd63a72), DeathStyle.Broken,
         Rgb.Hex(0xff6fae), Rgb.Hex(0x1f9c6c), Rgb.Hex(0xd63a72), Rgb.Hex(0xffb21e), Rgb.Hex(0xf6dde6),
@@ -336,7 +342,7 @@ public static class MeterThemes
         new ThemeWindow(Rgb.Hex(0x1d1d22), Rgb.Hex(0x35353c), Rgb.Hex(0x121215), 0, 5, 5, Rgb.Rgba(0, 0, 0, 0.75f), 1, null, Rgb.Rgba(214, 184, 120, 0.6f), 1,
             Array.Empty<Ring>(), Vector2.Zero, null, 26, 4, 5, 262, 26),
         new ThemeRow(22, 2, 3, Rgb.Hex(0x0b0b0d), 0.62f, Rgb.Hex(0xffffff), Rgb.Hex(0xa9a39a), Rgb.Hex(0x837c72), Rgb.Hex(0xffffff)),
-        new ThemeBar(BarStyle.Hp, 0.62f, 0),
+        new ThemeBar(BarStyle.Hp, 0.62f, 0, BeforeNumber: true),
         new ThemeRoles(Rgb.Hex(0x4c6be6), Rgb.Hex(0x3fbf2a), Rgb.Hex(0xd65c64)),
         Rgb.Hex(0xf0d48a), YouStyle.Gold, Rgb.Hex(0xff5b4f), DeathStyle.Cross,
         Rgb.Hex(0xf0d48a), Rgb.Hex(0x7fd36b), Rgb.Hex(0xff6b5f), Rgb.Hex(0x6ec1ff), Rgb.Rgba(214, 184, 120, 0.45f),
@@ -366,7 +372,7 @@ public static class MeterThemes
         new ThemeWindow(Rgb.Hex(0x140a28), Rgb.Hex(0x22104a), Rgb.Hex(0x0a0418), 0, 10, 5, Rgb.Hex(0xff4fd8), 1, null, null, 0,
             new[] { new Ring(2, Rgb.Rgba(255, 79, 216, 0.32f)), new Ring(5, Rgb.Rgba(255, 79, 216, 0.12f)) }, Vector2.Zero, null, 28, 2, 5, 256, 26),
         new ThemeRow(20, 3, 3, Rgb.Hex(0x100622), 0.88f, Rgb.Hex(0xffffff), Rgb.Hex(0xb6a6d8), Rgb.Hex(0x8170a8), Rgb.Hex(0xffffff)),
-        new ThemeBar(BarStyle.Glow, 0.45f, 1, Alpha0: 0.1f),
+        new ThemeBar(BarStyle.Glow, 0.45f, 1, Alpha0: 0.1f, BeforeNumber: true),
         new ThemeRoles(Rgb.Hex(0x3decff), Rgb.Hex(0xc5f04c), Rgb.Hex(0xff3d91)),
         Rgb.Hex(0xffffff), YouStyle.White, Rgb.Hex(0xff3b5c), DeathStyle.Glitch,
         Rgb.Hex(0xff4fd8), Rgb.Hex(0xc5f04c), Rgb.Hex(0xff3b5c), Rgb.Hex(0xffe14d), Rgb.Rgba(61, 236, 255, 0.55f),

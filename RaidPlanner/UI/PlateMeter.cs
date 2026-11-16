@@ -680,7 +680,8 @@ internal sealed class PlateMeter
         rx -= lockS + S(7);
         var chev = S(11);
         var ww = PlateArt.Width(tabWord, t.Font.Label);
-        var mw = ww + S(2) + chev;
+        // The words, a 6px gap (Dropdown.Gap), the chevron.
+        var mw = Dropdown.Width(ww, chev, 0, S(1));
         var mMin = new Vector2(rx - mw, top);
         if (Interactive)
         {
@@ -892,38 +893,15 @@ internal sealed class PlateMeter
         var padR = S(t.Id == MeterThemeId.Mochi ? 7 : 5);
         var heartSlot = youStyle == YouStyle.Heart ? S(10) + S(2) : 0;
         var shareW = ShareColumn();
-        // The bar, on its track: from the row's left to just before the share, so a full bar never runs under it.
-        if (t.Bar.Style != BarStyle.Segments && !inv) Bar(dl, min, PlateColumns.Track(iw, padR, heartSlot, shareW, S(1)), rh, bar, r.Role, dead);
+        var valW = ValueColumn();
+        // The bar, on its track: from the row's left to just before the share (and, a hard-ended bar, the number), so it never runs under them.
+        if (t.Bar.Style != BarStyle.Segments && !inv)
+            Bar(dl, min, PlateColumns.Track(iw, padR, heartSlot, shareW, S(1), t.Bar.BeforeNumber ? valW : 0, gap), rh, bar, r.Role, dead);
         if (t.Row.Rule is { } rule) Kit.Rule(dl, min.X, max.X, max.Y, rule);
         // You.
-        if (you)
-        {
-            switch (youStyle)
-            {
-                case YouStyle.Notch:
-                    dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Rgb.A(t.You, 0.75f)), rad, ImDrawFlags.None, 1f);
-                    dl.AddRectFilled(min, new Vector2(min.X + S(3), max.Y), Palette.U32(t.You), rad, ImDrawFlags.RoundCornersLeft);
-                    break;
-                case YouStyle.Heart:
-                    dl.AddRect(min - new Vector2(S(1) - 1), max + new Vector2(S(1) - 1), Palette.U32(t.You), rad + S(1), ImDrawFlags.None, S(2));
-                    break;
-                case YouStyle.Gold:
-                    dl.AddRect(min - new Vector2(0.5f), max + new Vector2(0.5f), Palette.U32(Rgb.Rgba(0, 0, 0, 0.6f)), rad + 1, ImDrawFlags.None, 1f);
-                    dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(t.You), rad, ImDrawFlags.None, 1f);
-                    break;
-                case YouStyle.White:
-                    dl.AddRect(min - new Vector2(S(2.5f)), max + new Vector2(S(2.5f)), Palette.U32(Rgb.Rgba(255, 255, 255, 0.1f)), rad + S(3), ImDrawFlags.None, S(2));
-                    dl.AddRect(min - new Vector2(0.5f), max + new Vector2(0.5f), Palette.U32(Rgb.Rgba(255, 255, 255, 0.28f)), rad + 1, ImDrawFlags.None, 1f);
-                    dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Vector4.One), rad, ImDrawFlags.None, 1f);
-                    break;
-                case YouStyle.Ribbon:
-                    // The bookmark, 6 wide (its strip is the middle half of its box), from 2 in: the job icon starts clear of it.
-                    PlateArt.Glyph(dl, PlateGlyph.Ribbon, new Vector2(min.X + S(RibbonLeft) - S(RibbonWidth) / 2, min.Y - S(3)), new Vector2(S(RibbonWidth * 2), rh + S(7)), t.You);
-                    break;
-            }
-        }
+        if (you) YouMark(dl, min, max, rad, rh, youStyle);
         // The words: the rank (Readout), the icon, the name; from the right the share, the number, the cells, the death's mark.
-        var padIn = S(t.Id == MeterThemeId.Mochi ? 3 : you && youStyle == YouStyle.Notch ? 5 : you && youStyle == YouStyle.Ribbon ? RibbonLeft + RibbonWidth + 6 : 3);
+        var padIn = S(t.Id == MeterThemeId.Mochi ? 3 : you && youStyle == YouStyle.Notch ? 5 : you && youStyle == YouStyle.Ribbon ? PastRibbon : 3);
         var lineCss = rh / S(1);
         var ink = Rgb.Hex(0x031005);
         var x = min.X + padIn;
@@ -949,7 +927,6 @@ internal sealed class PlateMeter
         }
         if (!waiting) PlateArt.LineRight(dl, rx, y, l.Share, t.Font.Small, inv ? ink : t.Row.Muted, lineCss);
         rx -= shareW + gap;
-        var valW = ValueColumn();
         PlateArt.LineRight(dl, rx, y, waiting ? "–" : l.Value, t.Font.Num, inv ? ink : dead ? t.Row.Muted : t.Row.Num, lineCss);
         rx -= valW + gap;
         var deathStyle = t.DeathDrawn(Decorations);
@@ -968,23 +945,7 @@ internal sealed class PlateMeter
             {
                 rx -= PlateArt.LineRight(dl, rx, y, l.DeadFor, t.Font.Small, dc, lineCss) + S(4);
             }
-            var gs = S(deathStyle == DeathStyle.Broken ? 13 : deathStyle == DeathStyle.Skull ? 12 : 11);
-            var gy = y + (rh - gs) / 2;
-            switch (deathStyle)
-            {
-                case DeathStyle.Skull:
-                    Icons.Draw(dl, Icon.Skull, new Vector2(rx - gs, gy), gs, dc, 2.2f);
-                    break;
-                case DeathStyle.Broken:
-                    PlateArt.Glyph(dl, PlateGlyph.BrokenHeart, new Vector2(rx - gs, gy), gs, dc);
-                    break;
-                case DeathStyle.Dagger:
-                    gs = PlateArt.LineRight(dl, rx, y, "†", t.Font.Num, dc, lineCss);
-                    break;
-                default:
-                    Icons.Draw(dl, Icon.X, new Vector2(rx - gs, gy), gs, dc, 3.2f);
-                    break;
-            }
+            var gs = DeathMark(dl, rx, y, rh, deathStyle, dc, t.Font.Num);
             rx -= gs + gap;
         }
         // The name (or the job alone), cut to fit; yours a weight heavier; struck through or glitched when dead.
@@ -1010,13 +971,89 @@ internal sealed class PlateMeter
         if (pinned) PlateArt.Line(dl, new Vector2(x + nw + S(5), y), l.PinnedRank, t.Font.Small, inv ? ink : t.Row.Muted, lineCss);
     }
 
+    /// <summary>A row's mark for you in a style (the meter's rows; the opened-up window's picked row): an outline, a notch, a heart's ring, a ribbon. Reverse video (Readout) is the row's own fill: not drawn here.</summary>
+    public void YouMark(ImDrawListPtr dl, Vector2 min, Vector2 max, float rad, float rh, YouStyle style)
+    {
+        var t = T;
+        switch (style)
+        {
+            case YouStyle.Notch:
+                dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Rgb.A(t.You, 0.75f)), rad, ImDrawFlags.None, 1f);
+                dl.AddRectFilled(min, new Vector2(min.X + S(3), max.Y), Palette.U32(t.You), rad, ImDrawFlags.RoundCornersLeft);
+                break;
+            case YouStyle.Heart:
+                dl.AddRect(min - new Vector2(S(1) - 1), max + new Vector2(S(1) - 1), Palette.U32(t.You), rad + S(1), ImDrawFlags.None, S(2));
+                break;
+            case YouStyle.Gold:
+                dl.AddRect(min - new Vector2(0.5f), max + new Vector2(0.5f), Palette.U32(Rgb.Rgba(0, 0, 0, 0.6f)), rad + 1, ImDrawFlags.None, 1f);
+                dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(t.You), rad, ImDrawFlags.None, 1f);
+                break;
+            case YouStyle.White:
+                dl.AddRect(min - new Vector2(S(2.5f)), max + new Vector2(S(2.5f)), Palette.U32(Rgb.Rgba(255, 255, 255, 0.1f)), rad + S(3), ImDrawFlags.None, S(2));
+                dl.AddRect(min - new Vector2(0.5f), max + new Vector2(0.5f), Palette.U32(Rgb.Rgba(255, 255, 255, 0.28f)), rad + 1, ImDrawFlags.None, 1f);
+                dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Vector4.One), rad, ImDrawFlags.None, 1f);
+                break;
+            case YouStyle.Ribbon:
+                // The bookmark, 6 wide (its strip is the middle half of its box), from 2 in: the job icon starts clear of it.
+                PlateArt.Glyph(dl, PlateGlyph.Ribbon, new Vector2(min.X + S(RibbonLeft) - S(RibbonWidth) / 2, min.Y - S(3)), new Vector2(S(RibbonWidth * 2), rh + S(7)), t.You);
+                break;
+        }
+    }
+
+    /// <summary>How far in a row's words start past a ribbon (CSS px).</summary>
+    public const float PastRibbon = RibbonLeft + RibbonWidth + 6;
+
+    /// <summary>A death's mark in a style, its right edge at <paramref name="right"/>, on a row <paramref name="rh"/> tall from <paramref name="y"/>: a skull, a broken heart, a dagger, a cross. Returns its width.</summary>
+    public static float DeathMark(ImDrawListPtr dl, float right, float y, float rh, DeathStyle style, Vector4 color, ThemeFont dagger)
+    {
+        var gs = S(style == DeathStyle.Broken ? 13 : style == DeathStyle.Skull ? 12 : 11);
+        var gy = y + (rh - gs) / 2;
+        switch (style)
+        {
+            case DeathStyle.Skull:
+                Icons.Draw(dl, Icon.Skull, new Vector2(right - gs, gy), gs, color, 2.2f);
+                break;
+            case DeathStyle.Broken:
+                PlateArt.Glyph(dl, PlateGlyph.BrokenHeart, new Vector2(right - gs, gy), gs, color);
+                break;
+            case DeathStyle.Dagger:
+                return PlateArt.LineRight(dl, right, y, "†", dagger, color, rh / S(1));
+            default:
+                Icons.Draw(dl, Icon.X, new Vector2(right - gs, gy), gs, color, 3.2f);
+                break;
+        }
+        return gs;
+    }
+
+    /// <summary>A bar in the theme's style along a track (the opened-up window's), as a row's.</summary>
+    public void BarOn(ImDrawListPtr dl, Vector2 min, float track, float h, float f, string? role, bool dead)
+    {
+        if (T.Bar.Style != BarStyle.Segments)
+        {
+            Bar(dl, min, track, h, f, role ?? "dps", dead);
+            return;
+        }
+        // Readout's cells along the track.
+        var b = T.Bar;
+        var step = S(b.Cell + b.CellGap);
+        var n = Math.Max(1, (int)MathF.Floor(track / step));
+        var on = (int)MathF.Round(n * Math.Clamp(f, 0, 1));
+        var lit = Palette.U32(dead ? T.DeadBar : Role(role));
+        var dim = Palette.U32(Rgb.Rgba(196, 245, 205, 0.08f));
+        for (var i = 0; i < n; i++)
+        {
+            var a = new Vector2(MathF.Round(min.X + i * step), MathF.Round(min.Y));
+            dl.AddRectFilled(a, a + new Vector2(S(b.Cell), h), i < on ? lit : dim);
+        }
+    }
+
     /// <summary>Grimoire's ribbon on your row: its strip's left edge and width (CSS px); the job icon starts 6 past it.</summary>
     private const float RibbonLeft = 2;
 
     private const float RibbonWidth = 6;
 
     /// <summary>Neon's glitch: how strong the dead name's two offset copies are.</summary>
-    private const float GlitchAlpha = 0.35f;
+    internal const float GlitchAlpha = 0.35f;
 
     private readonly Dictionary<int, string> deadTags = new();
 

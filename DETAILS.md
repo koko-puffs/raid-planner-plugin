@@ -1248,7 +1248,10 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     words never touch the game; the bar fills its track from the plate's left to its share of the top
     player's (the track ends 3px before the share column, so a full bar never runs under the share:
     `PlateColumns.Track`; Mochi keeps its heart's place on every row, so the shares line up; Readout's
-    cells are their own), in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
+    cells are their own; since 0.7.2 a bar whose end is a hard edge, Native's HP bar, Mochi's pill and
+    Neon's bright cap, `ThemeBar.BeforeNumber`, ends before the number column too, so the number and the
+    share sit on the plate beside it as the game's party list has them; Ready Check's soft 30% fill and
+    Grimoire's underline still run under the number), in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
     `ITextureProvider.GetFromGameIcon(62100 + the ClassJob row)`, `JobIcons`; the role's mark in a
     socket while it loads or for a job it doesn't know), the name (Geist 500 12, cut to fit; yours a
     weight heavier; _Jobs only_ the job), then in right-aligned columns the number (mono 600 12 in
@@ -1335,7 +1338,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     Grimoire's ribbon, Neon's glitch); off, the theme keeps its colours, faces and frame, you a plain
     outline and a death a cross.
   - **Their faces** load only while their theme is picked (`Fonts.Want`, a delegate font handle each,
-    the last theme's let go): Zen Maru Gothic 700 and 900 (Mochi; ~28 KB each) and Fraunces 500 and 600
+    the last theme's let go; since 0.7.2 with the opened-up window's sizes, `DetailFonts.Faces`): Zen Maru Gothic 700 and 900 (Mochi; ~28 KB each) and Fraunces 500 and 600
     at opsz 14 (Grimoire; ~76 KB each), static latin and latin-ext instances made with fontTools from
     fontsource's files, OFL (`Resources/Fonts/OFL-ZenMaruGothic.txt`, `OFL-Fraunces.txt`, beside the
     plugin); Chinese, Korean and Japanese words in them fall back to Geist (`Txt.For`), as the rest of
@@ -1345,7 +1348,12 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     Mochi's words are a step up from the mock-ups (Zen Maru Gothic's small x-height read small in the
     game) and its numbers and clock are Geist SemiBold (Zen Maru's digits were wide and loose).
   - **Drawn** with what ImGui draws (`Kit/PlateArt.cs`): words outlined (eight offsets in black, then the
-    words), digits in cells (centred; the cell the theme's or the widest digit, measured once a font
+    words, and since 0.7.2 a pixel more between the glyphs and at each end, so two outlines never merge:
+    Native's "9k"; measured with it, so the columns allow for it), each line's capitals' ink centred in its
+    line box (`InkCentre`, tested: the pushed font's 'H' from ImGui's glyph, Y0 to Y1, once a font and
+    build; Geist's capitals are centred in its line to the unit so it doesn't move, Zen Maru Gothic's sat
+    0.086 em low by its line, 1.2px at 14px, and now line up with it, the game's Axis and Jupiter too),
+    digits in cells (centred; the cell the theme's or the widest digit, measured once a font
     build), words whose first glyph reaches left of its pen or last right of its advance (the game's
     Jupiter) moved in and measured with it, the head's and foot's words drawn only as they fit whole
     before the buttons (the foot's right side first, the party's line in what's left), spaced capitals, filled glyphs from the mock-ups' 16-unit paths cut into triangles once (the
@@ -1409,7 +1417,23 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   sums at the foot), three fifths of the width, beside the fight's events, oldest first, in a slab
   that scrolls (a 34px row each, only those in view drawn: the time in mono, the kind's mark in its
   colour, the spot, the event's words, its kind in faint mono capitals on the right); pressed, a member's
-  event picks them in the table, a death's opens its recap on Deaths. A line under each tab
+  event picks them in the table, a death's opens its recap on Deaths. **In the theme** (since 0.7.2; the
+  compact meter's, while compact is on, else Ready Check's): a theme draws the window's ground and frame
+  (`PlateMeter.Ground`, opaque, its sparkles left out), its panels a shade off its ground in its
+  hairline, the rows on its plates (Grimoire's ruled, Readout's bare) with its hover wash, its faces
+  (`DetailFonts`, tested: Ready Check's are the window as it was; another's its name's face for words,
+  its number's for numbers, its small one's for small numbers and the heads in capitals, each as far
+  from Ready Check's sizes as its compact faces are from Ready Check's there), its role colours and job
+  icons in its sockets, the limit break's mark in its colour, the picked row in its mark for you
+  (`PlateMeter.YouMark`; Readout's reverse video as its colour's wash and outline), a dead name in its
+  death mark (struck through for the dagger, glitched faintly for Neon), the abilities' bars in its bar
+  style in the player's role colour (under their words), the tabs, the segments, the buttons and the
+  pull menu in its chips with its accent (the tab you're on, the segment picked, the pull shown), the
+  events' marks in its good, bad and accent, the recap's headline in its death colour. The table's and
+  the abilities' columns are as wide as the widest words they show, the head's and every cell's,
+  measured in the face drawn (`DetailColumns`, tested; again for a new snapshot, theme, scale or font
+  build): the limit break's "–" and "1,337,000" no longer run together. Settings → Meter → _Theme_ says
+  it's both windows' look. A line under each tab
   says how its numbers are worked out (Events: casts are GCDs, an interrupt is credited to whoever's
   interrupt hit the cast in the second before, time dead leaves out the wipe).
 - **Settings → Meter**: _Show the meter_ (`/raidcodex meter` too) with _Where_ (In duties,
@@ -1722,7 +1746,13 @@ entry).
   cells; no word or number touching another in any theme (Mochi's bigger words, "9.3 ♥" and "💔 0:30"; Native's
   "◆ DAMAGE 2:32 PHASE 2" and its Axis numbers with their points, "7.66k" in the limit break's row); every bar's
   end, Neon's cap and Grimoire's underline stopping short of the share; Neon's dead name reading through its
-  glitch; Grimoire's ribbon clear of your job icon; the game's Axis and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
+  glitch; Grimoire's ribbon clear of your job icon; (0.7.2) every theme's names, labels and numbers level with
+  each other and the icons (Mochi's Zen Maru no longer low; Geist not moved), Native's bars ending before the
+  number and its outlined digits apart ("9k"), Mochi's and Neon's bars before the number too; the opened-up
+  window in each theme (its ground, panels, plates, faces, the picked row's mark, a dead name, the abilities'
+  bars, the tabs, segments, buttons and pull menu, the event log, the recap) and in Ready Check as it was; the
+  pull button's chevron 6 apart from its words there and on "DPS ⌄" and the normal meter's dropdowns; the
+  limit break's "–" and "1,337,000" apart; the game's Axis and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
   1.3)`: too big or small?); the outlined words' weight; the ground, edge, rings and sparkles drawn outside the
   window (Mochi's sticker shadow and stars, Neon's glow) and the window's own corners matching its theme with the
   title bar showing; the details panel as a tooltip beside the meter, on the left when there's no room on the
@@ -1739,7 +1769,21 @@ entry).
 
 ## Release notes
 
-### 0.7.1 (not released yet)
+### 0.7.2 (not released yet)
+
+- **The opened-up meter takes the theme.** The big window (Damage, Healing, Taken, Deaths, Events) is drawn in the
+  compact meter's theme as the meter is: its ground and frame, its panels and plates, its faces, its role colours and
+  icons, its bars, its marks for the picked row and the dead, its chips and accent for the tabs, the buttons and the
+  pull menu. Ready Check looks as it did. Its columns are as wide as what they show ("–" and "1,337,000" no longer
+  run together).
+- **Words sit level.** Each line is centred by its capitals' ink, not by its font's line: Mochi's Zen Maru Gothic no
+  longer sits a pixel or two low beside the icons and numbers; Geist doesn't move.
+- **Native's numbers stand clear.** Its bars end before the number (as the game's party list has them), and its
+  outlined digits have a pixel between them ("9k"). Mochi's pill and Neon's bright cap end before the number too.
+- **Dropdowns have room for their chevron**: "Pull 12 · now ⌄", "DPS ⌄" and the normal meter's keep 6px between
+  the words and the chevron.
+
+### 0.7.1
 
 - **The compact meter sizes itself.** It can't be resized by hand any more (it only snapped back): its width is its
   theme's, its height its rows'; a size given it before is let go.

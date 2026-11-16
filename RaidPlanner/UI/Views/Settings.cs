@@ -688,7 +688,7 @@ public sealed partial class MainWindow
         var old = Palette.Opacity;
         if (off) Palette.Opacity = old * 0.45f;
         Txt.Line(dl, new Vector2(x, y), "Theme", Face.SansMedium, 14, Palette.White, 14 * 1.3f);
-        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "The compact meter's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
+        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "Compact's and the opened-up window's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
         y += S(14 * 1.3f) + S(2) + S(17.4f) + S(10);
         // The preview on the right, at its real size; the tiles in what's left.
         var previewW = S(theme.Win.Width);

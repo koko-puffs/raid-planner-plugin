@@ -48,7 +48,9 @@ public sealed partial class MeterWindow
     {
         if (fontsFor == id) return;
         fontsFor = id;
-        fonts.Want(MeterThemes.FacesOf(MeterThemes.Of(id)));
+        // The compact meter's faces and the opened-up window's in the theme (DetailFonts).
+        var t = MeterThemes.Of(id);
+        fonts.Want(System.Linq.Enumerable.Concat(MeterThemes.FacesOf(t), DetailFonts.For(t).Faces()));
     }
 
     /// <summary>The compact meter's settings onto its drawer (each frame), and the shown fight's words (once a snapshot).</summary>
