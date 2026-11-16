@@ -29,7 +29,8 @@ public enum StatusFrom
 /// seconds before the pull), ground placements, enemy casts stopped (and who interrupted them), raises,
 /// the enemies' targets, the recording player's target's enmity list, MP and barriers, the limit break
 /// gauge, head signs, the countdown, each hit's barriers and places, a damage effect's bonus %, and why a
-/// party cast was stopped. Game-free, so it's tested.
+/// party cast was stopped. Since 0.7.4 an enemy turning or moving at a mechanic (<see cref="Facing"/>) and whom a head
+/// marker points at. Game-free, so it's tested.
 /// </summary>
 public sealed class RecordingBuilder
 {
@@ -80,6 +81,22 @@ public sealed class RecordingBuilder
 
     /// <summary>A party member's cast with no action of theirs this long after it should have ended was cancelled.</summary>
     public const double CastGrace = 1.5;
+
+    /// <summary>
+    /// Since 0.7.4: an enemy at a mechanic (its cast going, or this long after its cast's end or its last hit) turning by
+    /// <see cref="TurnStep"/> (radians, 2°) or moving <see cref="TurnMove"/> yalms or more from where it last was is a
+    /// <c>turn</c> event, at most every <see cref="TurnEvery"/> seconds each and <see cref="MaxTurns"/> in all (they don't
+    /// count towards <see cref="MaxEvents"/>, so they never crowd out the rest).
+    /// </summary>
+    public const double TurnLinger = 1.5;
+
+    public const float TurnStep = MathF.PI / 90;
+
+    public const float TurnMove = 1f;
+
+    public const double TurnEvery = 0.1;
+
+    public const int MaxTurns = 3000;
 
     private readonly Func<uint, ActionInfo?> actionInfo;
     private readonly Func<uint, StatusInfo?> statusInfo;
@@ -147,6 +164,12 @@ public sealed class RecordingBuilder
     // Raises: the Raise status put on each member since they died (when, by whom); the last raise used on them while down.
     private readonly Dictionary<int, (double T, int By)> raiseStatus = new();
     private readonly Dictionary<int, (double T, int By, bool Lb)> raiseUse = new();
+
+    // Since 0.7.4: until when each enemy is at a mechanic (its cast's end, its last hit, and a moment), and how it last stood
+    // (when, its facing, where) as a turn event or as it began; the turn events kept so far.
+    private readonly Dictionary<int, double> busyUntil = new();
+    private readonly Dictionary<int, (double T, float Rot, float X, float Z)> turnLast = new();
+    private int turns;
 
     /// <summary>
     /// The recording player's own recast for one of their actions, in seconds, and its most charges (0: not known), as the game
@@ -288,13 +311,67 @@ public sealed class RecordingBuilder
         if (id != 0 && !recording.Statuses.ContainsKey(id)) recording.Statuses[id] = statusInfo(id) ?? new StatusInfo(string.Empty, 0);
     }
 
-    private bool Room => recording.Events.Count < MaxEvents;
+    /// <summary>Room for one more event (the turn events have their own cap: <see cref="MaxTurns"/>).</summary>
+    private bool Room => recording.Events.Count - turns < MaxEvents;
+
+    /// <summary>The turn events kept (since 0.7.4).</summary>
+    public int Turns => turns;
+
+    /// <summary>The enemy is at a mechanic until at least <paramref name="until"/> (its cast's end, its hit) and <see cref="TurnLinger"/> more.</summary>
+    private void Busy(int actor, double until)
+    {
+        if (actor <= 100) return;
+        var to = until + TurnLinger;
+        if (!busyUntil.TryGetValue(actor, out var had) || to > had) busyUntil[actor] = to;
+    }
+
+    /// <summary>
+    /// An enemy (a boss, an add or a helper) as it stands this frame (since 0.7.4), <paramref name="casting"/> when its cast bar
+    /// is up. While it's at a mechanic (casting, or within <see cref="TurnLinger"/> of its cast's end or its last hit) a turn of
+    /// <see cref="TurnStep"/> or more, or a move of <see cref="TurnMove"/>, from how it last stood is a <c>turn</c> event (at most
+    /// every <see cref="TurnEvery"/> each, <see cref="MaxTurns"/> in all); how it stood as it began is only remembered (its cast
+    /// has its facing). What shows a rotating mechanic's steps: a boss turning between cleaves, a helper's heading over its cast.
+    /// </summary>
+    public void Facing(double t, int actor, float x, float z, float rotation, bool casting)
+    {
+        if (actor <= 100 || !float.IsFinite(rotation) || !float.IsFinite(x) || !float.IsFinite(z)) return;
+        if (casting) Busy(actor, t);
+        if (!busyUntil.TryGetValue(actor, out var until) || t > until)
+        {
+            turnLast.Remove(actor);
+            busyUntil.Remove(actor);
+            return;
+        }
+        if (!turnLast.TryGetValue(actor, out var last))
+        {
+            turnLast[actor] = (t, rotation, x, z);
+            return;
+        }
+        if (t - last.T < TurnEvery - 0.001) return;
+        var turned = MathF.Abs(Turned(last.Rot, rotation)) >= TurnStep;
+        var moved = MathF.Sqrt((x - last.X) * (x - last.X) + (z - last.Z) * (z - last.Z)) >= TurnMove;
+        if (!turned && !moved) return;
+        turnLast[actor] = (t, rotation, x, z);
+        if (turns >= MaxTurns) return;
+        turns++;
+        recording.Events.Add(new TurnEvent(t, actor, rotation, x, z));
+    }
+
+    /// <summary>The angle from <paramref name="a"/> to <paramref name="b"/> the shorter way round (radians, −π…π).</summary>
+    public static float Turned(float a, float b)
+    {
+        var d = (b - a) % (2 * MathF.PI);
+        if (d > MathF.PI) d -= 2 * MathF.PI;
+        if (d < -MathF.PI) d += 2 * MathF.PI;
+        return d;
+    }
 
     public void Cast(double t, int source, uint action, float duration, float x, float z, float rotation, int target, float? targetX, float? targetZ,
         bool interruptible = false)
     {
         if (source == 0 || action == 0) return;
         enemyCasting[source] = (action, t + Math.Max(0, duration));
+        Busy(source, t + Math.Max(0, duration));
         if (!Room) return;
         Remember(action);
         recording.Events.Add(new CastEvent(t, source, action, duration, x, z, rotation, target, targetX, targetZ, interruptible));
@@ -311,7 +388,9 @@ public sealed class RecordingBuilder
         IReadOnlyList<long>? damage = null, IReadOnlyList<int>? fx = null, IReadOnlyList<long>? hp = null, IReadOnlyList<int>? shield = null,
         IReadOnlyList<float>? px = null, IReadOnlyList<float>? pz = null)
     {
-        if (!Room || source == 0 || action == 0) return;
+        if (source == 0 || action == 0) return;
+        Busy(source, t);
+        if (!Room) return;
         Remember(action);
         if (damage != null && damage.Count != targets.Count) damage = null;
         if (fx != null && fx.Count != targets.Count) fx = null;
@@ -341,10 +420,14 @@ public sealed class RecordingBuilder
         recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before, sh, xs, zs));
     }
 
-    public void Marker(double t, int on, uint icon)
+    /// <summary>
+    /// A head marker over someone (a party member, or an enemy or helper: a rotation's "clockwise" over the boss), with the one
+    /// the game said it points at (<paramref name="target"/>, since 0.7.4; 0 none, and never the one it's over).
+    /// </summary>
+    public void Marker(double t, int on, uint icon, int target = 0)
     {
         if (!Room || on == 0) return;
-        recording.Events.Add(new MarkerEvent(t, on, icon));
+        recording.Events.Add(new MarkerEvent(t, on, icon, target == on ? 0 : target));
         Markers++;
     }
 
@@ -536,6 +619,8 @@ public sealed class RecordingBuilder
         }
         if (!enemyCasting.TryGetValue(actor, out var e) || e.Action != action || t >= e.End - CancelBeforeEnd) return;
         enemyCasting.Remove(actor);
+        // No longer at that mechanic: its turns after a moment are its own again.
+        if (busyUntil.TryGetValue(actor, out var busy)) busyUntil[actor] = Math.Min(busy, t + TurnLinger);
         if (!Room) return;
         var credit = interrupted ? interrupts.Credit(t, (uint)actor) : null;
         recording.Events.Add(new CancelEvent(t, actor, action, interrupted, (int)(credit?.Member ?? 0), credit?.Action ?? 0));

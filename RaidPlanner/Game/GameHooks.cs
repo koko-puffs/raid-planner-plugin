@@ -363,7 +363,8 @@ public sealed unsafe class GameHooks : IDisposable
             // A cast stopped, as sent ([verify] arg2 the action type, arg3 the action, arg4 1 when interrupted).
             if (category == CancelCast && diag.On)
                 diag.Write("cancel-cast", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
-            if (category == HeadMarker) recorder.OnMarker(entityId, arg1);
+            // A head marker: its icon, and ([verify], BossMod's reading) whom it points at.
+            if (category == HeadMarker) recorder.OnMarker(entityId, arg1, arg2);
             else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4, arg5);
             // A cast stopped: only an action's ([verify] that arg4 == 1 is "interrupted").
             else if (category == CancelCast && arg2 == ActionTypeAction && arg3 != 0) recorder.OnCancel(entityId, arg3, arg4 == 1);

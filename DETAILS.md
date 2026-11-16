@@ -122,6 +122,13 @@ Every frame while it goes (on the framework thread):
   Of those, the last that could kill comes first (an instant death, or as much as the HP they had
   before it): the game takes a hit's damage off a moment after it says it landed, so a bleed's small
   tick can come between a lethal hit and the HP reaching 0, and that tick isn't the cause.
+- **Turns** (since 0.7.4): each enemy (bosses, adds and helpers) while it's at a mechanic: its cast bar up, or within
+  1.5 seconds (`TurnLinger`) of its cast's end or its last hit (a stopped cast's mechanic ends 1.5 seconds after it
+  stopped). Its first frame there is only remembered; then a turn of 2° (`TurnStep`) or a move of a yalm (`TurnMove`)
+  from how it last stood is a `turn` event with its facing and place, at most every tenth of a second each and 3,000 a
+  pull (`MaxTurns`, apart from the 20,000 events'). What shows a rotation's steps (a boss turning between cleaves, a
+  cone or line turning over its cast) and a helper's heading, which the frames don't keep. Away from a mechanic a boss
+  turning to its tank isn't kept (the frames have that).
 - **Targetability**: an enemy becoming targetable (the first time too, so the site sees a new boss
   come in), and one that has been targetable going untargetable (dead, gone, or a phase change);
   one that leaves the game is untargetable. One never targetable (a helper) isn't recorded. The
@@ -149,7 +156,10 @@ own function first and changes nothing):
   `CharacterManager.LookupBattleCharaByEntityId`) only for a party member, someone the party heals
   and a lifesteal's caster.
 - **`PacketDispatcher.HandleActorControlPacket`**, category 34: a head marker over someone (its
-  icon number, read after the game has unscrambled it, as BossMod reads it); since 0.3.0 category
+  icon number, read after the game has unscrambled it, as BossMod reads it): a party member, or an enemy or helper (a
+  rotation's "clockwise" over the boss); since 0.7.4 one over a helper the frames haven't met yet is taken in (a
+  combatant or part with no owner; in a field zone within 70 yalms of you), and the message's second argument, whom
+  it points at ([verify]: BossMod's reading), is kept when it's someone in the recording; since 0.3.0 category
   23, a DoT's or HoT's tick (its target, status, 3 damage or 4 a heal, amount and source, in the
   order of FFXIVClientStructs' `StatusManager.ProcessHotDot`), with the target's HP read for a heal
   or a party member, to the parser: the combat block's `tick` (that HP its `h`), and a bleed's
@@ -249,8 +259,9 @@ in game yet is marked [verify] in its code comment and listed under _Not yet_):
   first time, then when MP moved 500 or the barrier changed, at most every half second each.
 - **The limit break gauge** (`lb`): `LimitBreakController`'s units and bars × units a bar [verify], a
   row on change.
-- **Head signs**, once a second with the waymarks (`MarkingController.Markers`, 17 slots [verify their
-  order]): a `signs` event when any changed.
+- **Head signs**, once a second with the waymarks (`MarkingController.Markers`, 17 slots, in the
+  Marker sheet's row order, row − 1: attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8;
+  checked against the sheet in 0.7.4's sweep): a `signs` event when any changed.
 - **Each enemy hit's targets**: their barrier before it (`sh`) and where they stood as it arrived
   (`px`, `pz`), read with their HP; and the hit's flags 256 (knocked back or drawn in: effects 31–36),
   512 (partly absorbed: a damage effect's `Param4` & 4 [verify]) and 1024 (a status it carries
@@ -359,6 +370,13 @@ and 12 rings, 13 the soul crystal), `id` the Item sheet's row, `name` the item's
 language; a stat is written only when above 0. Read back leniently (`Gear.Read`): an item with a place
 outside 0–13 (or a second at a place), no id, or a stat not a whole number above 0 or not one of the
 twelve keys is left out; `gear` that isn't an object reads as none.
+
+Since 0.7.4 (the mechanics sweep; still version 1, every key optional):
+
+- `{ "k": "turn", "t", "actor": actorId, "rot": radians, "x", "z" }`: an enemy turning or moving at a mechanic (What's
+  recorded, Turns); facing to 3 decimals, its place to 2. None in a pull before 0.7.4.
+- `marker`: `tgt` (a party or actor id), whom the game says it points at; left out for none, someone not in the
+  recording, or the marked one itself.
 
 `Recording.Parse` reads all of it back leniently: a hit's lists not as long as its targets, or a
 combat table whose columns aren't all arrays of the same length, are left out; an optional column not
@@ -1779,7 +1797,8 @@ entry).
   `CurrentUnits` as the gauge's total (10,000 a bar); knockback effects (31–36) absent under Arm's Length
   or Surecast, and a damage effect's `Param4` & 4 meaning partly absorbed; `GetAdjustedRecastTime` in
   milliseconds with traits at the synced level and `GetMaxCharges(id, 0)`; `MarkingController.Markers`'
-  order (attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8); the hooks on out
+  slots following the Marker sheet's row order (attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle,
+  attack 6–8: the sheet's order, checked in 0.7.4's sweep; the memory's following it isn't yet); the hooks on out
   of combat in a recorded duty costing nothing noticeable, and the pre-pull rows and countdown appearing;
   the hook's target position for ground actions; a damage effect's `Param2` matching the battle log's
   bonus %; the enemies' `TargetObjectId` as their target; the countdown agent's first reading (its
@@ -1801,7 +1820,10 @@ entry).
   (Unix seconds, ticking over with the server: `startedAt`'s milliseconds rest on it), the party list's `World` as the home
   world, the cross-world party's `HomeWorld`, and the World sheet's names.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
-  where it can (stack, spread, tankbuster…).
+  where it can (stack, spread, tankbuster…; since 0.7.4 a rotation's way round from BossMod's names). Since 0.7.4,
+  to check in the game: a head marker's second argument as whom it points at (`tgt`, BossMod's reading), and a
+  rotating mechanic's `turn` events (a boss turning between cleaves, a helper's heading over its cast) coming as
+  often as the steps go, and few away from them.
 - The compact meter and its themes (0.7.0, with 0.7.1's fixes) want checking in the game (the sample fight shows most of it:
   `/raidcodex meter preview`, then each theme in Settings): the job icons (62100 + the ClassJob row, framed, at
   16px; grey when dead) and their fallback; Zen Maru Gothic and Fraunces built in the atlas and their digits in
@@ -1876,6 +1898,13 @@ entry).
   plugin's description name just `/raidcodex`, `/raidcodex settings` and `/raidcodex help`; the description is shorter.
 - **No keys.** The plugin reads no keys at all, so nothing can clash with your binds: a confirmation's Escape is gone
   (press No or Yes).
+- **Rotating mechanics, recorded whole.** An enemy at a mechanic (its cast going, or within 1.5 seconds of its cast's
+  end or its last hit) turning 2° or moving a yalm is a `turn` event every frame it does (at most ten a second each,
+  3,000 a pull, not counted towards the events' cap): a boss turning step by step through a rotation, and a helper's
+  heading over its cast, which the half-second frames missed or (a helper's, not in the frames) never had. A head
+  marker over a helper the frames hadn't met yet (one come between them, as a rotation's "clockwise" over its helper
+  often is) was dropped; it's taken in now as a hit's is, and every marker keeps whom the game says it points at
+  (`tgt` [verify]). The site finds the rotation, its way round, step and timing, and draws it.
 
 ### 0.7.3
 
