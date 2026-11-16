@@ -619,6 +619,50 @@ internal sealed class PlateMeter
     // ---------------------------------------------------------------------------------------------
     // The head.
 
+    /// <summary>
+    /// The head's band in the theme (the compact meter's and, since 0.7.3, the normal meter's): Native's
+    /// title band and gilt rule, Neon's horizon, Grimoire's two rules; on the side away from the rows
+    /// (<paramref name="up"/>: the head at the foot). Nothing for the others (their head sits on a plate or on the ground).
+    /// </summary>
+    public void HeadBand(ImDrawListPtr dl, float left, float right, float top, float h, bool up)
+    {
+        var t = T;
+        var w = right - left;
+        var orn = t.Drawn(Decorations);
+        if (t.Id == MeterThemeId.Native)
+        {
+            if ((orn & Ornaments.TitleBand) != 0)
+                PlateArt.GradientRect(dl, new Vector2(left + S(2), top + S(2)), new Vector2(right - S(2), top + h), Rgb.Rgba(78, 78, 88, 0.9f), Rgb.Rgba(40, 40, 46, 0.9f), S(3));
+            Kit.Rule(dl, left + S(4), right - S(4), up ? top - S(1) : top + h, Rgb.Rgba(214, 184, 120, 0.5f));
+        }
+        else if (t.Id == MeterThemeId.Neon && (orn & Ornaments.Horizon) != 0)
+        {
+            var a = Palette.U32(Rgb.Rgba(255, 79, 216, 0));
+            var b = Palette.U32(Rgb.Rgba(255, 79, 216, 0.16f));
+            dl.AddRectFilledMultiColor(new Vector2(left + 1, top + 1), new Vector2(right - 1, top + h), up ? b : a, up ? b : a, up ? a : b, up ? a : b);
+            var line = Palette.U32(Rgb.Rgba(255, 79, 216, 0.35f));
+            var gy = up ? top + S(7) : top + h - S(7);
+            for (var i = 0; i < 9; i++)
+            {
+                var gx = left + S(8) + i * (w - S(16)) / 8;
+                var lean = (i - 4) * S(1.75f);
+                dl.AddLine(new Vector2(gx, gy), new Vector2(gx + lean, up ? top : top + h), line, 1f);
+            }
+            dl.AddLine(new Vector2(left + S(4), gy + 0.5f), new Vector2(right - S(4), gy + 0.5f), line, 1f);
+            var g2 = up ? top + S(3) : top + h - S(3);
+            dl.AddLine(new Vector2(left + S(4), g2 + 0.5f), new Vector2(right - S(4), g2 + 0.5f), Palette.U32(Rgb.Rgba(255, 79, 216, 0.28f)), 1f);
+            Kit.Rule(dl, left + S(4), right - S(4), up ? top : top + h, Rgb.Rgba(255, 79, 216, 0.7f));
+        }
+        else if (t.Id == MeterThemeId.Grimoire)
+        {
+            var r1 = up ? top + S(1) : top + h - S(1);
+            var r2 = up ? top - S(1) : top + h + S(1);
+            Kit.Rule(dl, left + S(10), right - S(10), r1, Rgb.Rgba(90, 60, 30, 0.45f));
+            Kit.Rule(dl, left + S(10), right - S(10), r2, Rgb.Rgba(90, 60, 30, 0.25f));
+        }
+
+    }
+
     private void Head(ImDrawListPtr dl, Vector2 min, float w, float top, bool waiting, ref PlateInput input)
     {
         var t = T;
@@ -629,37 +673,7 @@ internal sealed class PlateMeter
         var right = min.X + w;
         var cy = top + h / 2;
         // The bands behind it.
-        if (t.Id == MeterThemeId.Native)
-        {
-            if ((orn & Ornaments.TitleBand) != 0)
-                PlateArt.GradientRect(dl, new Vector2(left + S(2), top + S(2)), new Vector2(right - S(2), top + h), Rgb.Rgba(78, 78, 88, 0.9f), Rgb.Rgba(40, 40, 46, 0.9f), S(3));
-            Kit.Rule(dl, left + S(4), right - S(4), Up ? top - S(1) : top + h, Rgb.Rgba(214, 184, 120, 0.5f));
-        }
-        else if (t.Id == MeterThemeId.Neon && (orn & Ornaments.Horizon) != 0)
-        {
-            var a = Palette.U32(Rgb.Rgba(255, 79, 216, 0));
-            var b = Palette.U32(Rgb.Rgba(255, 79, 216, 0.16f));
-            dl.AddRectFilledMultiColor(new Vector2(left + 1, top + 1), new Vector2(right - 1, top + h), Up ? b : a, Up ? b : a, Up ? a : b, Up ? a : b);
-            var line = Palette.U32(Rgb.Rgba(255, 79, 216, 0.35f));
-            var gy = Up ? top + S(7) : top + h - S(7);
-            for (var i = 0; i < 9; i++)
-            {
-                var gx = left + S(8) + i * (w - S(16)) / 8;
-                var lean = (i - 4) * S(1.75f);
-                dl.AddLine(new Vector2(gx, gy), new Vector2(gx + lean, Up ? top : top + h), line, 1f);
-            }
-            dl.AddLine(new Vector2(left + S(4), gy + 0.5f), new Vector2(right - S(4), gy + 0.5f), line, 1f);
-            var g2 = Up ? top + S(3) : top + h - S(3);
-            dl.AddLine(new Vector2(left + S(4), g2 + 0.5f), new Vector2(right - S(4), g2 + 0.5f), Palette.U32(Rgb.Rgba(255, 79, 216, 0.28f)), 1f);
-            Kit.Rule(dl, left + S(4), right - S(4), Up ? top : top + h, Rgb.Rgba(255, 79, 216, 0.7f));
-        }
-        else if (t.Id == MeterThemeId.Grimoire)
-        {
-            var r1 = Up ? top + S(1) : top + h - S(1);
-            var r2 = Up ? top - S(1) : top + h + S(1);
-            Kit.Rule(dl, left + S(10), right - S(10), r1, Rgb.Rgba(90, 60, 30, 0.45f));
-            Kit.Rule(dl, left + S(10), right - S(10), r2, Rgb.Rgba(90, 60, 30, 0.25f));
-        }
+        HeadBand(dl, left, right, top, h, Up);
 
         var padL = S(t.Id == MeterThemeId.Grimoire ? 12 : t.Id == MeterThemeId.Native ? 9 : 8);
         var padR = S(t.Id == MeterThemeId.Grimoire ? 12 : 7);

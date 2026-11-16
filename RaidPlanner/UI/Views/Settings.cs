@@ -582,14 +582,8 @@ public sealed partial class MainWindow
             config.MeterGauge = (GaugePlace)gauge;
             config.Save();
         }
-        if (SwitchRow(i++, "##meter-compact", "Compact", "The top eight on plates, in a theme; the tabs and pulls in one menu", config.MeterCompact,
-                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them; its size is its theme's and its rows', not set by hand. Off, the normal meter with its tabs, pace bar and column heads. The meter's own menu has this switch too; the opened-up window stays as it is.",
-                pad: 10))
-        {
-            config.MeterCompact = !config.MeterCompact;
-            config.Save();
-        }
-        ThemeBlock(i++, !config.MeterCompact);
+        // The theme: the compact meter's, the normal meter's and the opened-up window's (since 0.7.3), with its role colours and decorations under it.
+        ThemeBlock(i++, false);
         var roles = SegmentRow(i++, "##meter-roles", "Role colours", "The bars' and icons' colours", RoleItems, (int)config.MeterRoleColours, sub: true,
             tip: "The theme's: a blue, a green and a red-orange told apart with any colour blindness (each theme has its own set). The game's: its own blue, green and red, as the party list has them.");
         if (roles != (int)config.MeterRoleColours)
@@ -597,21 +591,28 @@ public sealed partial class MainWindow
             config.MeterRoleColours = (MeterRoleColours)roles;
             config.Save();
         }
+        if (SwitchRow(i++, "##meter-decor", "Decorations", "Sparkles, scanlines, the horizon, the glitch, the ribbon", config.MeterDecorations,
+                "Each theme's flourishes, in both meters and the opened-up window. Off, the theme keeps its colours, fonts and frame without them.", sub: true, pad: 10))
+        {
+            config.MeterDecorations = !config.MeterDecorations;
+            config.Save();
+        }
+        if (SwitchRow(i++, "##meter-compact", "Compact", "The top eight on plates; the tabs and pulls in one menu", config.MeterCompact,
+                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them; its size is its theme's and its rows', not set by hand. Off, the normal meter, in the same theme, with its tabs, pace bar and column heads, sized by its edge. The meter's own menu has this switch too.",
+                pad: 10))
+        {
+            config.MeterCompact = !config.MeterCompact;
+            config.Save();
+        }
         if (SwitchRow(i++, "##meter-whole", "Whole numbers", "27,840 instead of 27.8k", config.MeterWholeNumbers,
-                "Three figures (27.8k, 9.05k, 165k) keep still at every snapshot and read at a glance; whole numbers widen the column a little.", sub: true, pad: 10,
+                "Three figures (27.8k, 9.05k, 165k) keep still at every snapshot and read at a glance; whole numbers widen the column a little. The normal meter always writes them whole.", sub: true, pad: 10,
                 off: !config.MeterCompact))
         {
             config.MeterWholeNumbers = !config.MeterWholeNumbers;
             config.Save();
         }
-        if (SwitchRow(i++, "##meter-decor", "Decorations", "Sparkles, scanlines, the horizon, the glitch, the ribbon", config.MeterDecorations,
-                "Each theme's flourishes. Off, the theme keeps its colours, fonts and frame without them.", sub: true, pad: 10, off: !config.MeterCompact))
-        {
-            config.MeterDecorations = !config.MeterDecorations;
-            config.Save();
-        }
         // 20% at the least, as the meter draws it (below that its edge and words would float on nothing).
-        var floor = config.MeterCompact ? MeterThemes.Of(config.MeterTheme).Win.Floor : 0;
+        var floor = MeterThemes.Of(config.MeterTheme).Win.Floor;
         var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", floor > 0 ? $"Rows stay solid; {MeterThemes.Of(config.MeterTheme).Name} keeps {Format.PercentWhole(floor)} at least" : "Rows stay solid",
             Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
         if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
@@ -683,12 +684,13 @@ public sealed partial class MainWindow
         if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
         var theme = MeterThemes.Of(config.MeterTheme);
         MeterWindow.WantFonts(fonts, theme.Id);
-        var x = at.X + S(34);
+        // A top-level row (it is for all three windows, not under Compact).
+        var x = at.X + S(16);
         var y = at.Y + S(12);
         var old = Palette.Opacity;
         if (off) Palette.Opacity = old * 0.45f;
         Txt.Line(dl, new Vector2(x, y), "Theme", Face.SansMedium, 14, Palette.White, 14 * 1.3f);
-        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "Compact's and the opened-up window's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
+        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "Both meters' and the opened-up window's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
         y += S(14 * 1.3f) + S(2) + S(17.4f) + S(10);
         // The preview on the right, at its real size; the tiles in what's left.
         var previewW = S(theme.Win.Width);

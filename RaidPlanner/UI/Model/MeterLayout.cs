@@ -51,6 +51,13 @@ public sealed record MeterSizes(
     /// </summary>
     public float Needed(int rows, bool pace) => Head + Tabs + (pace ? Pace : 0) + Cols + Math.Max(0, rows) * Row + LimitBreak + Foot;
 
+    /// <summary>
+    /// The normal meter's sizes in a theme (since 0.7.3 it draws in the compact meter's theme): Ready Check's are
+    /// <see cref="Normal"/>; a theme's rows are as tall as its plates need for its bigger faces, 5 more than its
+    /// compact rows, never under 25 (Mochi 29, Native 27, Grimoire 26).
+    /// </summary>
+    public static MeterSizes For(MeterTheme t) => t.Id == MeterThemeId.ReadyCheck ? Normal : Normal with { Row = MathF.Max(Normal.Row, t.Row.H + 5) };
+
     /// <summary>How many rows fit in a fight's content this tall (CSS px), the rest as <see cref="Needed"/> has it.</summary>
     public int RowsIn(float content, bool pace) => Row <= 0 ? 0 : Math.Max(0, (int)MathF.Floor((content - Needed(0, pace) + 1) / Row));
 }
