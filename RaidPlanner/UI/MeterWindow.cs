@@ -12,13 +12,13 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The meter over the fight (the mock-ups' "The meter"): small and calm, 330 wide. The fight's clock
-/// in mono with the ember dot that beats while a fight is on, which pull it shows (the picker), the
-/// lock; four tabs with the ember cast bar under the one you're on; pace on the Damage tab; a 25px
-/// row a player (the spot in its role's colour, the name, the job in mono, the number and its share,
-/// a slim bar to the top player's: yours ember), the limit break on its own row, the party at the
-/// foot. Compact (since 0.7.0 the default: <see cref="PlateMeter"/>, in MeterWindow.Plate.cs), the top
-/// eight on plates in the theme picked, the tabs and the picker in one menu in its head.
+/// The meter over the fight (the mock-ups' "The meter"): small and calm, 330 wide, in the theme picked
+/// (since 0.7.3 the normal meter too: MeterWindow.Normal.cs). The fight's clock with the dot that beats
+/// while a fight is on, which pull it shows (the picker), the lock; five tabs with the accent under the
+/// one you're on; pace on the Damage tab; a row a player on the theme's plate (the job's icon, the name,
+/// the job, the number and its share, the bar in the theme's style and the role's colour), the limit
+/// break on its own row, the party at the foot. Compact (since 0.7.0 the default: <see cref="PlateMeter"/>,
+/// in MeterWindow.Plate.cs), the top eight on plates, the tabs and the picker in one menu in its head.
 /// Locked, it has no title bar and can't be moved or sized; click-through, the mouse goes to the game.
 /// Only the normal meter, unlocked, can be sized by hand (<see cref="MeterLayout.Resizable"/>): its
 /// head's buttons are kept out of the reach of its edges and corners, and while the mouse is over one
@@ -49,8 +49,6 @@ public sealed partial class MeterWindow : Window
     /// <summary>Folded or empty it's as tall as what it shows (a line, or the Boss and its words).</summary>
     private static readonly WindowSizeConstraints FitSizes = new() { MinimumSize = new Vector2(260, 0), MaximumSize = new Vector2(720, 1400) };
 
-    private static readonly TabSpec[] TabSpecs = { new("Damage"), new("Healing"), new("Taken"), new("Deaths"), new("Events") };
-
     private static readonly string[] TabIds = { "##mtab0", "##mtab1", "##mtab2", "##mtab3", "##mtab4" };
 
     private static readonly Icon[] TabIcons = { Icon.Sword, Icon.Heart, Icon.Shield, Icon.Skull, Icon.List };
@@ -61,8 +59,6 @@ public sealed partial class MeterWindow : Window
     private static readonly string[] PaceItems = { "Best", "Last", "Off" };
 
     private static readonly string[] SpotOrderOf = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
-
-    private static readonly Run[] OneRun = new Run[1];
 
     /// <summary>What the window shows this frame (decided once, before ImGui.Begin, since it sizes the window).</summary>
     private enum View
@@ -178,9 +174,6 @@ public sealed partial class MeterWindow : Window
     /// <summary>The limit break gauge's bars, worked out again only when the gauge changes.</summary>
     private (LimitBreakGauge? Of, float[] Bars) gaugeBars = (null, Array.Empty<float>());
 
-    /// <summary>Column heads in capitals.</summary>
-    private static readonly Dictionary<string, string> CapsOf = new();
-
     public MeterWindow(Configuration config, Fonts fonts)
         : base("Meter###RaidPlannerMeter")
     {
@@ -214,8 +207,8 @@ public sealed partial class MeterWindow : Window
 
     private IMeterSource? Meter => Preview ?? Source?.Invoke();
 
-    /// <summary>The normal meter's sizes (compact is <see cref="PlateMeter"/>'s own since 0.7.0).</summary>
-    private static MeterSizes Z => MeterSizes.Normal;
+    /// <summary>The normal meter's sizes in its theme (<see cref="MeterSizes.For"/>; compact is <see cref="PlateMeter"/>'s own since 0.7.0).</summary>
+    private MeterSizes Z => NormalLook().Z;
 
     /// <summary>It grows up: anchored at its foot, its head at the foot.</summary>
     private bool Up => config.MeterGrows == MeterGrows.Up;
@@ -252,9 +245,8 @@ public sealed partial class MeterWindow : Window
         {
             Failed(ex, "Raid Codex's meter couldn't place itself");
         }
-        // The background is see-through as set; the rows stay solid. Compact draws its theme's own ground and frame.
-        if (config.MeterCompact) Theme.PushFrame(Vector4.Zero, PlateTheme.Win.Radius, Vector4.Zero);
-        else Theme.PushFrame(Palette.Rgba(13, 13, 16, Math.Clamp(config.MeterBackground, 0.2f, 1f)), Palette.RadiusMd);
+        // The background is see-through as set; the rows stay solid. Both meters draw their theme's own ground and frame (since 0.7.3 the normal one too).
+        Theme.PushFrame(Vector4.Zero, PlateTheme.Win.Radius, Vector4.Zero);
     }
 
     public override void PostDraw() => Theme.Pop();
@@ -284,7 +276,6 @@ public sealed partial class MeterWindow : Window
             {
                 try
                 {
-                    if (!config.MeterCompact) Frame.Window(!config.MeterLocked);
                     DrawInside();
                 }
                 finally
@@ -498,6 +489,9 @@ public sealed partial class MeterWindow : Window
         widthKnown = true;
         previewInFoot = false;
         if (shown != null) Words(shown);
+        // The theme's ground and frame under it all (its sparkles as Decorations has them), as compact's.
+        Configure(plate, config);
+        plate.Ground(dl, top, new Vector2(top.X + w, bottom), true);
         Kit.PushBox(win.X, w);
         try
         {
@@ -527,6 +521,8 @@ public sealed partial class MeterWindow : Window
         finally
         {
             Kit.PopBox();
+            // Readout's scanlines over everything, last.
+            plate.Scanlines(dl, top, new Vector2(top.X + w, bottom));
         }
     }
 
@@ -581,194 +577,7 @@ public sealed partial class MeterWindow : Window
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The head: the clock, which pull, the tab menu, the lock.
-
-    /// <summary>
-    /// The head (`.mt-h`, 36 tall; 30 compact) at the anchored edge: on the right the lock, compact's
-    /// tab menu ("Damage ⌄") and the picker ("Pull 12 ⌄"); on the left the clock (mono 600) with its
-    /// dot, then the Preview tag and the outcome's tag, or the waiting line, as far as they fit before
-    /// the buttons.
-    /// </summary>
-    private void Header(ImDrawListPtr dl, float left, ref MeterStack stack, float w, string clock, bool beating, string? tag, TagKind tagKind, string? pick,
-        IMeterSource? m, string? waitingLine, bool hasFight)
-    {
-        var z = Z;
-        var h = S(z.Head);
-        var y = stack.Near(h);
-        headTop = y;
-        headBottom = y + h;
-        var cy = y + h / 2;
-        var right = left + w - S(6);
-        // The lock (`.mt-ib`): ember-washed when locked, a pointer when click-through, quiet when open. Out of
-        // the reach of the window's right edge and (growing up, its head at the foot) its bottom-right grip.
-        var lx = right - S(24);
-        lx -= guard.ShiftLeft(new Vector2(lx, cy - S(12)), new Vector2(lx + S(24), cy + S(12)));
-        guard.Keep(new Vector2(lx, cy - S(12)), new Vector2(lx + S(24), cy + S(12)));
-        var locked = config.MeterLocked;
-        var icon = !locked ? Icon.LockOpen : config.MeterClickThrough ? Icon.MousePointer : Icon.Lock;
-        if (SmallButton("##meter-lock", new Vector2(lx, cy - S(12)), icon, locked, locked ? "Locked where it is. Press to move and size it again." : "Lock it where it is"))
-        {
-            config.MeterLocked = !locked;
-            config.Save();
-        }
-        var edge = lx;
-        if (pick != null && m != null)
-        {
-            // The picker (`.mt-pick`): 24 tall, 6px corners, a hairline; "Pull 12 ⌄".
-            var pw = DropWidth(pick);
-            var px = edge - S(8) - pw;
-            guard.Keep(new Vector2(px, cy - S(12)), new Vector2(px + pw, cy + S(12)));
-            if (DropButton("##meter-pick", new Vector2(px, cy - S(12)), pw, pick)) ImGui.OpenPopup(Picker);
-            DrawPicker(m, px);
-            edge = px;
-        }
-        // The left: the dot and the clock, then the tags while they fit before the buttons.
-        var x = left + S(12);
-        Kit.BeatDot(dl, new Vector2(x + S(3), cy), beating ? Palette.Ember : Palette.Faint, beating);
-        x += S(6 + 7);
-        x += Txt.Line(dl, new Vector2(x, y), clock, Face.MonoSemibold, z.ClockPx, Palette.White, z.Head) + S(8);
-        var room = edge - S(8);
-        if (Preview != null)
-        {
-            // The sample's mark; pressed, it stops the sample. Where it doesn't fit, the foot shows it.
-            var pw = Kit.TagWidth("Preview", TagKind.Plain);
-            if (x + pw <= room)
-            {
-                PreviewTag(dl, new Vector2(x, cy - S(9)));
-                x += pw + S(8);
-            }
-            else previewInFoot = true;
-        }
-        if (tag != null)
-        {
-            var tw = Kit.TagWidth(tag, tagKind);
-            if (x + tw <= room)
-            {
-                Kit.Tag(dl, new Vector2(x, cy - S(9)), tag, tagKind, 18);
-                x += tw + S(8);
-            }
-        }
-        // The limit break gauge, when it's wanted in the head, as far as it fits before the buttons.
-        if (config.MeterGauge == GaugePlace.Head && beating && Bars(m) is { Length: > 0 } bars)
-        {
-            var gw = GaugeWidth(bars.Length);
-            if (x + gw <= room)
-            {
-                DrawGauge(dl, new Vector2(x, cy), gw, bars, 5);
-                if (Kit.Pointed(new Vector2(x, y), new Vector2(x + gw, y + h)) && m?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
-                x += gw + S(8);
-            }
-        }
-        // "Waiting for the first hit", as much as fits before the buttons.
-        const int px2 = 13;
-        if (waitingLine != null && room - x > S(20))
-            Txt.Line(dl, new Vector2(x, y), Txt.Fit(waitingLine, Face.Sans, px2, room - x), Face.Sans, px2, Palette.Muted, z.Head);
-    }
-
-    /// <summary>The Preview tag: the sample's mark. Pressed, the sample stops.</summary>
-    private void PreviewTag(ImDrawListPtr dl, Vector2 pos)
-    {
-        var w = Kit.TagWidth("Preview", TagKind.Plain);
-        guard.Keep(pos, pos + new Vector2(w, S(18)));
-        var (clicked, hovered, _) = Kit.Hit("##meter-preview", pos, new Vector2(w, S(18)));
-        Kit.Tag(dl, pos, "Preview", TagKind.Plain, 18);
-        if (hovered) Kit.Tooltip("A sample fight with made-up numbers. Press to stop it; a real fight stops it too.");
-        if (clicked) Preview = null;
-    }
-
-    /// <summary>The Preview tag in the foot, its right edge at <paramref name="right"/> (moved in out of the bottom-right grip's reach when the foot is at the bottom), on the foot's middle.</summary>
-    private void FootPreviewTag(ImDrawListPtr dl, float right, float footY, float footH)
-    {
-        var w = Kit.TagWidth("Preview", TagKind.Plain);
-        var pos = new Vector2(right - w, footY + (footH - S(18)) / 2);
-        pos.X -= guard.ShiftLeft(pos, pos + new Vector2(w, S(18)));
-        PreviewTag(dl, pos);
-    }
-
-    /// <summary>A 24px square icon button (`.mt-ib`): muted, ember-washed when on.</summary>
-    private static bool SmallButton(string id, Vector2 pos, Icon icon, bool on, string tip)
-    {
-        var s = S(24);
-        var (clicked, hovered, _) = Kit.Hit(id, pos, new Vector2(s));
-        var dl = Kit.Dl;
-        if (on) dl.AddRectFilled(pos, pos + new Vector2(s), Palette.U32(Palette.EmberWash), S(6));
-        else if (hovered) dl.AddRectFilled(pos, pos + new Vector2(s), Palette.U32(Palette.Hover), S(6));
-        Icons.Draw(dl, icon, pos + new Vector2((s - S(14)) / 2), S(14), on ? Palette.Ember : hovered ? Palette.White : Palette.Muted);
-        if (hovered) Kit.Tooltip(tip);
-        Kit.FocusRing(pos, pos + new Vector2(s), S(6));
-        return clicked;
-    }
-
-    /// <summary>A dropdown's button's width (`.mt-pick`): 8 in, the words (550 12px), 6 (<see cref="Dropdown.Gap"/>), the chevron (13), 8.</summary>
-    private static float DropWidth(string label) => Dropdown.Width(Txt.Width(label, Face.SansMedium, 12), S(13), S(8), S(1));
-
-    /// <summary>A dropdown's button (`.mt-pick`, the picker's and compact's tab menu): 24 tall, 6px corners, a hairline, its words and a chevron.</summary>
-    private static bool DropButton(string id, Vector2 pos, float width, string label)
-    {
-        var dl = Kit.Dl;
-        var size = new Vector2(width, S(24));
-        var (clicked, hovered, _) = Kit.Hit(id, pos, size);
-        if (hovered) dl.AddRectFilled(pos, pos + size, Palette.U32(Palette.Hover), S(6));
-        dl.AddRect(pos + new Vector2(0.5f), pos + size - new Vector2(0.5f), Palette.U32(Palette.Line2), S(6), ImDrawFlags.None, 1f);
-        var lw = Txt.Line(dl, new Vector2(pos.X + S(8), pos.Y), label, Face.SansMedium, 12, Palette.Text, 24);
-        Icons.Draw(dl, Icon.ChevronDown, new Vector2(pos.X + Dropdown.ChevronAt(lw, S(8), S(1)), pos.Y + (size.Y - S(13)) / 2), S(13), Palette.Faint);
-        Kit.FocusRing(pos, pos + size, S(6));
-        return clicked;
-    }
-
-    /// <summary>The four tabs (`.mt-tabs`, 27 tall, 12px at 550) next to the head, a hairline on their far side.</summary>
-    private void TabsRow(ImDrawListPtr dl, float left, ref MeterStack stack, float w)
-    {
-        var h = S(Z.Tabs);
-        var y = stack.Near(h);
-        var current = MeterLayout.Known(config.MeterTab);
-        // The five tabs where they fit; a narrower meter has compact's menu in their place.
-        if (Kit.TabsWidth(TabSpecs, TabSize.Meter) + S(12) > w)
-        {
-            var word = MeterLayout.TabWord(current);
-            var tx = left + S(Z.Pad);
-            if (DropButton("##meter-tabs-row", new Vector2(tx, y + (h - S(24)) / 2), DropWidth(word), word)) ImGui.OpenPopup(TabMenu);
-            headTop = y;
-            headBottom = y + h;
-            DrawTabMenu(tx, shown != null);
-            Kit.Rule(dl, left, left + w, stack.Away(y, h));
-            return;
-        }
-        var t = (MeterTab)Kit.Tabs("##meter-tab", new Vector2(left + S(6), y), TabSpecs, (int)current, TabSize.Meter);
-        Kit.Rule(dl, left, left + w, stack.Away(y, h));
-        if (t == config.MeterTab) return;
-        config.MeterTab = t;
-        config.Save();
-    }
-
-    /// <summary>Pace (`.mt-pace`, 26 tall; 22 compact): the phase and how far into it, the bar (this pull ember, the other's a white tick), "on pull 4 +3.4%".</summary>
-    private void PaceRow(ImDrawListPtr dl, float left, ref MeterStack stack, float w, PaceLine pace)
-    {
-        var z = Z;
-        var h = S(z.Pace);
-        var y = stack.Near(h);
-        var (label, ahead, on) = PaceWords(pace);
-        var x = left + S(z.Pad);
-        var lw = Txt.Spaced(dl, new Vector2(x, y + (h - Txt.Natural(Face.Mono, 9)) / 2), label, Face.Mono, 9, Palette.Faint, 0.09f);
-        const int aheadPx = 12;
-        var aw = Txt.Width(ahead, Face.MonoSemibold, aheadPx);
-        var ow = Txt.Width(on, Face.Sans, 11);
-        var rx = left + w - S(z.Pad);
-        Txt.Line(dl, new Vector2(rx - aw, y), ahead, Face.MonoSemibold, aheadPx, Palette.White, z.Pace);
-        Txt.Line(dl, new Vector2(rx - aw - ow, y), on, Face.Sans, 11, Palette.Muted, z.Pace);
-        var bx = x + lw + S(8);
-        var bw = rx - aw - ow - S(8) - bx;
-        if (bw > S(20))
-        {
-            var (fill, mark) = MeterView.PaceBar(pace);
-            var by = y + h / 2 - S(1.5f);
-            dl.AddRectFilled(new Vector2(bx, by), new Vector2(bx + bw, by + S(3)), Palette.U32(Palette.Rgba(255, 255, 255, 0.08f)), S(2));
-            if (fill > 0) Kit.CastGradient(dl, new Vector2(bx, by), new Vector2(bx + bw * fill, by + S(3)));
-            var mx = bx + bw * mark;
-            dl.AddRectFilled(new Vector2(mx - S(0.75f), by - S(3)), new Vector2(mx + S(0.75f), by + S(6)), Palette.U32(Palette.White));
-        }
-        Kit.Rule(dl, left, left + w, stack.Away(y, h));
-    }
+    // Words worked out once (the normal meter's parts are drawn in MeterWindow.Normal.cs, in its theme).
 
     /// <summary>Pace's words ("PACE · P2 +0:41" in capitals, "+3.4%", "on pull 4 "), made again only when what they say changes.</summary>
     private (string Label, string Ahead, string On) PaceWords(PaceLine pace)
@@ -784,153 +593,6 @@ public sealed partial class MeterWindow : Window
         return (paceWords.Label, paceWords.AheadText, paceWords.On);
     }
 
-    /// <summary>The columns' heads (`.mt-cols`, 20 tall; 16 compact; mono 9px capitals) next to the rows, right-aligned to their columns.</summary>
-    private void Columns(ImDrawListPtr dl, float left, ref MeterStack stack, float w, MeterTab tab)
-    {
-        var z = Z;
-        var h = S(z.Cols);
-        var y = stack.Near(h);
-        var (a, b) = MeterView.Heads(tab, config.MeterRank);
-        a = Caps(a);
-        b = Caps(b);
-        var g = Grid(left, w, z);
-        var lh = Txt.Natural(Face.Mono, 9);
-        // Against the rows: at the band's foot when they're under it, at its top when they're above (growing up).
-        var ly = stack.Up ? y + S(2) : y + h - S(2) - lh;
-        Txt.Spaced(dl, new Vector2(g.ValueRight - Txt.SpacedWidth(a, Face.Mono, 9, 0.08f), ly), a, Face.Mono, 9, Palette.Faint, 0.08f);
-        Txt.Spaced(dl, new Vector2(g.SecondRight - Txt.SpacedWidth(b, Face.Mono, 9, 0.08f), ly), b, Face.Mono, 9, Palette.Faint, 0.08f);
-    }
-
-    private static string Caps(string text)
-    {
-        if (CapsOf.TryGetValue(text, out var caps)) return caps;
-        return CapsOf[text] = Txt.Caps(text);
-    }
-
-    /// <summary>
-    /// The row's grid (`18px 1fr 30px 66px 40px`, 8 apart, 12 in; compact `16px 1fr 26px 66px 34px`, 6
-    /// apart, 10 in): the spot's left, the name's left, the job's left, the number's right, the second's right.
-    /// </summary>
-    private static (float Spot, float Name, float Job, float ValueRight, float SecondRight) Grid(float left, float w, MeterSizes z)
-    {
-        var x0 = left + S(z.Pad);
-        var secondR = left + w - S(z.Pad);
-        var valueR = secondR - S(z.SecondCol) - S(z.Gap);
-        var job = valueR - S(z.ValueCol) - S(z.Gap) - S(z.JobCol);
-        return (x0, x0 + S(z.Spot) + S(z.Gap), job, valueR, secondR);
-    }
-
-    /// <summary>The rows (25 tall; 20 compact), biggest first from the head's side, then the limit break's after a hairline. Past the room they're cut.</summary>
-    private void Rows(ImDrawListPtr dl, float left, float w, MeterEncounter e, MeterTab tab, MeterStack stack)
-    {
-        var z = Z;
-        var (rows, lb, _) = LinesOf(e, tab, config.MeterRank);
-        var g = Grid(left, w, z);
-        var rowH = S(z.Row);
-        var lbH = S(z.LimitBreak);
-        var n = Math.Min(rows.Count, stack.Fits(rowH));
-        var a = MathF.Min(stack.NearEdge, stack.FarEdge);
-        var b = MathF.Max(stack.NearEdge, stack.FarEdge);
-        dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, b), true);
-        try
-        {
-            for (var i = 0; i < n; i++) Row(dl, rows[i], left, stack.Row(i, rowH), w, g, z, e, tab);
-            if (lb != null && stack.Room - n * rowH + 1 >= lbH)
-            {
-                var y = stack.Up ? stack.NearEdge - n * rowH - lbH : stack.NearEdge + n * rowH;
-                Kit.Rule(dl, left, left + w, stack.Toward(y, lbH));
-                Kit.LimitMark(dl, new Vector2(g.Spot, y + (lbH - S(z.Spot)) / 2), z.Spot);
-                Txt.Line(dl, new Vector2(g.Name, y), "Limit break", Face.SansMedium, z.NamePx, Palette.White, z.LimitBreak);
-                Txt.LineRight(dl, g.ValueRight, y, lb.Value, Face.MonoSemibold, z.ValuePx, Palette.White, z.LimitBreak);
-                Txt.LineRight(dl, g.SecondRight, y, lb.Second, Face.Mono, z.SecondPx, Palette.Muted, z.LimitBreak);
-                Bar(dl, left, w, y + lbH, lb.Bar, false, false);
-            }
-        }
-        finally
-        {
-            dl.PopClipRect();
-        }
-    }
-
-    /// <summary>A player's row: the spot, the name (muted with a red skull once dead), the job, the number, its second column, the bar. Pressed, the meter opens up on them.</summary>
-    private void Row(ImDrawListPtr dl, MeterLine line, float left, float y, float w, (float Spot, float Name, float Job, float ValueRight, float SecondRight) g,
-        MeterSizes z, MeterEncounter e, MeterTab tab)
-    {
-        var r = line.Row;
-        var rowH = S(z.Row);
-        var min = new Vector2(left, y);
-        var max = new Vector2(left + w, y + rowH);
-        var (clicked, hovered, _) = Kit.Hit(line.Id, min, max - min);
-        var dim = r.Dead;
-        if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
-        if (clicked) OpenDetail?.Invoke(tab, e.Id, r.PartyId, null);
-        PlateArt.JobBadge(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Job, r.Role, config.MeterRoleColours, dim, r.Slot);
-        const int skull = 12;
-        var nameText = config.MeterJobsOnly ? r.Job : r.Name;
-        var nameRoom = (config.MeterJobsOnly ? g.ValueRight - S(z.ValueCol) : g.Job - S(z.Gap)) - g.Name - (dim ? S(5 + skull) : 0);
-        var nw = Txt.Line(dl, new Vector2(g.Name, y), Txt.Fit(nameText, Face.SansMedium, z.NamePx, nameRoom), Face.SansMedium, z.NamePx,
-            dim ? Palette.Muted : Palette.White, z.Row);
-        if (dim) Icons.Draw(dl, Icon.Skull, new Vector2(g.Name + nw + S(5), y + (rowH - S(skull)) / 2), S(skull), Palette.Danger);
-        if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(g.Job, y + (rowH - Txt.Natural(Face.Mono, z.JobPx)) / 2), Caps(r.Job), Face.Mono, z.JobPx, Palette.Faint, 0.06f);
-        Txt.LineRight(dl, g.ValueRight, y, line.Value, Face.MonoSemibold, z.ValuePx, dim ? Palette.Muted : Palette.White, z.Row);
-        Txt.LineRight(dl, g.SecondRight, y, line.Second, Face.Mono, z.SecondPx, Palette.Muted, z.Row);
-        Bar(dl, left, w, y + rowH, line.Bar, r.IsYou, dim);
-    }
-
-    /// <summary>A row's bar (`.mb`): a slim cast bar to the top player's, 38 in from the left; grey, yours ember, a death's dimmer.</summary>
-    private static void Bar(ImDrawListPtr dl, float left, float w, float bottom, float fraction, bool you, bool dead)
-    {
-        var a = new Vector2(left + S(38), bottom - S(1) - S(2));
-        var b = new Vector2(left + w - S(12), bottom - S(1));
-        dl.AddRectFilled(a, b, Palette.U32(Palette.Rgba(255, 255, 255, 0.05f)), S(1));
-        var fw = (b.X - a.X) * fraction;
-        if (fw < 1) return;
-        if (you) Kit.CastGradient(dl, a, new Vector2(a.X + fw, b.Y));
-        else dl.AddRectFilled(a, new Vector2(a.X + fw, b.Y), Palette.U32(Palette.Rgba(255, 255, 255, dead ? 0.16f : 0.3f)), S(1));
-    }
-
-    /// <summary>The foot (`.mt-f`, 28 tall; 22 compact; mono 11px, 10 compact) at the far edge: the party's number, and what's worth saying on the right.</summary>
-    private void Footer(ImDrawListPtr dl, float left, float y, float w, MeterEncounter e, MeterTab tab, bool ended, MeterStack stack)
-    {
-        var z = Z;
-        var h = S(z.Foot);
-        Kit.Rule(dl, left, left + w, stack.Toward(y, h));
-        var (value, unit) = LinesOf(e, tab, config.MeterRank).Party;
-        var x = left + S(z.Pad);
-        x += Txt.Line(dl, new Vector2(x, y), "Party · ", Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        x += Txt.Line(dl, new Vector2(x, y), value, Face.MonoSemibold, z.FootPx, Palette.White, z.Foot);
-        // The unit after the number ("HPS"), and the gauge only after it.
-        if (unit != null) x += Txt.Width(" ", Face.Mono, z.FootPx) + Txt.Line(dl, new Vector2(x + Txt.Width(" ", Face.Mono, z.FootPx), y), unit, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        var rx = left + w - S(z.Pad);
-        if (previewInFoot)
-        {
-            FootPreviewTag(dl, rx, y, h);
-            return;
-        }
-        var right = DateTime.UtcNow - copiedAt < CopiedFor ? "copied to the clipboard"
-            : config.MeterLocked && config.MeterClickThrough ? "click-through"
-            : ended ? said.KeptAs
-            : tab switch
-            {
-                MeterTab.Healing => "shields not counted",
-                MeterTab.Taken => "incl. bleeds",
-                _ => said.Where ?? (config.MeterRank == MeterRank.Dps ? "DPS" : "ENCDPS"),
-            };
-        var rw = Txt.LineRight(dl, rx, y, right, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        FootGauge(dl, x + S(12), rx - rw - S(10), y, h, !ended);
-    }
-
-    /// <summary>The limit break gauge in the foot (when it's wanted there and the fight is live), right-aligned before what the foot says on the right, when there's room.</summary>
-    private void FootGauge(ImDrawListPtr dl, float from, float to, float y, float h, bool live)
-    {
-        if (config.MeterGauge != GaugePlace.Foot || !live || Bars(Meter) is not { Length: > 0 } bars) return;
-        var gw = GaugeWidth(bars.Length);
-        if (to - gw < from) return;
-        var gx = to - gw;
-        DrawGauge(dl, new Vector2(gx, y + h / 2), gw, bars, 5);
-        if (Kit.Pointed(new Vector2(gx, y), new Vector2(to, y + h)) && Meter?.LimitBreak is { } g) Kit.Tooltip(MeterText.GaugeTip(g));
-    }
-
     /// <summary>The gauge's bars now (none outside a party that fills one), worked out again only when it changes.</summary>
     private float[]? Bars(IMeterSource? m)
     {
@@ -940,8 +602,6 @@ public sealed partial class MeterWindow : Window
         return gaugeBars.Bars;
     }
 
-    /// <summary>The gauge's width: "LB" in mono and a 16px bar each, 3 apart.</summary>
-    private static float GaugeWidth(int bars) => Txt.Width("LB", Face.Mono, 9) + S(5) + bars * S(16) + Math.Max(0, bars - 1) * S(3);
 
     /// <summary>
     /// The limit break gauge (`.cast-bar`s side by side): "LB" in faint mono, then a bar each the party
@@ -976,168 +636,6 @@ public sealed partial class MeterWindow : Window
 
     // ---------------------------------------------------------------------------------------------
     // Deaths, waiting, folded, nothing yet.
-
-    /// <summary>
-    /// The Deaths tab: each death in red time, its spot and name, the killing blow and how big (compact:
-    /// on one 20px line); pressed, its recap opens. The first nearest the head. Past the room (the foot,
-    /// or the alive count after them) they're cut, and said.
-    /// </summary>
-    private void DrawDeaths(ImDrawListPtr dl, float left, float w, MeterStack stack, MeterEncounter e, bool live)
-    {
-        var z = Z;
-        var deaths = said.Deaths;
-        var footY = live ? 0 : stack.Far(S(z.Foot));
-        var nameH = Txt.Natural(Face.SansMedium, 13);
-        var subH = Txt.Natural(Face.Sans, 11);
-        var rowH = S(6) * 2 + nameH + S(2) + subH;
-        // Live, "7 alive" and its line sit after the rows (14 off them, 46 for the two; compact, one 22px line).
-        var aliveH = !live ? 0 : S(14) + S(19.5f) + S(7.2f) + S(16) + S(6);
-        var fit = Math.Max(0, (int)MathF.Floor((stack.Room - aliveH + 1) / rowH));
-        var n = Math.Min(deaths.Count, fit);
-        var cut = deaths.Count - n;
-        var a = MathF.Min(stack.NearEdge, stack.FarEdge);
-        var b = MathF.Max(stack.NearEdge, stack.FarEdge);
-        dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, MathF.Max(a, b)), true);
-        try
-        {
-            for (var i = 0; i < n; i++)
-            {
-                var y = stack.Row(i, rowH);
-                DeathRow(dl, left, y, w, rowH, nameH, e, i);
-            }
-        }
-        finally
-        {
-            dl.PopClipRect();
-        }
-        var listEnd = stack.Up ? stack.NearEdge - n * rowH : stack.NearEdge + n * rowH;
-        if (live)
-        {
-            var by = stack.Up ? listEnd - aliveH : listEnd;
-            var t1 = AliveLine(said.Alive, cut);
-            var c = new Vector2(left + w / 2, by + S(14));
-            Txt.Draw(dl, new Vector2(c.X - Txt.Width(t1, Face.Sans, 13) / 2, c.Y), t1, Face.Sans, 13, Palette.Muted);
-            var t2 = deaths.Count > 0 ? "A death's recap opens from its row" : "No deaths yet";
-            Txt.Draw(dl, new Vector2(c.X - Txt.Width(t2, Face.Sans, 12) / 2, c.Y + S(19.5f) + S(7.2f)), t2, Face.Sans, 12, Palette.Faint);
-            return;
-        }
-        if (deaths.Count == 0)
-        {
-            var t = said.Wipe > 0 ? "No deaths but the wipe" : "Nobody died";
-            const int px = 13;
-            var ty = stack.Up ? listEnd - S(14) - Txt.Natural(Face.Sans, px) : listEnd + S(14);
-            Txt.Draw(dl, new Vector2(left + (w - Txt.Width(t, Face.Sans, px)) / 2, ty), t, Face.Sans, px, Palette.Muted);
-        }
-        var fh = S(z.Foot);
-        Kit.Rule(dl, left, left + w, stack.Toward(footY, fh));
-        Txt.Line(dl, new Vector2(left + S(z.Pad), footY), DeathFoot(deaths.Count, cut, said.Wipe > 0), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        if (previewInFoot) FootPreviewTag(dl, left + w - S(z.Pad), footY, fh);
-        else Txt.LineRight(dl, left + w - S(z.Pad), footY, said.PullWord, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-    }
-
-    /// <summary>A death (`.mdr`): the spot and name, the job in mono, its time in red on the right, what killed them and how big under it.</summary>
-    private void DeathRow(ImDrawListPtr dl, float left, float y, float w, float h, float nameH, MeterEncounter e, int i)
-    {
-        var d = said.Deaths[i];
-        var min = new Vector2(left, y);
-        var max = new Vector2(left + w, y + h);
-        var (clicked, hovered, _) = Kit.Hit(said.DeathIds[i], min, max - min);
-        if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
-        Kit.Reticle(dl, said.DeathRets[i], min + new Vector2(S(6), S(1)), max - new Vector2(S(6), S(1)), hovered);
-        if (clicked) OpenDetail?.Invoke(MeterTab.Deaths, e.Id, d.PartyId, IndexIn(e.Deaths, d));
-        var x = left + S(12);
-        var row = RowOf(e, d.PartyId);
-        PlateArt.JobBadge(dl, new Vector2(x + S(9), y + S(6) + nameH / 2), 18, row?.Job, row?.Role, config.MeterRoleColours, false, d.Slot);
-        var nx = x + S(18) + S(8);
-        var job = row?.Job ?? string.Empty;
-        var name = config.MeterJobsOnly ? job : d.Name;
-        var nw = Txt.Line(dl, new Vector2(nx, y + S(6)), Txt.Fit(name, Face.SansMedium, 13, w - S(100)), Face.SansMedium, 13, Palette.White);
-        if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(nx + nw + S(5), y + S(6) + (nameH - Txt.Natural(Face.Mono, 10)) / 2), Caps(job), Face.Mono, 10, Palette.Faint, 0.06f);
-        Txt.LineRight(dl, left + w - S(12), y + S(6), said.DeathTimes[i], Face.MonoSemibold, 12, Palette.Danger, nameH / S(1));
-        Txt.Draw(dl, new Vector2(nx, y + S(6) + nameH + S(2)), Txt.Fit(said.DeathLines[i], Face.Sans, 11, left + w - S(12) - nx), Face.Sans, 11, Palette.Muted);
-    }
-
-    /// <summary>
-    /// The Events tab (0.4.0): the fight's events as a feed, the newest nearest the head: the time in
-    /// mono, the kind's mark in its colour (a death red, a raise or an interrupt green, the limit break
-    /// and potions ember), the member's spot and what happened, cut to fit. Pressed, the meter opens up
-    /// on Events (a death, on its recap). Past the room the oldest are cut; the foot counts them by kind.
-    /// </summary>
-    private void DrawEvents(ImDrawListPtr dl, float left, float w, MeterStack stack, MeterEncounter e, IMeterSource m)
-    {
-        var z = Z;
-        var f = Feed(m.Events(e.Id));
-        var fh = S(z.Foot);
-        var footY = stack.Far(fh);
-        var rowH = S(23);
-        var n = Math.Min(f.Newest.Count, stack.Fits(rowH));
-        var a = MathF.Min(stack.NearEdge, stack.FarEdge);
-        var b = MathF.Max(stack.NearEdge, stack.FarEdge);
-        dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, MathF.Max(a, b)), true);
-        try
-        {
-            for (var i = 0; i < n; i++) EventRow(dl, f.Newest[i], f.Times[i], left, stack.Row(i, rowH), w, rowH, e, i);
-            if (f.Newest.Count == 0)
-            {
-                const string none = "Deaths, raises, interrupts, potions and limit breaks show here.";
-                const int px = 12;
-                var ty = stack.Up ? stack.NearEdge - S(14) - Txt.Natural(Face.Sans, px) : stack.NearEdge + S(14);
-                var t = Txt.Fit(none, Face.Sans, px, w - S(24));
-                Txt.Draw(dl, new Vector2(left + (w - Txt.Width(t, Face.Sans, px)) / 2, ty), t, Face.Sans, px, Palette.Muted);
-            }
-        }
-        finally
-        {
-            dl.PopClipRect();
-        }
-        Kit.Rule(dl, left, left + w, stack.Toward(footY, fh));
-        var lw = Txt.Line(dl, new Vector2(left + S(z.Pad), footY), Txt.Fit(f.Foot, Face.Mono, z.FootPx, w * 0.62f), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        var rx = left + w - S(z.Pad);
-        if (previewInFoot) FootPreviewTag(dl, rx, footY, fh);
-        else
-        {
-            var rw = Txt.LineRight(dl, rx, footY, DateTime.UtcNow - copiedAt < CopiedFor ? "copied" : said.PullWord, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-            FootGauge(dl, left + S(z.Pad) + lw + S(12), rx - rw - S(10), footY, fh, e.Live);
-        }
-    }
-
-    /// <summary>An event's row: its time, its mark, the member's spot, what happened. Pressed, the meter opens up on it.</summary>
-    private void EventRow(ImDrawListPtr dl, MeterEvent ev, string time, float left, float y, float w, float h, MeterEncounter e, int i)
-    {
-        var z = Z;
-        var min = new Vector2(left, y);
-        var max = new Vector2(left + w, y + h);
-        var (clicked, hovered, _) = Kit.Hit(EventIds[i % EventIds.Length], min, max - min);
-        if (hovered)
-        {
-            dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
-            Kit.Tooltip($"{MeterText.KindWord(ev.Kind)} at {time}: {ev.Text}");
-        }
-        if (clicked)
-        {
-            var death = ev.Kind == MeterEventKind.Death ? DeathAt(e, ev) : -1;
-            if (death >= 0) OpenDetail?.Invoke(MeterTab.Deaths, e.Id, ev.PartyId, death);
-            else OpenDetail?.Invoke(MeterTab.Events, e.Id, ev.PartyId > 0 ? ev.PartyId : null, null);
-        }
-        var lineCss = h / S(1);
-        var x = left + S(z.Pad);
-        const int tpx = 11;
-        Txt.LineRight(dl, x + S(30), y, time, Face.Mono, tpx, Palette.Faint, lineCss);
-        x += S(30) + S(8);
-        var mark = S(13);
-        Icons.Draw(dl, EventIcon(ev.Kind), new Vector2(x, y + (h - mark) / 2), mark, ToneColor(MeterText.Tone(ev.Kind)));
-        x += mark + S(7);
-        if (ev.Slot.Length > 0)
-        {
-            var spot = z.Spot - 2;
-            var who = RowOf(e, ev.PartyId);
-            PlateArt.JobBadge(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, who?.Job, who?.Role ?? Format.RoleOfSlot(ev.Slot), config.MeterRoleColours, false, ev.Slot);
-            x += S(spot) + S(6);
-        }
-        const int px = 12;
-        var room = left + w - S(z.Pad) - x;
-        if (room > S(16)) Txt.Line(dl, new Vector2(x, y), Txt.Fit(ev.Text, Face.Sans, px, room), Face.Sans, px, ev.Kind == MeterEventKind.Death ? Palette.DangerName : Palette.Text, lineCss);
-    }
 
     private static readonly string[] EventIds = MakeIds("##mev", 64);
 
@@ -1260,104 +758,7 @@ public sealed partial class MeterWindow : Window
         return -1;
     }
 
-    /// <summary>Waiting for the first hit: the clock at 0:00 with a hollow dot, the party listed (in spot order) with nothing yet.</summary>
-    private void DrawWaiting(ImDrawListPtr dl, Vector2 top, float w, float bottom, MeterEncounter? last, IMeterSource m)
-    {
-        var z = Z;
-        var stack = new MeterStack(top.Y, bottom, Up);
-        Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, null, m, "Waiting for the first hit", false);
-        TabsRow(dl, top.X, ref stack, w);
-        Columns(dl, top.X, ref stack, w, MeterTab.Damage);
-        var fy = stack.Far(S(z.Foot));
-        var g = Grid(top.X, w, z);
-        var rowH = S(z.Row);
-        var rows = last != null ? said.Spots : null;
-        var n = rows == null ? 0 : Math.Min(rows.Count, stack.Fits(rowH));
-        for (var i = 0; i < n; i++)
-        {
-            var r = rows![i];
-            var y = stack.Row(i, rowH);
-            PlateArt.JobBadge(dl, new Vector2(g.Spot + S(z.Spot) / 2, y + rowH / 2), z.Spot, r.Job, r.Role, config.MeterRoleColours, false, r.Slot);
-            Txt.Line(dl, new Vector2(g.Name, y), Txt.Fit(config.MeterJobsOnly ? r.Job : r.Name, Face.SansMedium, z.NamePx, g.Job - S(z.Gap) - g.Name), Face.SansMedium, z.NamePx,
-                Palette.White, z.Row);
-            if (!config.MeterJobsOnly) Txt.Spaced(dl, new Vector2(g.Job, y + (rowH - Txt.Natural(Face.Mono, z.JobPx)) / 2), Caps(r.Job), Face.Mono, z.JobPx, Palette.Faint, 0.06f);
-            Txt.LineRight(dl, g.ValueRight, y, "–", Face.MonoSemibold, z.ValuePx, Palette.White, z.Row);
-            Bar(dl, top.X, w, y + rowH, 0, false, false);
-        }
-        Kit.Rule(dl, top.X, top.X + w, stack.Toward(fy, S(z.Foot)));
-        if (last == null) return;
-        Txt.Line(dl, new Vector2(top.X + S(z.Pad), fy), Txt.Fit(last.Duty, Face.Mono, z.FootPx, w * 0.6f), Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-        Txt.LineRight(dl, top.X + w - S(z.Pad), fy, said.NextPull, Face.Mono, z.FootPx, Palette.Muted, z.Foot);
-    }
-
     private static int SpotOrder(string slot) => Array.IndexOf(SpotOrderOf, slot) is var i and >= 0 ? i : 99;
-
-    /// <summary>
-    /// Before any fight, the Boss asleep, "No fight yet", one line and a quiet link to a sample fight;
-    /// stopped (<see cref="IMeterSource.Problem"/>), the Boss awake, "The meter has stopped" and why.
-    /// The head and the tabs on its anchored side, the Boss and its words beyond them. Returns how tall
-    /// it is (the window is that tall).
-    /// </summary>
-    private float DrawEmpty(ImDrawListPtr dl, Vector2 top, float w, IMeterSource? m)
-    {
-        var z = Z;
-        var stopped = view == View.Stopped && m?.Problem != null;
-        // Stopped, a kept fight can still be picked to look at.
-        var pick = stopped && shown != null && m!.Kept.Count > 0 ? said.Pick : null;
-        var line = stopped ? StoppedLine(m!.Problem!)
-            : m == null ? "The meter starts with the plugin's reader."
-            : "It starts on the first hit.";
-        var title = stopped ? "The meter has stopped" : "No fight yet";
-        var sample = !stopped && Preview == null && StartSample != null;
-        OneRun[0] = Run.Note(line);
-        var calloutH = Kit.CalloutHeight(title, 13, w, 1, 1.1f);
-        var lineH = Txt.Flow(Vector2.Zero, w - S(28), OneRun, 19.5f, out _, center: true, draw: false);
-        var linkH = sample ? S(6) + Txt.Natural(Face.SansMedium, 12) + S(4) : 0;
-        var messageH = S(16) + S(40) + S(7.2f) + calloutH + S(7.2f) + lineH + linkH + S(18);
-        var total = S(z.Head) + S(z.Tabs) + messageH;
-        var stack = new MeterStack(top.Y, top.Y + total, Up);
-        Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, pick, m, null, pick != null);
-        TabsRow(dl, top.X, ref stack, w);
-        // The message fills what's left, whichever side the head is on.
-        var y = stack.Up ? stack.FarEdge : stack.NearEdge;
-        var c = new Vector2(top.X + w / 2, y + S(16) + S(20));
-        Boss.Empty(dl, c, 40, stopped ? BossMood.Awake : BossMood.Asleep);
-        var ty = c.Y + S(20) + S(7.2f);
-        ty += Kit.Callout(dl, new Vector2(top.X, ty), title, 13, w, 1, 1.1f, center: true);
-        ty += S(7.2f);
-        ty += Txt.Flow(new Vector2(top.X + S(14), ty), w - S(28), OneRun, 19.5f, out _, center: true);
-        if (sample)
-        {
-            // "See a sample": the meter mid-fight, with made-up numbers.
-            const string see = "See a sample";
-            var lw = Kit.LinkWidth(see, null, 12);
-            if (Kit.Link("##meter-sample", new Vector2(top.X + (w - lw) / 2, ty + S(6)), see, null, 12, "A made-up pull, to see the meter mid-fight. A real fight ends it."))
-                StartSample?.Invoke();
-        }
-        return total;
-    }
-
-    /// <summary>Folded between pulls: one line, the last pull's length under its tag, "Pull 12 · party 163,188", and a press opens it.</summary>
-    private void Folded(ImDrawListPtr dl, Vector2 top, float w, MeterEncounter e)
-    {
-        var z = Z;
-        var h = S(z.Head);
-        var x = top.X + S(12);
-        var cy = top.Y + h / 2;
-        Kit.BeatDot(dl, new Vector2(x + S(3), cy), Palette.Faint, false);
-        x += S(13);
-        x += Txt.Line(dl, new Vector2(x, top.Y), said.Clock, Face.MonoSemibold, z.ClockPx, Palette.White, z.Head) + S(8);
-        if (MeterView.OutcomeWord(e.Ended) is { } t) x += Kit.Tag(dl, new Vector2(x, cy - S(9)), t, e.Ended == Core.Outcome.Clear ? TagKind.Clear : TagKind.Wipe, 18) + S(8);
-        var right = top.X + w - S(6);
-        if (SmallButton("##meter-open", new Vector2(right - S(24), cy - S(12)), Icon.ChevronDown, false, "Open it")) unfolded = true;
-        var (value, _) = LinesOf(e, MeterTab.Damage, config.MeterRank).Party;
-        const int px = 13;
-        var vw = Txt.Width(value, Face.MonoSemibold, px);
-        var rx = right - S(24) - S(8);
-        Txt.Line(dl, new Vector2(rx - vw, top.Y), value, Face.MonoSemibold, px, Palette.White, z.Head);
-        var lw = Txt.Width(said.FoldLabel, Face.Sans, px);
-        if (rx - vw - lw > x) Txt.Line(dl, new Vector2(rx - vw - lw, top.Y), said.FoldLabel, Face.Sans, px, Palette.Muted, z.Head);
-    }
 
     // ---------------------------------------------------------------------------------------------
     // The menus: the picker, compact's tabs.
@@ -1376,155 +777,6 @@ public sealed partial class MeterWindow : Window
         var up = MeterLayout.MenuUp(Up, headTop - screenTop, screenBottom - headBottom, menuH + S(MenuGap));
         var x = MeterLayout.MenuLeft(buttonLeft, win.X, win.X + ImGui.GetWindowWidth(), menuW, S(MenuInset), vp.WorkPos.X, vp.WorkPos.X + vp.WorkSize.X);
         ImGui.SetNextWindowPos(new Vector2(x, up ? headTop - S(MenuGap) : headBottom + S(MenuGap)), ImGuiCond.Always, new Vector2(0, up ? 1 : 0));
-    }
-
-    /// <summary>
-    /// The tab menu (`.menu`, 200 wide; the tab row's place in a meter too narrow for the five): Damage, Healing, Taken, Deaths, each with the opened-up
-    /// window's icon, the one you're on ticked, the deaths counted.
-    /// </summary>
-    private void DrawTabMenu(float buttonLeft, bool hasFight)
-    {
-        var mw = S(TabMenuWidth);
-        ImGui.SetNextWindowSizeConstraints(new Vector2(mw, 0), new Vector2(mw, S(400)));
-        PlaceMenu(buttonLeft, mw, tabMenuH > 0 ? tabMenuH : S(MeterLayout.TabOrder.Length * 34 + 11.2f));
-        if (!Kit.BeginMenu(TabMenu)) return;
-        try
-        {
-            var w = mw - S(11.2f);
-            var dl = ImGui.GetWindowDrawList();
-            foreach (var t in MeterLayout.TabOrder)
-            {
-                var on = t == config.MeterTab;
-                var count = !hasFight ? null : t == MeterTab.Deaths ? said.DeathCount : t == MeterTab.Events ? EventCount() : null;
-                var reserve = on ? S(16) + S(8) : count != null ? Txt.Width(count, Face.Mono, 11) + S(8) : 0;
-                var (clicked, _, min, max) = Kit.MenuRow(TabIds[(int)t], w, MeterLayout.TabWord(t), null, true, 16, reserve);
-                var (slot, right) = Kit.MenuRowParts(min, max, true, 16);
-                Icons.Draw(dl, TabIcons[(int)t], slot + new Vector2((S(16) - S(15)) / 2), S(15), on ? Palette.White : Palette.Muted);
-                var cy = (min.Y + max.Y) / 2;
-                if (on) Kit.Tick(dl, new Vector2(right - S(8), cy), 16);
-                else if (count != null) Txt.LineRight(dl, right, min.Y, count, Face.Mono, 11, Palette.Faint, (max.Y - min.Y) / S(1));
-                if (!clicked) continue;
-                if (!on)
-                {
-                    config.MeterTab = t;
-                    config.Save();
-                }
-                ImGui.CloseCurrentPopup();
-            }
-            tabMenuH = ImGui.GetWindowHeight();
-        }
-        finally
-        {
-            Kit.EndMenu();
-        }
-    }
-
-    /// <summary>
-    /// The picker (`.menu`, 300 wide): tonight's fights the meter kept, newest first, the one shown
-    /// ticked, the live one tagged Now, the best starred; the other duties' after; and at its foot Pace
-    /// against (Best, Last, Off) and Compact. With a sample on, Stop the sample first.
-    /// </summary>
-    private void DrawPicker(IMeterSource m, float buttonLeft)
-    {
-        ImGui.SetNextWindowSizeConstraints(new Vector2(S(260), 0), new Vector2(S(PickerWidth), S(460)));
-        PlaceMenu(buttonLeft, S(PickerWidth), pickerH > 0 ? pickerH : S(300));
-        if (!Kit.BeginMenu(Picker)) return;
-        try
-        {
-            var w = S(PickerWidth) - S(11.2f);
-            var dl = ImGui.GetWindowDrawList();
-            if (Preview != null)
-            {
-                var (stop, _, min, max) = Kit.MenuRow("##pick-stop", w, "Stop the sample", "Its numbers are made up", true, 16);
-                var (slot, _) = Kit.MenuRowParts(min, max, true, 16);
-                Icons.Draw(dl, Icon.X, slot + new Vector2((S(16) - S(15)) / 2), S(15), Palette.Muted);
-                if (stop)
-                {
-                    Preview = null;
-                    ImGui.CloseCurrentPopup();
-                }
-                Kit.MenuRule(w);
-            }
-            var current = picked is { } id ? m.Get(id) : m.Current;
-            var (here, others) = MeterView.Picker(m.Kept, current, current != null ? m.Best(current.Content) : null);
-            if (here.Count > 0)
-            {
-                Kit.MenuEyebrow($"{(DateTime.Now.Hour >= 17 ? "Tonight" : "Today")} · {here[0].Fight.Duty}", w);
-                foreach (var r in here) PickRow(dl, r, w);
-            }
-            if (others.Count > 0)
-            {
-                Kit.MenuEyebrow("Other duties", w);
-                foreach (var r in others) PickRow(dl, r, w, r.Fight.Duty);
-            }
-            Kit.MenuRule(w);
-            // Copy as text: a mini-parse of the fight shown, for chat (as ACT's).
-            if (current != null)
-            {
-                var (copy, _, cmin, cmax) = Kit.MenuRow("##pick-copy", w, "Copy as text", $"Pull {current.Pull}: each player's ENCDPS, share and deaths", true, 16);
-                var (cslot, _) = Kit.MenuRowParts(cmin, cmax, true, 16);
-                Icons.Draw(dl, Icon.Copy, cslot + new Vector2((S(16) - S(15)) / 2), S(15), Palette.Muted);
-                if (copy)
-                {
-                    CopyParse(current);
-                    ImGui.CloseCurrentPopup();
-                }
-                Kit.MenuRule(w);
-            }
-            var pos = ImGui.GetCursorScreenPos();
-            var lineH = S(28);
-            var gap = S(4);
-            var h = S(5.6f) + lineH + gap + lineH + S(7.2f);
-            var y = pos.Y + S(5.6f);
-            Txt.Line(dl, new Vector2(pos.X + S(8.8f), y), "Pace against", Face.Sans, 13, Palette.Muted, 28);
-            var sw = Kit.SegmentedWidth(PaceItems);
-            var pace = Kit.Segmented("##pick-pace", new Vector2(pos.X + w - S(8.8f) - sw, y), PaceItems, (int)config.MeterPace, true, false, lineH);
-            if (pace != (int)config.MeterPace)
-            {
-                config.MeterPace = (PaceAgainst)pace;
-                config.Save();
-            }
-            // Compact, as Settings has it (0.7.0's compact meter, in its theme).
-            y += lineH + gap;
-            Txt.Line(dl, new Vector2(pos.X + S(8.8f), y), "Compact", Face.Sans, 13, Palette.Muted, 28);
-            var size = Kit.SwitchSize;
-            if (Kit.Switch("##pick-compact", new Vector2(pos.X + w - S(8.8f) - size.X, y + (lineH - size.Y) / 2), config.MeterCompact))
-            {
-                config.MeterCompact = !config.MeterCompact;
-                config.Save();
-            }
-            ImGui.Dummy(new Vector2(w, h));
-            pickerH = ImGui.GetWindowHeight();
-        }
-        finally
-        {
-            Kit.EndMenu();
-        }
-    }
-
-    private void PickRow(ImDrawListPtr dl, PickerRow r, float w, string? sub = null)
-    {
-        var f = r.Fight;
-        var title = r.Best ? $"Pull {f.Pull} · the best" : $"Pull {f.Pull}";
-        var tag = r.Live ? "Now" : MeterView.OutcomeWord(f.Ended);
-        var tagKind = r.Live ? TagKind.Ember : f.Ended == Core.Outcome.Clear ? TagKind.Clear : TagKind.Wipe;
-        var time = Format.Clock(f.Duration);
-        var tagW = tag != null ? Kit.TagWidth(tag, tagKind) : 0;
-        var timeW = Txt.Width(time, Face.Mono, 12);
-        var reserve = tagW + S(8) + timeW + S(8);
-        var (clicked, _, min, max) = Kit.MenuRow("##pick" + f.Id, w, title, sub, true, 16, reserve);
-        var (slot, right) = Kit.MenuRowParts(min, max, true, 16);
-        if (r.Shown) Kit.Tick(dl, slot + new Vector2(S(8)), 16);
-        else if (r.Best) Icons.Draw(dl, Icon.Star, slot + new Vector2((S(16) - S(13)) / 2), S(13), Palette.White);
-        var cy = (min.Y + max.Y) / 2;
-        if (tag != null) Kit.Tag(dl, new Vector2(right - tagW, cy - S(9)), tag, tagKind, 18);
-        Txt.LineRight(dl, right - (tag != null ? tagW + S(8) : 0), min.Y, time, Face.Mono, 12, Palette.Faint, (max.Y - min.Y) / S(1));
-        if (clicked)
-        {
-            picked = r.Live ? null : f.Id;
-            unfolded = true;
-            ImGui.CloseCurrentPopup();
-        }
     }
 
     /// <summary>/raidcodex meter unlock: the mouse back, the window movable again.</summary>

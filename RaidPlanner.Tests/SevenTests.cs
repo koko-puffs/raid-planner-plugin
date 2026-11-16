@@ -479,4 +479,40 @@ public class SevenTests
         Assert.Equal(Dropdown.Width(80, 15, 11.2f, 1) - 11.2f, Dropdown.ChevronAt(80, 11.2f, 1) + 15, 3);
         Assert.Equal(80 + 9f, Dropdown.ChevronAt(80, 0, 1.5f), 3);
     }
+
+    [Fact]
+    public void The_normal_meter_takes_the_theme()
+    {
+        // Ready Check: the normal meter's sizes and faces as they were.
+        Assert.Same(MeterSizes.Normal, MeterSizes.For(MeterThemes.ReadyCheck));
+        var rc = DetailFonts.ForNormal(MeterThemes.ReadyCheck);
+        Assert.Same(DetailFonts.NormalReadyCheck, rc);
+        Assert.Equal(new ThemeFont(Face.SansMedium, 13), rc.Name);
+        Assert.Equal(new ThemeFont(Face.MonoSemibold, 13), rc.NumStrong);
+        Assert.Equal(new ThemeFont(Face.Mono, 11), rc.Small);
+        Assert.Equal(new ThemeFont(Face.Mono, 9, Caps: true), rc.Head);
+        Assert.Equal(new ThemeFont(Face.MonoSemibold, 15), rc.Clock);
+        // A theme's rows are as tall as its plates need for its faces (never under 25); everything else as Ready Check's.
+        Assert.Equal(new[] { 25f, 29, 27, 25, 25, 26 }, MeterThemes.All.Select(t => MeterSizes.For(t).Row));
+        foreach (var t in MeterThemes.All)
+        {
+            var z = MeterSizes.For(t);
+            Assert.Equal(MeterSizes.Normal with { Row = z.Row }, z);
+            // A bigger row makes the fight's meter taller by as much a row.
+            Assert.Equal(MeterSizes.Normal.Needed(8, true) + 8 * (z.Row - 25), z.Needed(8, true), 3);
+            // The theme's faces, a step from Ready Check's as its compact faces are; none of them MiedingerMid.
+            var f = DetailFonts.ForNormal(t);
+            Assert.All(f.All(), x => Assert.NotEqual(Face.GameNumbers, x.Face));
+            Assert.Equal(t.Font.Name.Face, f.Name.Face);
+            Assert.Equal(13 + t.Font.Name.Px - MeterThemes.ReadyCheck.Font.Name.Px, f.Name.Px);
+            Assert.Equal(MeterThemes.Heavier(t.Font.Num.Face), f.NumStrong.Face);
+            Assert.True(f.Head.Caps && f.Head.Cells == 0);
+        }
+        // Mochi's words two steps up (its face reads small), its numbers Geist SemiBold.
+        var mochi = DetailFonts.ForNormal(MeterThemes.Mochi);
+        Assert.Equal((Face.Round, 15), (mochi.Name.Face, mochi.Name.Px));
+        Assert.Equal((Face.SansSemibold, 14), (mochi.NumStrong.Face, mochi.NumStrong.Px));
+        // The opened-up window's are unchanged by the normal meter's.
+        Assert.Equal((Face.Round, 16), (DetailFonts.For(MeterThemes.Mochi).Name.Face, DetailFonts.For(MeterThemes.Mochi).Name.Px));
+    }
 }

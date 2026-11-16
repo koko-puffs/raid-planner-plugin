@@ -1120,7 +1120,39 @@ thousand times and allocates nothing), the object table only four times a second
 Drawn from `IMeterSource` only (`Core/Meter/MeterModel.cs`; the plugin's is `CombatMeter.Source`);
 `Model/MeterView` orders and words what they show, `Model/MeterLayout` sizes and places the small
 one (both tested). Since 0.7.0 the small one is **compact by default**, in one of six themes (below,
-_Compact_); off, it's the normal meter described first here, unchanged but for the job icons.
+_Compact_); off, it's the normal meter described first here. Since 0.7.3 the normal meter and the
+opened-up window are drawn in the same theme (below, _The normal meter in the theme_); the colours,
+faces and sizes the paragraphs on the normal meter give are Ready Check's.
+
+- **The normal meter in the theme** (since 0.7.3; `MeterWindow.Normal.cs`, `ThemeSkin.cs`): a bigger
+  sibling of the theme's compact meter, every part of it the theme's, its features and behaviour as
+  below (its columns, tabs, pace, growing up or down, sizing by its edge with the resize zones kept
+  clear, the lock). Its ground and frame are the theme's (`PlateMeter.Ground`, the Background slider
+  never under the theme's floor, its sparkles and Readout's scanlines as Decorations has them; the
+  window's own background and edge are clear), the head on the theme's band (`PlateMeter.HeadBand`:
+  Native's title band, Neon's horizon, Grimoire's rules; a plate for Ready Check's and Neon's head)
+  with the theme's clock (Mochi's pink pill with its heart, Native's diamond and the tab's word in
+  Jupiter, Readout's prompt and cursor, Grimoire's red capital, else the beating dot; Neon's glows).
+  Its faces by role (`DetailFonts.ForNormal`, tested: Ready Check's are the normal meter's sizes as
+  they were; a theme's its compact faces, as far from those sizes as they are from Ready Check's
+  compact ones), every word measured and centred by its ink. The rows on the theme's plates, 25 tall
+  or as its faces need (`MeterSizes.For`, tested: Mochi 29, Native 27, Grimoire 26), 1px apart: the
+  job's icon in the theme's socket and role colours, the name (yours a weight heavier), the job in the
+  heads' capitals, the number and the second column in columns as wide as the widest words shown
+  (never under 66 and 40; the job's under 30), Mochi's heart's place kept on every row; the bar in the
+  theme's style along its track (`PlateColumns.Track`: before the second column, and for a hard-ended
+  bar, `ThemeBar.BeforeNumber`, before the job and the number too); you in the theme's mark
+  (`PlateMeter.YouMark`; Readout's reverse video), the dead muted with its death mark (struck through
+  for the dagger, glitched faintly for Neon). The tabs in the theme's words with its accent under the
+  one you're on (Ready Check's the ember cast gradient), the column heads, pace (its label in the
+  heads' capitals, the bar in the accent, ahead in good or bad), the limit break's row (its mark in the
+  theme's colour, Mochi's star, no plate), the foot (on a plate for Ready Check, Neon and Native, else a
+  hairline; the limit break's pips as compact's), the Preview and outcome tags in its chips (Readout's
+  in brackets), the dropdowns, the lock and the fold's chevron, and the picker's and tab menu's rows, the
+  pace segments and the Compact switch, in its panel, chips, accent and lines (`ThemeSkin`). Deaths and
+  Events on plates too; the empty meter's Boss with the theme's words. Ready Check is today's meter
+  refined to match compact Ready Check: its rows on plates with the bar in the role's colour at 30% and
+  its 2px foot, the ember notch for you.
 
 - **The meter** (`MeterWindow`, "Meter", 330 wide at first, translucent as Settings says: its
   background rgb 13 13 16 at _Background_, its rows solid, 10px corners). Shown with _Show the meter_
@@ -1418,7 +1450,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   that scrolls (a 34px row each, only those in view drawn: the time in mono, the kind's mark in its
   colour, the spot, the event's words, its kind in faint mono capitals on the right); pressed, a member's
   event picks them in the table, a death's opens its recap on Deaths. **In the theme** (since 0.7.2; the
-  compact meter's, while compact is on, else Ready Check's): a theme draws the window's ground and frame
+  meter's theme, compact or not): a theme draws the window's ground and frame
   (`PlateMeter.Ground`, opaque, its sparkles left out), its panels a shade off its ground in its
   hairline, the rows on its plates (Grimoire's ruled, Readout's bare) with its hover wash, its faces
   (`DetailFonts`, tested: Ready Check's are the window as it was; another's its name's face for words,
@@ -1442,14 +1474,15 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
   (Names, Jobs only); _Lock it where it is_ (its tooltip: compact is never sized by hand) with
   _Click-through when locked_ under it; _Grows_
   (Down, Up: which edge stays put, the head going with it); _Limit break gauge_ (Head, Foot, Off;
-  0.4.0; compact's pips are in its head, or none with Off); _Compact_ (on at first since 0.7.0) with, under it, _Theme_
-  (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
+  0.4.0; compact's pips are in its head, or none with Off); _Theme_ (since 0.7.2 a row of its own, before
+  _Compact_: it's both meters' and the opened-up window's look) with _Role colours_ and _Decorations_ under
+  it, then _Compact_ (on at first since 0.7.0) with _Whole numbers_ under it (compact's alone). _Theme_ (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
   the range, the one picked edged in ember, its idea under them and in a tile's tooltip; beside them the
   live preview, the sample fight playing in that theme at its real size, as the meter draws it, from the
   same drawer: `PlateMeter`, not interactive), _Role colours_ (The theme's, The game's: the bars and job
-  icons' sockets, in the normal meter, the opened-up window and the cooldown tracker too), _Whole
-  numbers_ and _Decorations_ (on); _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it;
-  compact in a theme with a floor says "Readout keeps 82% at least"); _See it in a
+  icons' sockets, in both meters, the opened-up window and the cooldown tracker too), _Decorations_ (on;
+  both meters and the opened-up window), _Whole numbers_; _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it;
+  a theme with a floor says "Readout keeps 82% at least", compact or not); _See it in a
   fight_ · _Show a sample fight_ (_Stop the sample_ while it's on; dimmed while a real fight is on,
   "After this fight"); _A fight ends after_ (2 to 15 s) and _Keep the
   last_ (5 to 50), read by the meter's session; _Pace against_; _Use ACT's numbers_ (not in this
@@ -1751,6 +1784,12 @@ entry).
   number and its outlined digits apart ("9k"), Mochi's and Neon's bars before the number too; the opened-up
   window in each theme (its ground, panels, plates, faces, the picked row's mark, a dead name, the abilities'
   bars, the tabs, segments, buttons and pull menu, the event log, the recap) and in Ready Check as it was; the
+  normal meter (_Compact_ off) in each theme, growing down and up: its ground and frame, head band and clock,
+  rows on plates (Mochi's 29, Native's 27), icons, bars (none under the number for Native, Mochi and Neon), you
+  and the dead, the tabs, column heads, pace, the limit break's row, the foot and its pips, the tags, the
+  picker and tab menu (a narrow meter), the lock and the fold's chevron, Deaths and Events, the empty and
+  stopped meter, waiting; Ready Check close to the old normal meter; sizing it by its edges and its lock
+  still pressable growing up; Settings' Theme row before Compact; the
   pull button's chevron 6 apart from its words there and on "DPS ⌄" and the normal meter's dropdowns; the
   limit break's "–" and "1,337,000" apart; the game's Axis and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
   1.3)`: too big or small?); the outlined words' weight; the ground, edge, rings and sparkles drawn outside the
@@ -1769,7 +1808,17 @@ entry).
 
 ## Release notes
 
-### 0.7.2 (not released yet)
+### 0.7.3 (not released yet)
+
+- **The normal meter takes the theme too.** With _Compact_ off, the meter is the theme's bigger sibling of its compact
+  one: its ground and frame, its head band and clock, its faces, the rows on its plates with its icons, bars and marks,
+  and its tabs, column heads, pace, limit break row, foot, tags, dropdowns, lock and menus in its chips, accent and
+  lines; its columns as wide as what they show. Its tabs, pace, columns, growing up or down, sizing and lock work as
+  before. Ready Check is today's normal meter refined to match compact Ready Check (rows on plates, the bar in the
+  role's colour, the ember notch for you). Settings → Meter's _Theme_ is its own row now, before _Compact_, for both
+  meters and the opened-up window, with _Role colours_ and _Decorations_ under it.
+
+### 0.7.2
 
 - **The opened-up meter takes the theme.** The big window (Damage, Healing, Taken, Deaths, Events) is drawn in the
   compact meter's theme as the meter is: its ground and frame, its panels and plates, its faces, its role colours and

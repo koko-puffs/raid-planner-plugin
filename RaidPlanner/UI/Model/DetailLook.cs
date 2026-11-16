@@ -34,23 +34,37 @@ public sealed record DetailFonts(
         F(Face.Mono, 13), F(Face.MonoSemibold, 13), F(Face.Mono, 12), F(Face.MonoSemibold, 12), F(Face.Mono, 11),
         F(Face.Mono, 10, true), F(Face.Mono, 9, true), F(Face.MonoSemibold, 18));
 
-    /// <summary>A theme's: Ready Check's sizes moved by the theme's own steps from Ready Check's compact faces, in its faces.</summary>
-    public static DetailFonts For(MeterTheme t)
+    /// <summary>
+    /// The normal meter's (since 0.7.3 it's in the theme too): Ready Check's are its sizes as they were (names Geist 500
+    /// 13, its numbers mono 600 13, the second column mono 11, the heads mono capitals 9 and the jobs 10, the clock 600 15,
+    /// the tabs and buttons 500 12, the small lines 400 12 and 11).
+    /// </summary>
+    public static readonly DetailFonts NormalReadyCheck = new(
+        F(Face.SansMedium, 13), F(Face.SansMedium, 13), F(Face.Sans, 12), F(Face.SansMedium, 12), F(Face.Sans, 11),
+        F(Face.Mono, 13), F(Face.MonoSemibold, 13), F(Face.Mono, 11), F(Face.MonoSemibold, 11), F(Face.Mono, 11),
+        F(Face.Mono, 9, true), F(Face.Mono, 10, true), F(Face.MonoSemibold, 15));
+
+    /// <summary>A theme's opened-up window: Ready Check's sizes moved by the theme's own steps from Ready Check's compact faces, in its faces.</summary>
+    public static DetailFonts For(MeterTheme t) => t.Id == MeterThemeId.ReadyCheck ? ReadyCheck : Derive(t, ReadyCheck);
+
+    /// <summary>A theme's normal meter, as <see cref="For"/> from <see cref="NormalReadyCheck"/>.</summary>
+    public static DetailFonts ForNormal(MeterTheme t) => t.Id == MeterThemeId.ReadyCheck ? NormalReadyCheck : Derive(t, NormalReadyCheck);
+
+    private static DetailFonts Derive(MeterTheme t, DetailFonts b)
     {
-        if (t.Id == MeterThemeId.ReadyCheck) return ReadyCheck;
         var rc = MeterThemes.ReadyCheck.Font;
         var f = t.Font;
         var w = f.Name.Px - rc.Name.Px;
         var n = f.Num.Px - rc.Num.Px;
         var s = f.Small.Px - rc.Small.Px;
-        ThemeFont Words(int px, bool heavy = false) => f.Name with { Face = heavy ? MeterThemes.Heavier(f.Name.Face) : f.Name.Face, Px = px + w };
-        ThemeFont Numbers(ThemeFont of, int px, bool heavy = false) => of with { Face = heavy ? MeterThemes.Heavier(of.Face) : of.Face, Px = px };
+        ThemeFont Words(ThemeFont of, bool heavy = false) => f.Name with { Face = heavy ? MeterThemes.Heavier(f.Name.Face) : f.Name.Face, Px = of.Px + w };
+        ThemeFont Numbers(ThemeFont face, ThemeFont of, int step, bool heavy = false) => face with { Face = heavy ? MeterThemes.Heavier(face.Face) : face.Face, Px = of.Px + step };
         var clockOf = t.Id is MeterThemeId.Native or MeterThemeId.Grimoire ? f.Num : f.Head;
         return new DetailFonts(
-            Words(14), Words(15, true), Words(13), Words(13, true), Words(12),
-            Numbers(f.Num, 13 + n), Numbers(f.Num, 13 + n, true), Numbers(f.Small, 12 + s), Numbers(f.Small, 12 + s, true), Numbers(f.Small, 11 + s),
-            f.Small with { Px = 10 + s, Caps = true, Cells = 0 }, f.Small with { Px = 9 + s, Caps = true, Cells = 0 },
-            clockOf with { Px = 18 + clockOf.Px - 13 });
+            Words(b.Name), Words(b.Title, true), Words(b.Body), Words(b.BodyStrong, true), Words(b.Note),
+            Numbers(f.Num, b.Num, n), Numbers(f.Num, b.NumStrong, n, true), Numbers(f.Small, b.Small, s), Numbers(f.Small, b.SmallStrong, s, true), Numbers(f.Small, b.Tiny, s),
+            f.Small with { Px = b.Head.Px + s, Caps = true, Cells = 0 }, f.Small with { Px = b.HeadSmall.Px + s, Caps = true, Cells = 0 },
+            clockOf with { Px = b.Clock.Px + clockOf.Px - 13 });
     }
 
     public IEnumerable<ThemeFont> All()

@@ -32,59 +32,23 @@ public sealed class MeterDetailWindow : Window
     /// <summary>The theme's drawer: its ground, its bars, its marks (never pressed: the window's own controls are).</summary>
     private readonly PlateMeter plate = new() { Interactive = false };
 
-    /// <summary>The window's colours in the theme (worked out once a theme).</summary>
-    private readonly record struct Ink(
-        Vector4 Panel,
-        Vector4 PanelEdge,
-        Vector4 Rule,
-        Vector4 StrongRule,
-        Vector4 Strong,
-        Vector4 Text,
-        Vector4 Muted,
-        Vector4 Faint,
-        Vector4 Hover,
-        Vector4 Accent,
-        Vector4 Bad,
-        Vector4 BadWash,
-        Vector4 Good,
-        Vector4 Warn,
-        Vector4 Chip,
-        float PanelRadius,
-        float RowRadius,
-        float ChipRadius);
+    private (MeterThemeId Id, DetailFonts Fonts, ThemeInk Ink) look = (MeterThemeId.ReadyCheck, DetailFonts.ReadyCheck, ThemeInk.Of(MeterThemes.ReadyCheck));
 
-    private (MeterThemeId Id, DetailFonts Fonts, Ink Ink) look = (MeterThemeId.ReadyCheck, DetailFonts.ReadyCheck, InkOf(MeterThemes.ReadyCheck));
-
-    /// <summary>The theme: the compact meter's when it's on (the normal meter is Ready Check's look, and so is this window then).</summary>
-    private MeterTheme T => config.MeterCompact ? MeterThemes.Of(config.MeterTheme) : MeterThemes.ReadyCheck;
+    /// <summary>The meter's theme (the compact meter's since 0.7.2, the normal meter's too since 0.7.3).</summary>
+    private MeterTheme T => MeterThemes.Of(config.MeterTheme);
 
     /// <summary>Ready Check: the window as it was (the kit's controls).</summary>
     private bool Rc => T.Id == MeterThemeId.ReadyCheck;
 
     private DetailFonts F => Look().Fonts;
 
-    private Ink I => Look().Ink;
+    private ThemeInk I => Look().Ink;
 
-    private (MeterThemeId Id, DetailFonts Fonts, Ink Ink) Look()
+    private (MeterThemeId Id, DetailFonts Fonts, ThemeInk Ink) Look()
     {
         var t = T;
-        if (look.Id != t.Id) look = (t.Id, DetailFonts.For(t), InkOf(t));
+        if (look.Id != t.Id) look = (t.Id, DetailFonts.For(t), ThemeInk.Of(t));
         return look;
-    }
-
-    /// <summary>
-    /// The colours: Ready Check's the kit's; a theme's its rows' words, its accent, good and bad, its
-    /// divider and chips, its panels a shade off its ground (its rows on their plates over them).
-    /// </summary>
-    private static Ink InkOf(MeterTheme t)
-    {
-        if (t.Id == MeterThemeId.ReadyCheck)
-            return new Ink(Palette.Slab, Palette.Line, Palette.Line, Palette.Line3, Palette.White, Palette.Text, Palette.Muted, Palette.Faint, Palette.Hover, Palette.Ember,
-                Palette.Danger, Palette.DangerWash, Palette.Ready, Palette.Warn, Palette.Line2, Palette.RadiusLg, Palette.RadiusSm, 6);
-        var ground = t.Win.GradBottom ?? t.Win.Bg;
-        var panel = Rgb.Mix(ground, t.Row.Text, t.Light ? 0.035f : 0.045f) with { W = 1 };
-        return new Ink(panel, t.Row.PlateEdge ?? t.Divider, t.Divider, Rgb.A(t.Row.Muted, 0.45f), t.Row.Num, t.Row.Text, t.Row.Muted, t.Row.Faint, t.HoverWash,
-            t.Accent, t.Bad, Rgb.A(t.Bad, 0.12f), t.Good, t.Lb, t.ChipLine, MathF.Min(t.Win.Radius, 10), t.Row.Radius, MathF.Max(t.ChipRadius, 0));
     }
 
     private static readonly string[] Ranks = { "ENCDPS", "DPS" };
@@ -695,8 +659,8 @@ public sealed class MeterDetailWindow : Window
     /// <summary>The table's columns' widths (screen px), from the widest words each shows (head, cells, the party's) in the faces drawn; again for a new table, theme, scale or font build.</summary>
     private float[] ColumnWidths(Col[] cols, List<MeterRow> rows, string[][] cells, string[] party)
     {
-        var key = (table.Of, table.Tab, table.Rank, T.Id, S(1), Txt.Fonts.Generation);
-        if (columnWidths.Key == key && columnWidths.Widths.Length == cols.Length) return columnWidths.Widths;
+        var key = (table.Tab, table.Rank, T.Id, S(1), Txt.Fonts.Generation);
+        if (ReferenceEquals(columnWidthsOf, table.Of) && columnWidths.Key == key && columnWidths.Widths.Length == cols.Length) return columnWidths.Widths;
         var widths = new float[cols.Length];
         var fonts = new ThemeFont[cols.Length];
         var css = new float[cols.Length];
@@ -709,12 +673,19 @@ public sealed class MeterDetailWindow : Window
         }
         DetailColumns.Widths(widths, css, S(1), heads, F.Head, fonts, cells.Append(party), Measure);
         // Kept once the faces are built (measured in a stand-in before).
-        if (Txt.Ready(F.Num.Face, F.Num.Px) && Txt.Ready(F.NumStrong.Face, F.NumStrong.Px)) columnWidths = (key, widths);
+        if (Txt.Ready(F.Num.Face, F.Num.Px) && Txt.Ready(F.NumStrong.Face, F.NumStrong.Px))
+        {
+            columnWidths = (key, widths);
+            columnWidthsOf = table.Of;
+        }
         _ = rows;
         return widths;
     }
 
-    private ((MeterEncounter?, MeterTab, MeterRank, MeterThemeId, float, int) Key, float[] Widths) columnWidths = (default, Array.Empty<float>());
+    private ((MeterTab, MeterRank, MeterThemeId, float, int) Key, float[] Widths) columnWidths = (default, Array.Empty<float>());
+
+    /// <summary>The table the columns were measured for (compared by reference: an encounter is a record).</summary>
+    private MeterEncounter? columnWidthsOf;
 
     private (MeterEncounter? Of, MeterTab Tab, MeterRank Rank, Col[] Cols, List<MeterRow> Rows, string[][] Cells, string[] Party) table =
         (null, MeterTab.Damage, MeterRank.EncDps, Array.Empty<Col>(), new List<MeterRow>(), Array.Empty<string[]>(), Array.Empty<string>());
