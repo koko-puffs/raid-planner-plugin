@@ -88,7 +88,12 @@ internal sealed class PlateMeter
     public MeterRoleColours RoleSet;
     public bool Whole;
     public bool JobsOnly;
-    public bool Up;
+
+    /// <summary>Where its head sits and the rows' order (since 0.7.4; which way it grows is its window's alone).</summary>
+    public MeterArrange Arrange = MeterArrange.Default;
+
+    /// <summary>The head at the bottom edge: everything else the other way up from it (the foot at the top).</summary>
+    private bool Up => Arrange.HeadAtBottom;
     public float Background = 0.88f;
     public bool Locked;
     public bool ClickThrough;
@@ -495,7 +500,8 @@ internal sealed class PlateMeter
     /// <summary>
     /// The fight's meter in a box <paramref name="w"/> by <paramref name="h"/> (the window's content):
     /// as many rows as fit (at most eight; you pinned last when you're below them), the head at the
-    /// anchored edge (the foot when it grows up, everything else the other way up from it).
+    /// edge <see cref="Arrange"/> puts it at (at the bottom, everything else the other way up from it), the
+    /// rows in its order (the top player at the top or at the bottom of the list; you pinned at the end away from them).
     /// </summary>
     public PlateInput DrawFight(ImDrawListPtr dl, Vector2 min, float w, float h, bool waiting)
     {
@@ -507,7 +513,7 @@ internal sealed class PlateMeter
         var x0 = min.X + pad;
         var iw = w - pad * 2;
         var headH = S(t.Win.HeadH);
-        // Mirrored growing up: a band at y (down from the head's edge) is drawn at its mirror.
+        // Mirrored with the head at the bottom: a band at y (down from the head's edge) is drawn at its mirror.
         float Y(float y, float hh) => Up ? max.Y - y - hh : min.Y + y;
 
         if (t.HeadPlates) Plate(dl, new Vector2(x0, Y(pad - S(1), headH - pad + S(1))), iw, headH - pad + S(1), t.Row.Plate, t.Row.PlateAlpha);
@@ -522,11 +528,9 @@ internal sealed class PlateMeter
         {
             var room = PlateSizes.RowsIn(t, h / S(1), false);
             var n = Math.Min(items.Count, room);
-            for (var i = 0; i < n; i++)
-            {
-                ItemRow(dl, items[i], x0, Y(y, rh), iw, rh, i, ref input);
-                y += step;
-            }
+            // The first death or the newest event where the top player would be (Order).
+            for (var i = 0; i < n; i++) ItemRow(dl, items[i], x0, Y(y + Arrange.FromHead(i, n) * step, rh), iw, rh, i, ref input);
+            y += n * step;
             if (items.Count == 0)
             {
                 var none = tabOf == MeterTab.Deaths ? (ended == Core.Outcome.Wipe ? "No deaths but the wipe" : "Nobody died") : "Deaths, raises, interrupts and potions show here.";
@@ -552,6 +556,11 @@ internal sealed class PlateMeter
         if (slots.Count > 0 && slots[^1].Pinned && PlateSizes.Needed(t, slots.Count, lbOn, true) > h / S(1) + 0.5f && fit > 1)
             PlateRows.Select(lines.Count, you, fit - 1, slots);
         var rowsTop = y;
+        // Each row's place from the head's side, as Order has it; you pinned at the end away from the top player,
+        // the dashed rule between you and the rest (the rows past it moved by its room).
+        var count = slots.Count;
+        var pinned = count > 0 && slots[^1].Pinned;
+        var boundary = Arrange.PinBoundary(count);
         var dt = ImGui.GetIO().DeltaTime;
         var still = ReducedMotion;
         var clipA = Up ? Y(rowsTop + slots.Count * step + S(PlateSizes.PinRule), 0) : Y(rowsTop, 0);
@@ -565,16 +574,17 @@ internal sealed class PlateMeter
                 var l = lines[slot.Index];
                 var id = l.Row.PartyId;
                 // The rows slide to their places (160ms a place) and the bars ease (250ms).
-                var target = (float)k;
+                var place = Arrange.FromHead(k, count);
+                var target = (float)place;
                 var at = slot.Pinned || still || !shownSlot.TryGetValue(id, out var s0) ? target : Toward(s0, target, MathF.Max(1, MathF.Abs(target - s0)) / 0.16f * dt);
                 shownSlot[id] = at;
                 var bar = still || !shownBar.TryGetValue(id, out var b0) ? l.Target : Toward(b0, l.Target, MathF.Max(0.05f, MathF.Abs(l.Target - b0)) / 0.25f * dt);
                 shownBar[id] = bar;
-                var ry = rowsTop + at * step;
+                var ry = rowsTop + at * step + (pinned && place >= boundary ? S(PlateSizes.PinRule) : 0);
                 if (slot.Pinned)
                 {
-                    PlateArt.Dashed(dl, x0 + S(8), x0 + iw - S(8), Y(rowsTop + k * step + S(1), 1), t.Dashed);
-                    ry = rowsTop + k * step + S(PlateSizes.PinRule);
+                    PlateArt.Dashed(dl, x0 + S(8), x0 + iw - S(8), Y(rowsTop + boundary * step + S(1), 1), t.Dashed);
+                    ry = rowsTop + place * step + (place >= boundary ? S(PlateSizes.PinRule) : 0);
                 }
                 Row(dl, l, x0, Y(ry, rh), iw, rh, waiting ? 0 : bar, slot.Pinned, waiting, ref input);
             }
@@ -632,14 +642,16 @@ internal sealed class PlateMeter
         if (t.Id == MeterThemeId.Native)
         {
             if ((orn & Ornaments.TitleBand) != 0)
-                PlateArt.GradientRect(dl, new Vector2(left + S(2), top + S(2)), new Vector2(right - S(2), top + h), Rgb.Rgba(78, 78, 88, 0.9f), Rgb.Rgba(40, 40, 46, 0.9f), S(3));
+                // Inset 2 from the window's edge it's against (the top, or the bottom with the head there), flush with the rows' side.
+                PlateArt.GradientRect(dl, new Vector2(left + S(2), up ? top : top + S(2)), new Vector2(right - S(2), up ? top + h - S(2) : top + h), Rgb.Rgba(78, 78, 88, 0.9f),
+                    Rgb.Rgba(40, 40, 46, 0.9f), S(3));
             Kit.Rule(dl, left + S(4), right - S(4), up ? top - S(1) : top + h, Rgb.Rgba(214, 184, 120, 0.5f));
         }
         else if (t.Id == MeterThemeId.Neon && (orn & Ornaments.Horizon) != 0)
         {
             var a = Palette.U32(Rgb.Rgba(255, 79, 216, 0));
             var b = Palette.U32(Rgb.Rgba(255, 79, 216, 0.16f));
-            dl.AddRectFilledMultiColor(new Vector2(left + 1, top + 1), new Vector2(right - 1, top + h), up ? b : a, up ? b : a, up ? a : b, up ? a : b);
+            dl.AddRectFilledMultiColor(new Vector2(left + 1, up ? top : top + 1), new Vector2(right - 1, up ? top + h - 1 : top + h), up ? b : a, up ? b : a, up ? a : b, up ? a : b);
             var line = Palette.U32(Rgb.Rgba(255, 79, 216, 0.35f));
             var gy = up ? top + S(7) : top + h - S(7);
             for (var i = 0; i < 9; i++)

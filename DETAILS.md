@@ -1831,10 +1831,39 @@ entry).
   short), at 100% and a bigger Dalamud scale; the same for the plan window's Previous and Next and the overlays'
   _Preview_ tags; a 0.6 configuration landing on compact once (and an old compact height or a test build's width
   ignored); frame time with eight rows in each theme.
+- The meter's layout (0.7.4) wants checking in the game, both meters, in each theme: the normal meter fitted to
+  what it shows, growing down and up (one player, then the sample's eight: no empty band at either edge; pace's row
+  and the limit break's adding their height as they come, the anchored edge not moving; waiting, Deaths live and
+  kept, Events, the empty and stopped meter and the fold all fitted; a height given by its edge capping it, and
+  the rows past it cut from the lowest); each of the eight Grows, Head and Order settings (the head at the bottom
+  growing down and on top growing up; highest and lowest first; the first death and the newest event with the
+  top player; compact's pinned you at the end away from the top player, its dashed rule on the right side and
+  its rows sliding without a jump); the lock, picker and fold's chevron with the head at the bottom growing down
+  (in the bottom-right grip's corner: still moved in out of its reach and taking every press) and the foot's
+  _Preview_ tag with the head on top; no words touching in the head or the foot at either edge; Native's title
+  band and gilt rule, Neon's horizon and Grimoire's rules facing the rows with the head at either edge, and the
+  frame's own ornaments (Mochi's sparkles, Grimoire's corner pips) unchanged; the menus opening away from the
+  head; Settings' three rows and the preview following Head and Order; a 0.7.3 configuration growing up landing
+  on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
 
-### 0.7.3 (not released yet)
+### 0.7.4 (not released yet)
+
+- **The normal meter is as tall as what it shows.** It no longer keeps room for pace and the limit break before
+  they come, so there's no empty band at the edge away from its head (a meter growing up with one player had 53px
+  over its row). Its rows, pace's row, the limit break's, waiting's party and the Deaths and Events lists set its
+  height; the edge it's anchored at stays put and the other moves as they come and go. The height you give it by its
+  edge is the most it grows to.
+- **Grows, Head and Order are three settings.** Settings → Meter's _Grows_ (Down, Up) is only the edge that stays
+  put now; _Head_ (Top, Bottom) puts the clock, tabs, pull menu and lock (compact's head) at either edge, whichever
+  way it grows; _Order_ (Highest first, Lowest first) is whether the top player is at the top or the bottom of the
+  list, reading down. Both meters; compact's pinned you stays at the end away from the top player. A meter that grew
+  up keeps its look (Up, Bottom, Lowest first).
+- **The themes' head bands face the rows** at either edge: Native's title band no longer runs into the window's
+  edge with the head at the bottom, nor Neon's horizon.
+
+### 0.7.3
 
 - **The normal meter takes the theme too.** With _Compact_ off, the meter is the theme's bigger sibling of its compact
   one: its ground and frame, its head band and clock, its faces, the rows on its plates with its icons, bars and marks,

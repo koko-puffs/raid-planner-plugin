@@ -38,6 +38,10 @@ public sealed partial class MainWindow
 
     private static readonly string[] GrowsItems = { "Down", "Up" };
 
+    private static readonly string[] HeadItems = { "Top", "Bottom" };
+
+    private static readonly string[] OrderItems = { "Highest first", "Lowest first" };
+
     private static readonly string[] GaugeItems = { "Head", "Foot", "Off" };
 
     private static readonly string[] WhereItems = { "In duties", "Everywhere" };
@@ -567,12 +571,27 @@ public sealed partial class MainWindow
             config.MeterClickThrough = !config.MeterClickThrough;
             config.Save();
         }
-        // Which edge stays put when its height changes by itself (folding, opening, a bigger party, compact).
-        var grows = SegmentRow(i++, "##meter-grows", "Grows", "Which edge stays put as it folds and opens", GrowsItems, (int)config.MeterGrows,
-            tip: "Down: its top edge stays where you put it, with the clock and its buttons on top, and it grows downwards. Up: its foot stays, with the clock and its buttons at the foot and the rows reading up from them, and it grows upwards (for a meter sitting on your hotbars).");
+        // Since 0.7.4 three settings apart (until then Grows flipped all three): the edge that stays put, where the
+        // head sits, the rows' order. Both meters; an older configuration growing up was moved to Up, Bottom, Lowest first.
+        var grows = SegmentRow(i++, "##meter-grows", "Grows", "The edge that stays put as it grows", GrowsItems, (int)config.MeterGrows,
+            tip: "Down: its top edge stays where you put it and it grows downwards. Up: its bottom edge stays and it grows upwards (for a meter sitting on your hotbars). Where its head sits and the rows' order are the two settings under this.");
         if (grows != (int)config.MeterGrows)
         {
             config.MeterGrows = (MeterGrows)grows;
+            config.Save();
+        }
+        var head = SegmentRow(i++, "##meter-head", "Head", "The clock, tabs, pulls and lock", HeadItems, (int)config.MeterHead,
+            tip: "Top or Bottom of the meter, whichever way it grows: the normal meter's clock, tabs, pull menu and lock (pace and the column heads beside them), compact's head. The party's line sits at the other edge.");
+        if (head != (int)config.MeterHead)
+        {
+            config.MeterHead = (MeterHead)head;
+            config.Save();
+        }
+        var order = SegmentRow(i++, "##meter-order", "Order", "Reading down the list", OrderItems, (int)config.MeterOrder,
+            tip: "Highest first: the top player at the top of the list. Lowest first: at its bottom. The first death and the newest event go where the top player does; compact's pinned you stays at the end away from them.");
+        if (order != (int)config.MeterOrder)
+        {
+            config.MeterOrder = (MeterOrder)order;
             config.Save();
         }
         var gauge = SegmentRow(i++, "##meter-gauge", "Limit break gauge", "Its bars, while a fight is on", GaugeItems, (int)config.MeterGauge,

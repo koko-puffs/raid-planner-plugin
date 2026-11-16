@@ -60,7 +60,6 @@ public sealed partial class MeterWindow
         Configure(plate, config);
         plate.Locked = config.MeterLocked;
         plate.ClickThrough = config.MeterClickThrough;
-        plate.Up = Up;
         plate.PreviewOn = Preview != null;
         if (shown != null) plate.Update(shown, m, MeterLayout.Known(config.MeterTab), config.MeterRank, config.MeterWholeNumbers, Now());
     }
@@ -74,6 +73,8 @@ public sealed partial class MeterWindow
         p.Whole = config.MeterWholeNumbers;
         p.JobsOnly = config.MeterJobsOnly;
         p.Background = Math.Clamp(config.MeterBackground, 0.2f, 1f);
+        // Where its head sits and the rows' order (since 0.7.4 apart from which way it grows; Settings' preview follows them too).
+        p.Arrange = config.MeterArrangeNow();
     }
 
     private static double Now() => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
@@ -128,8 +129,8 @@ public sealed partial class MeterWindow
             plate.PaceTip = paceTip.Tip;
         }
         var h = bottom - top.Y;
-        headTop = Up ? bottom - S(t.Win.HeadH) : top.Y;
-        headBottom = Up ? bottom : top.Y + S(t.Win.HeadH);
+        headTop = HeadBottom ? bottom - S(t.Win.HeadH) : top.Y;
+        headBottom = HeadBottom ? bottom : top.Y + S(t.Win.HeadH);
         PlateInput input;
         var oneLine = PlateOneLine;
         if (oneLine)

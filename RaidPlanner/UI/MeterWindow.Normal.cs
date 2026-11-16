@@ -18,7 +18,7 @@ namespace RaidPlanner.UI;
 /// own parts, the tabs, the column heads, pace, the limit break's row, the foot, the dropdowns, the tags,
 /// the lock and the menus, in the theme's chips, accent and lines (<see cref="ThemeSkin"/>). Ready Check
 /// is today's normal meter refined to match compact Ready Check (its rows on plates, the bar in the role's
-/// colour, the ember notch for you). Its columns, tabs, pace, growing up or down, resizing (with the
+/// colour, the ember notch for you). Its columns, tabs, pace, growing up or down (its head at the top or the bottom, its rows highest or lowest first: <see cref="MeterArrange"/>), resizing (with the
 /// resize zones kept clear) and the lock are as before.
 /// </summary>
 public sealed partial class MeterWindow
@@ -126,7 +126,7 @@ public sealed partial class MeterWindow
         HeadGround(dl, left, w, y, h);
         var right = left + w - S(PlateInset) - S(2);
         // The lock: the accent's wash when locked, a pointer when click-through, quiet when open. Out of the
-        // reach of the window's right edge and (growing up, its head at the foot) its bottom-right grip.
+        // reach of the window's right edge and (its head at the bottom, whichever way it grows) its bottom-right grip.
         var ls = S(24);
         var lx = right - ls;
         lx -= guard.ShiftLeft(new Vector2(lx, cy - ls / 2), new Vector2(lx + ls, cy + ls / 2));
@@ -195,7 +195,7 @@ public sealed partial class MeterWindow
             var b = new Vector2(left + w - S(PlateInset) + S(2), y + h - S(4));
             dl.AddRectFilled(a, b, Palette.U32(Rgb.A(t.Row.Plate, t.Row.PlateAlpha)), S(t.Row.Radius));
         }
-        plate.HeadBand(dl, left, left + w, y, h, Up);
+        plate.HeadBand(dl, left, left + w, y, h, HeadBottom);
     }
 
     /// <summary>The clock in the theme's way, from <paramref name="x"/>; returns where what follows it starts.</summary>
@@ -363,7 +363,7 @@ public sealed partial class MeterWindow
         var y = stack.Near(h);
         var (a, b) = MeterView.Heads(tab, config.MeterRank);
         var g = GridOf(left, w, shown, tab);
-        // Against the rows: at the band's foot when they're under it, at its top when they're above (growing up).
+        // Against the rows: at the band's foot when they're under it, at its top when they're above (the head at the bottom).
         var ly = stack.Up ? y + S(2) : y + h - S(2) - S(14);
         PlateArt.LineRight(dl, g.ValueR, ly, a, f, NI.Faint, 14);
         PlateArt.LineRight(dl, g.SecondR, ly, b, f, NI.Faint, 14);
@@ -381,15 +381,17 @@ public sealed partial class MeterWindow
         var rowH = S(z.Row);
         var lbH = S(z.LimitBreak);
         var n = Math.Min(rows.Count, stack.Fits(rowH));
+        var arr = Arr;
         var a = MathF.Min(stack.NearEdge, stack.FarEdge);
         var b = MathF.Max(stack.NearEdge, stack.FarEdge);
         dl.PushClipRect(new Vector2(left, a - S(4)), new Vector2(left + w, b + S(4)), true);
         try
         {
+            // The top n (the rest cut past the room), the top player nearest the head or furthest from it as Order has it.
             for (var i = 0; i < n; i++)
             {
                 var l = rows[i];
-                Row(dl, l.Row, l.Value, l.Second, l.Bar, l.Id, stack.Row(i, rowH), rowH, g, e, tab, false);
+                Row(dl, l.Row, l.Value, l.Second, l.Bar, l.Id, stack.Row(arr.FromHead(i, n), rowH), rowH, g, e, tab, false);
             }
             if (lb != null && stack.Room - n * rowH + 1 >= lbH)
             {
@@ -563,9 +565,8 @@ public sealed partial class MeterWindow
         var deaths = said.Deaths;
         var footY = live ? 0 : stack.Far(S(z.Foot));
         var nameH = PlateArt.Natural(f.Name);
-        var subH = PlateArt.Natural(f.Note);
-        var rowH = S(6) * 2 + nameH + S(2) + subH;
-        var aliveH = !live ? 0 : S(14) + S(19.5f) + S(7.2f) + S(16) + S(6);
+        var rowH = DeathRowH();
+        var aliveH = !live ? 0 : S(MeterFit.Alive);
         var fit = Math.Max(0, (int)MathF.Floor((stack.Room - aliveH + 1) / rowH));
         var n = Math.Min(deaths.Count, fit);
         var cut = deaths.Count - n;
@@ -574,7 +575,7 @@ public sealed partial class MeterWindow
         dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, MathF.Max(a, b)), true);
         try
         {
-            for (var i = 0; i < n; i++) DeathRow(dl, left, stack.Row(i, rowH), w, rowH, nameH, e, i);
+            for (var i = 0; i < n; i++) DeathRow(dl, left, stack.Row(Arr.FromHead(i, n), rowH), w, rowH, nameH, e, i);
         }
         finally
         {
@@ -609,6 +610,9 @@ public sealed partial class MeterWindow
         var x = left + S(z.Pad);
         PlateArt.Line(dl, new Vector2(x, footY), PlateArt.Fit(DeathFoot(deaths.Count, cut, said.Wipe > 0), f.Small, rx - x), f.Small, ink.Muted, z.Foot);
     }
+
+    /// <summary>A death's row (screen px): 6 above, the name's line, 2, the note's line, 6 under, in the theme's faces.</summary>
+    private float DeathRowH() => S(6) * 2 + PlateArt.Natural(NF.Name) + S(2) + PlateArt.Natural(NF.Note);
 
     /// <summary>A death on its plate: the icon and name, the job in the heads' capitals, its time in the theme's death colour on the right, what killed them and how big under it.</summary>
     private void DeathRow(ImDrawListPtr dl, float left, float y, float w, float h, float nameH, MeterEncounter e, int i)
@@ -653,14 +657,15 @@ public sealed partial class MeterWindow
         var fd = Feed(m.Events(e.Id));
         var fh = S(z.Foot);
         var footY = stack.Far(fh);
-        var rowH = S(MathF.Max(23, z.Row - 2));
+        var rowH = S(MeterFit.EventRow(z));
         var n = Math.Min(fd.Newest.Count, stack.Fits(rowH));
+        var arr = Arr;
         var a = MathF.Min(stack.NearEdge, stack.FarEdge);
         var b = MathF.Max(stack.NearEdge, stack.FarEdge);
         dl.PushClipRect(new Vector2(left, a), new Vector2(left + w, MathF.Max(a, b)), true);
         try
         {
-            for (var i = 0; i < n; i++) EventRow(dl, fd.Newest[i], fd.Times[i], left, stack.Row(i, rowH), w, rowH, e, i);
+            for (var i = 0; i < n; i++) EventRow(dl, fd.Newest[i], fd.Times[i], left, stack.Row(arr.FromHead(i, n), rowH), w, rowH, e, i);
             if (fd.Newest.Count == 0)
             {
                 const string none = "Deaths, raises, interrupts, potions and limit breaks show here.";
@@ -735,7 +740,7 @@ public sealed partial class MeterWindow
         var z = Z;
         var ink = NI;
         var f = NF;
-        var stack = new MeterStack(top.Y, bottom, Up);
+        var stack = new MeterStack(top.Y, bottom, HeadBottom);
         Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, null, m, "Waiting for the first hit", false);
         TabsRow(dl, top.X, ref stack, w);
         Columns(dl, top.X, ref stack, w, MeterTab.Damage);
@@ -744,7 +749,8 @@ public sealed partial class MeterWindow
         var rowH = S(z.Row);
         var rows = last != null ? said.Spots : null;
         var n = rows == null ? 0 : Math.Min(rows.Count, stack.Fits(rowH));
-        for (var i = 0; i < n; i++) Row(dl, rows![i], "–", string.Empty, 0, WaitIds[i % WaitIds.Length], stack.Row(i, rowH), rowH, g, null, MeterTab.Damage, true);
+        var arr = Arr;
+        for (var i = 0; i < n; i++) Row(dl, rows![i], "–", string.Empty, 0, WaitIds[i % WaitIds.Length], stack.Row(arr.FromHead(i, n), rowH), rowH, g, null, MeterTab.Damage, true);
         FootGround(dl, top.X, w, fy, S(z.Foot), stack);
         if (last == null) return;
         var rw = PlateArt.LineRight(dl, top.X + w - S(z.Pad), fy, said.NextPull, f.Small, ink.Muted, z.Foot);
@@ -779,7 +785,7 @@ public sealed partial class MeterWindow
         var linkH = sample ? S(6) + S(18) + S(4) : 0;
         var messageH = S(16) + S(40) + S(7.2f) + titleH + S(7.2f) + lineH + linkH + S(18);
         var total = S(z.Head) + S(z.Tabs) + messageH;
-        var stack = new MeterStack(top.Y, top.Y + total, Up);
+        var stack = new MeterStack(top.Y, top.Y + total, HeadBottom);
         Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, pick, m, null, pick != null);
         TabsRow(dl, top.X, ref stack, w);
         // The message fills what's left, whichever side the head is on.

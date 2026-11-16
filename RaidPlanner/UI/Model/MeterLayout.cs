@@ -188,9 +188,10 @@ public static class MeterFit
 }
 
 /// <summary>
-/// The meter's bands laid from its head's edge: the top when it grows down, the foot when it grows up.
-/// The head first, then what goes next to it (the tabs, pace, the column heads), the rows running away
-/// from it, and at the far edge the party's line. Screen pixels.
+/// The meter's bands laid from its head's edge: the top, or the bottom with its head there (up;
+/// since 0.7.4 <see cref="MeterHead"/>, apart from which way it grows). The head first, then what goes next to it
+/// (the tabs, pace, the column heads), the rows running away from it (each row's place from the head is
+/// <see cref="MeterArrange.FromHead"/>'s), and at the far edge the party's line. Screen pixels.
 /// </summary>
 public struct MeterStack
 {
@@ -205,7 +206,7 @@ public struct MeterStack
         far = up ? top : bottom;
     }
 
-    /// <summary>The head is at the foot (it grows up).</summary>
+    /// <summary>The head is at the bottom edge.</summary>
     public readonly bool Up => up;
 
     /// <summary>Where the room left starts on the head's side (the first row's edge).</summary>
