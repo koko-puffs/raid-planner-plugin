@@ -259,8 +259,9 @@ in game yet is marked [verify] in its code comment and listed under _Not yet_):
   first time, then when MP moved 500 or the barrier changed, at most every half second each.
 - **The limit break gauge** (`lb`): `LimitBreakController`'s units and bars × units a bar [verify], a
   row on change.
-- **Head signs**, once a second with the waymarks (`MarkingController.Markers`, 17 slots [verify their
-  order]): a `signs` event when any changed.
+- **Head signs**, once a second with the waymarks (`MarkingController.Markers`, 17 slots, in the
+  Marker sheet's row order, row − 1: attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8;
+  checked against the sheet in 0.7.4's sweep): a `signs` event when any changed.
 - **Each enemy hit's targets**: their barrier before it (`sh`) and where they stood as it arrived
   (`px`, `pz`), read with their HP; and the hit's flags 256 (knocked back or drawn in: effects 31–36),
   512 (partly absorbed: a damage effect's `Param4` & 4 [verify]) and 1024 (a status it carries
@@ -1767,7 +1768,8 @@ entry).
   `CurrentUnits` as the gauge's total (10,000 a bar); knockback effects (31–36) absent under Arm's Length
   or Surecast, and a damage effect's `Param4` & 4 meaning partly absorbed; `GetAdjustedRecastTime` in
   milliseconds with traits at the synced level and `GetMaxCharges(id, 0)`; `MarkingController.Markers`'
-  order (attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8); the hooks on out
+  slots following the Marker sheet's row order (attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle,
+  attack 6–8: the sheet's order, checked in 0.7.4's sweep; the memory's following it isn't yet); the hooks on out
   of combat in a recorded duty costing nothing noticeable, and the pre-pull rows and countdown appearing;
   the hook's target position for ground actions; a damage effect's `Param2` matching the battle log's
   bonus %; the enemies' `TargetObjectId` as their target; the countdown agent's first reading (its
@@ -1789,7 +1791,10 @@ entry).
   (Unix seconds, ticking over with the server: `startedAt`'s milliseconds rest on it), the party list's `World` as the home
   world, the cross-world party's `HomeWorld`, and the World sheet's names.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
-  where it can (stack, spread, tankbuster…).
+  where it can (stack, spread, tankbuster…; since 0.7.4 a rotation's way round from BossMod's names). Since 0.7.4,
+  to check in the game: a head marker's second argument as whom it points at (`tgt`, BossMod's reading), and a
+  rotating mechanic's `turn` events (a boss turning between cleaves, a helper's heading over its cast) coming as
+  often as the steps go, and few away from them.
 - The compact meter and its themes (0.7.0, with 0.7.1's fixes) want checking in the game (the sample fight shows most of it:
   `/raidcodex meter preview`, then each theme in Settings): the job icons (62100 + the ClassJob row, framed, at
   16px; grey when dead) and their fallback; Zen Maru Gothic and Fraunces built in the atlas and their digits in

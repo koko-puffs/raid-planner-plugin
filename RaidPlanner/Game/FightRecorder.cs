@@ -848,7 +848,7 @@ public sealed unsafe class FightRecorder : IDisposable
 
     private static readonly Comparer<(int Who, int Pct)> HateOrder = Comparer<(int Who, int Pct)>.Create((x, y) => y.Pct != x.Pct ? y.Pct.CompareTo(x.Pct) : x.Who.CompareTo(y.Who));
 
-    /// <summary>The head signs (the party's target markers, by the game's 17 slots [verify their order]) on anyone in the recording.</summary>
+    /// <summary>The head signs (the party's target markers, by the game's 17 slots: the Marker sheet's rows in order) on anyone in the recording.</summary>
     private void ReadSigns(RecordingBuilder b, double t)
     {
         var marking = MarkingController.Instance();

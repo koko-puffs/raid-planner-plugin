@@ -349,8 +349,8 @@ public sealed record AggroEvent(double T, int Actor, int On) : RecEvent(T)
 
 /// <summary>
 /// The head signs (the party's target markers) as they now are (since 0.4.0): by the game's index
-/// (0–16; assumed attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8
-/// [verify]) the party id or actor id marked. One missing isn't placed.
+/// (0–16: attack 1–5, bind 1–3, ignore 1–2, square, circle, cross, triangle, attack 6–8, the game's
+/// Marker sheet's rows in order, row − 1) the party id or actor id marked. One missing isn't placed.
 /// </summary>
 public sealed record SignsEvent(double T, IReadOnlyDictionary<int, int> Marks) : RecEvent(T)
 {
