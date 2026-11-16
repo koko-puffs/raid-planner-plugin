@@ -313,11 +313,12 @@ public static class MeterThemes
     public static readonly MeterTheme Mochi = new(
         MeterThemeId.Mochi, "Mochi", "Cute",
         "A pastel sticker: cream, round pills, a heart on your row and two sparkles. Light, so it also reads over a dark arena.",
-        // Zen Maru Gothic for the names and labels; the numbers and the clock in Geist SemiBold (Zen Maru's digits are wide and loose in the game).
-        new ThemeFonts(F(Face.Round, 12), F(Face.SansSemibold, 12, cells: 6.8f), F(Face.SansSemibold, 10, cells: 5.7f), F(Face.SansSemibold, 13, cells: 7.4f), F(Face.Round, 11)),
+        // Zen Maru Gothic for the names and labels, a step up from the mock-ups (its small x-height reads small in the game);
+        // the numbers and the clock in Geist SemiBold (Zen Maru's digits are wide and loose there). Rows 24 tall for them.
+        new ThemeFonts(F(Face.Round, 14), F(Face.SansSemibold, 13, cells: 7.4f), F(Face.SansSemibold, 11, cells: 6.3f), F(Face.SansSemibold, 14, cells: 8f), F(Face.Round, 12)),
         new ThemeWindow(Rgb.Hex(0xfff7f2), null, null, 0.9f, 16, 6, Rgb.Hex(0xffffff), 3, Rgb.Hex(0xf3b9cf), null, 0,
-            Array.Empty<Ring>(), new Vector2(0, 4), Rgb.Hex(0xf2a9c6, 0.55f), 30, 2, 6, 256, 32),
-        new ThemeRow(22, 3, 11, Rgb.Hex(0xffffff), 1, Rgb.Hex(0x4b2a45), Rgb.Hex(0x8f7189), Rgb.Hex(0xb49aae), Rgb.Hex(0x4b2a45), Rgb.Hex(0xf6e1ea)),
+            Array.Empty<Ring>(), new Vector2(0, 4), Rgb.Hex(0xf2a9c6, 0.55f), 30, 2, 6, 268, 32),
+        new ThemeRow(24, 3, 12, Rgb.Hex(0xffffff), 1, Rgb.Hex(0x4b2a45), Rgb.Hex(0x8f7189), Rgb.Hex(0xb49aae), Rgb.Hex(0x4b2a45), Rgb.Hex(0xf6e1ea)),
         new ThemeBar(BarStyle.Pill, 0.62f, 0),
         new ThemeRoles(Rgb.Hex(0xa99cff), Rgb.Hex(0x7fe9cf), Rgb.Hex(0xffad6b)),
         Rgb.Hex(0xff4f9a), YouStyle.Heart, Rgb.Hex(0xd63a72), DeathStyle.Broken,

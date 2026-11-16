@@ -138,6 +138,19 @@ internal sealed class PlateMeter
     private readonly List<Item> items = new();
     private readonly List<Item> itemPool = new();
     private string itemsFoot = string.Empty;
+
+    /// <summary>Counts the rows' words made (<see cref="Update"/>): the widest number is measured again for new ones.</summary>
+    private int linesVersion;
+
+    // The number columns as drawn (screen px; PlateColumns): measured in the faces actually drawn, again
+    // for another theme, scale, Whole or font build (kept only once the faces are built: before, a stand-in is measured).
+    private (MeterThemeId Id, bool Whole, float Scale, int Fonts) columnsOf = (MeterThemeId.ReadyCheck, false, -1, -1);
+    private int columnsVersion;
+    private float valueCol;
+    private float shareCol;
+
+    /// <summary>The widest number among the rows' (a whole number past the samples: Taken's millions), for their words and the columns measured.</summary>
+    private (int Lines, int Columns, float Width) widest = (-1, -1, 0);
     private IReadOnlyList<MeterEvent>? eventsOf;
     private int eventsCount = -1;
 
@@ -273,6 +286,7 @@ internal sealed class PlateMeter
         };
         partyText = MeterNumber.Text(pv, whole);
         partyUnit = unit;
+        linesVersion++;
         youRank = string.Empty;
         youValue = string.Empty;
         foreach (var l in lines)
@@ -355,6 +369,41 @@ internal sealed class PlateMeter
 
     /// <summary>The row of a member, or null.</summary>
     public Line? LineOf(int partyId) => byId.TryGetValue(partyId, out var l) ? l : null;
+
+    // ---------------------------------------------------------------------------------------------
+    // The number columns.
+
+    /// <summary>The number and share columns' widths (screen px) for the theme, the scale and Whole, measured once a font build.</summary>
+    private void Columns()
+    {
+        var t = T;
+        var key = (t.Id, Whole, S(1), Txt.Fonts.Generation);
+        if (key == columnsOf) return;
+        valueCol = PlateColumns.Value(t, Whole, S(1), PlateArt.Width);
+        shareCol = PlateColumns.Share(t, S(1), PlateArt.Width);
+        columnsVersion++;
+        if (Txt.Ready(t.Font.Num.Face, t.Font.Num.Px) && Txt.Ready(t.Font.Small.Face, t.Font.Small.Px)) columnsOf = key;
+    }
+
+    /// <summary>The number column (screen px): the measured samples', or the widest of the rows' own numbers when one is wider.</summary>
+    private float ValueColumn()
+    {
+        Columns();
+        if (widest.Lines != linesVersion || widest.Columns != columnsVersion)
+        {
+            var w = 0f;
+            foreach (var l in lines) w = MathF.Max(w, PlateArt.Width(l.Value, T.Font.Num));
+            widest = (linesVersion, columnsVersion, w);
+        }
+        return MathF.Max(valueCol, widest.Width);
+    }
+
+    /// <summary>The share column (screen px), as measured.</summary>
+    private float ShareColumn()
+    {
+        Columns();
+        return shareCol;
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Sizes.
@@ -684,7 +733,7 @@ internal sealed class PlateMeter
                 PlateArt.Glyph(dl, PlateGlyph.Diamond, new Vector2(x - S(1), cy - d / 2 - S(1)), d + S(2), Rgb.Hex(0x000000));
                 PlateArt.Glyph(dl, PlateGlyph.Diamond, new Vector2(x, cy - d / 2), d, Rgb.Hex(0xd6b878));
                 x += d + gapL;
-                x += PlateArt.Line(dl, new Vector2(x, top), title, t.Font.Head, Rgb.Hex(0xefe3c4), hCss, Rgb.Rgba(0, 0, 0, 0.8f)) + gapL;
+                x += PlateArt.Line(dl, new Vector2(x, top), PlateArt.Fit(title, t.Font.Head, room - x), t.Font.Head, Rgb.Hex(0xefe3c4), hCss, Rgb.Rgba(0, 0, 0, 0.8f)) + gapL;
                 break;
             }
             case MeterThemeId.Readout:
@@ -716,12 +765,17 @@ internal sealed class PlateMeter
         {
             var word = o == Core.Outcome.Clear ? "Clear" : "Wipe";
             var c = o == Core.Outcome.Clear ? (t.Light ? t.Good : t.Row.Text) : t.Bad;
-            if (t.Id == MeterThemeId.Readout) x += PlateArt.Line(dl, new Vector2(x, top), o == Core.Outcome.Clear ? "[CLEAR]" : "[WIPE]", t.Font.Small, c, hCss) + gapL;
+            var tag = o == Core.Outcome.Clear ? "[CLEAR]" : "[WIPE]";
+            if (t.Id == MeterThemeId.Readout)
+            {
+                if (x + PlateArt.Width(tag, t.Font.Small) <= room) x += PlateArt.Line(dl, new Vector2(x, top), tag, t.Font.Small, c, hCss) + gapL;
+            }
             else x += Chip(dl, new Vector2(x, cy), word, c, room - x) + gapL;
         }
-        // The clock after the title (Native, Grimoire).
-        if (t.Id is MeterThemeId.Native or MeterThemeId.Grimoire && x < room)
-            x += PlateArt.Line(dl, new Vector2(x, top), waiting ? "0:00" : clock, t.Font.Num, t.Clock, hCss) + gapL;
+        // The clock after the title (Native, Grimoire), when it fits whole before the buttons.
+        var after = waiting ? "0:00" : clock;
+        if (t.Id is MeterThemeId.Native or MeterThemeId.Grimoire && x + PlateArt.Width(after, t.Font.Num) <= room)
+            x += PlateArt.Line(dl, new Vector2(x, top), after, t.Font.Num, t.Clock, hCss) + gapL;
         // Where in the fight, or waiting.
         if (waiting)
         {
@@ -833,8 +887,13 @@ internal sealed class PlateMeter
             if (since is >= 0 and < 2) dl.AddRectFilled(min, max, Palette.U32(Rgb.A(t.Death, 0.28f * (1 - since / 2))), rad);
         }
         if (hovered) dl.AddRectFilled(min, max, Palette.U32(t.HoverWash), rad);
-        // The bar.
-        if (t.Bar.Style != BarStyle.Segments && !inv) Bar(dl, min, iw, rh, bar, r.Role, dead);
+        // The right's parts: Mochi keeps the heart's place on every row (so the shares line up), the share column, the number's.
+        var gap = S(t.Id == MeterThemeId.Readout ? 5 : 6);
+        var padR = S(t.Id == MeterThemeId.Mochi ? 7 : 5);
+        var heartSlot = youStyle == YouStyle.Heart ? S(10) + S(2) : 0;
+        var shareW = ShareColumn();
+        // The bar, on its track: from the row's left to just before the share, so a full bar never runs under it.
+        if (t.Bar.Style != BarStyle.Segments && !inv) Bar(dl, min, PlateColumns.Track(iw, padR, heartSlot, shareW, S(1)), rh, bar, r.Role, dead);
         if (t.Row.Rule is { } rule) Kit.Rule(dl, min.X, max.X, max.Y, rule);
         // You.
         if (you)
@@ -858,14 +917,13 @@ internal sealed class PlateMeter
                     dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Vector4.One), rad, ImDrawFlags.None, 1f);
                     break;
                 case YouStyle.Ribbon:
-                    PlateArt.Glyph(dl, PlateGlyph.Ribbon, new Vector2(min.X + S(3) - S(4), min.Y - S(3)), new Vector2(S(16), rh + S(7)), t.You);
+                    // The bookmark, 6 wide (its strip is the middle half of its box), from 2 in: the job icon starts clear of it.
+                    PlateArt.Glyph(dl, PlateGlyph.Ribbon, new Vector2(min.X + S(RibbonLeft) - S(RibbonWidth) / 2, min.Y - S(3)), new Vector2(S(RibbonWidth * 2), rh + S(7)), t.You);
                     break;
             }
         }
         // The words: the rank (Readout), the icon, the name; from the right the share, the number, the cells, the death's mark.
-        var gap = S(t.Id == MeterThemeId.Readout ? 5 : 6);
-        var padIn = S(t.Id == MeterThemeId.Mochi ? 3 : you && youStyle == YouStyle.Notch ? 5 : t.Id == MeterThemeId.Grimoire && you && youStyle == YouStyle.Ribbon ? 14 : 3);
-        var padR = S(t.Id == MeterThemeId.Mochi ? 7 : 5);
+        var padIn = S(t.Id == MeterThemeId.Mochi ? 3 : you && youStyle == YouStyle.Notch ? 5 : you && youStyle == YouStyle.Ribbon ? RibbonLeft + RibbonWidth + 6 : 3);
         var lineCss = rh / S(1);
         var ink = Rgb.Hex(0x031005);
         var x = min.X + padIn;
@@ -884,15 +942,14 @@ internal sealed class PlateMeter
             x += S(isz) + gap;
         }
         var rx = max.X - padR;
-        if (you && youStyle == YouStyle.Heart)
+        if (heartSlot > 0)
         {
-            PlateArt.Glyph(dl, PlateGlyph.Heart, new Vector2(rx - S(10), y + (rh - S(10)) / 2), S(10), t.You);
-            rx -= S(10) + S(2);
+            if (you) PlateArt.Glyph(dl, PlateGlyph.Heart, new Vector2(rx - S(10), y + (rh - S(10)) / 2), S(10), t.You);
+            rx -= heartSlot;
         }
-        var shareW = S(t.ShareCol);
         if (!waiting) PlateArt.LineRight(dl, rx, y, l.Share, t.Font.Small, inv ? ink : t.Row.Muted, lineCss);
         rx -= shareW + gap;
-        var valW = S(t.ValueWidth(Whole));
+        var valW = ValueColumn();
         PlateArt.LineRight(dl, rx, y, waiting ? "–" : l.Value, t.Font.Num, inv ? ink : dead ? t.Row.Muted : t.Row.Num, lineCss);
         rx -= valW + gap;
         var deathStyle = t.DeathDrawn(Decorations);
@@ -939,8 +996,9 @@ internal sealed class PlateMeter
         float nw;
         if (dead && deathStyle == DeathStyle.Glitch)
         {
-            PlateArt.Line(dl, new Vector2(x - 1, y), name, nameFont, Rgb.A(t.Death, 0.8f), lineCss);
-            PlateArt.Line(dl, new Vector2(x + 1, y), name, nameFont, Rgb.Rgba(61, 236, 255, 0.7f), lineCss);
+            // The two offset copies faint, so the name itself still reads.
+            PlateArt.Line(dl, new Vector2(x - 1, y), name, nameFont, Rgb.A(t.Death, GlitchAlpha), lineCss);
+            PlateArt.Line(dl, new Vector2(x + 1, y), name, nameFont, Rgb.Rgba(61, 236, 255, GlitchAlpha), lineCss);
             nw = PlateArt.Line(dl, new Vector2(x, y), name, nameFont, nameColor, lineCss);
         }
         else nw = PlateArt.Line(dl, new Vector2(x, y), name, nameFont, nameColor, lineCss);
@@ -951,6 +1009,14 @@ internal sealed class PlateMeter
         }
         if (pinned) PlateArt.Line(dl, new Vector2(x + nw + S(5), y), l.PinnedRank, t.Font.Small, inv ? ink : t.Row.Muted, lineCss);
     }
+
+    /// <summary>Grimoire's ribbon on your row: its strip's left edge and width (CSS px); the job icon starts 6 past it.</summary>
+    private const float RibbonLeft = 2;
+
+    private const float RibbonWidth = 6;
+
+    /// <summary>Neon's glitch: how strong the dead name's two offset copies are.</summary>
+    private const float GlitchAlpha = 0.35f;
 
     private readonly Dictionary<int, string> deadTags = new();
 
@@ -965,7 +1031,7 @@ internal sealed class PlateMeter
     /// <summary>A steady clock in seconds (the flash of a fresh death).</summary>
     public Func<double> Now { get; set; } = () => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
 
-    /// <summary>A row's bar in the theme's style, from the row's left to its share of the top's.</summary>
+    /// <summary>A row's bar in the theme's style, from the row's left to its share of the top's along its track (<see cref="PlateColumns.Track"/>, ending before the share).</summary>
     private void Bar(ImDrawListPtr dl, Vector2 min, float iw, float rh, float f, string role, bool dead)
     {
         var t = T;
@@ -1054,12 +1120,13 @@ internal sealed class PlateMeter
         var gs = S(12);
         PlateArt.Glyph(dl, t.Id == MeterThemeId.Mochi ? PlateGlyph.Star : PlateGlyph.LimitBreak, new Vector2(x + (S(16) - gs) / 2, y + (lh - gs) / 2), gs, t.Lb);
         x += S(16) + S(6);
-        var rx = x0 + iw - S(5);
+        // Its columns line up with the rows' (Mochi's heart's place kept as theirs).
+        var rx = x0 + iw - S(t.Id == MeterThemeId.Mochi ? 7 : 5) - (t.YouDrawn(Decorations) == YouStyle.Heart ? S(10) + S(2) : 0);
         PlateArt.LineRight(dl, rx, y, l.Share, t.Font.Small, t.Row.Muted, lineCss);
-        rx -= S(t.ShareCol) + S(6);
+        rx -= ShareColumn() + S(6);
         var num = t.Font.Num with { Px = t.Font.Num.Px - 1 };
         PlateArt.LineRight(dl, rx, y, l.Value, num, t.Row.Text, lineCss);
-        rx -= S(t.ValueWidth(Whole)) + S(6);
+        rx -= MathF.Max(ValueColumn(), PlateArt.Width(l.Value, num)) + S(6);
         var label = t.Id == MeterThemeId.Readout ? "LB" : "Limit break";
         PlateArt.Line(dl, new Vector2(x, y), PlateArt.Fit(label, t.Font.Label, rx - x), t.Font.Label, t.Row.Muted, lineCss);
     }
@@ -1071,18 +1138,33 @@ internal sealed class PlateMeter
         var f = t.Font.Small;
         var x = x0 + S(3);
         var rx = x0 + iw - S(3);
-        if (value.Length > 0)
+        // The right first (the Preview tag is pressed; pace changes), then the left in the room it leaves.
+        if (rightSide) rx -= FootRight(dl, rx, y, ref input) is var rw and > 0 ? rw + S(8) : 0;
+        if (value.Length == 0) return;
+        var room = rx - x;
+        if (tabOf is MeterTab.Deaths or MeterTab.Events)
         {
-            if (tabOf is MeterTab.Deaths or MeterTab.Events)
-                PlateArt.Line(dl, new Vector2(x, y), PlateArt.Fit(value, f, iw * 0.62f), f, t.Row.Muted, 18);
-            else
-            {
-                x += PlateArt.Line(dl, new Vector2(x, y), t.Id == MeterThemeId.Readout ? "party " : "Party ", f, t.Row.Muted, 18);
-                x += PlateArt.Line(dl, new Vector2(x, y), value, f, t.Row.Text, 18);
-                if (unit != null) PlateArt.Line(dl, new Vector2(x, y), unit == "HPS" ? " HPS" : unit, f, t.Row.Muted, 18);
-            }
+            PlateArt.Line(dl, new Vector2(x, y), PlateArt.Fit(value, f, MathF.Min(iw * 0.62f, room)), f, t.Row.Muted, 18);
+            return;
         }
-        if (!rightSide) return;
+        var label = t.Id == MeterThemeId.Readout ? "party " : "Party ";
+        var unitText = unit == null ? null : unit == "HPS" ? " HPS" : unit;
+        var vw = PlateArt.Width(value, f);
+        var lw = PlateArt.Width(label, f);
+        var uw = unitText != null ? PlateArt.Width(unitText, f) : 0;
+        // What doesn't fit goes: the unit, then the word; the number stays.
+        if (lw + vw + uw > room) unitText = null;
+        if (lw + vw > room) lw = 0;
+        if (lw > 0) x += PlateArt.Line(dl, new Vector2(x, y), label, f, t.Row.Muted, 18);
+        x += PlateArt.Line(dl, new Vector2(x, y), value, f, t.Row.Text, 18);
+        if (unitText != null) PlateArt.Line(dl, new Vector2(x, y), unitText, f, t.Row.Muted, 18);
+    }
+
+    /// <summary>The foot's right, from <paramref name="rx"/>: the Preview tag, a note, what it's kept as, or pace; returns its width (0: nothing).</summary>
+    private float FootRight(ImDrawListPtr dl, float rx, float y, ref PlateInput input)
+    {
+        var t = T;
+        var f = t.Font.Small;
         if (PreviewOn)
         {
             const string word = "Preview";
@@ -1096,24 +1178,18 @@ internal sealed class PlateMeter
             }
             dl.AddRect(a + new Vector2(0.5f), a + new Vector2(w, S(16)) - new Vector2(0.5f), Palette.U32(t.ChipLine), S(t.ChipRadius), ImDrawFlags.None, 1f);
             PlateArt.Line(dl, new Vector2(a.X + S(5), a.Y), word, f, t.Accent, 16);
-            return;
+            return w;
         }
-        if (FootNote != null)
-        {
-            PlateArt.LineRight(dl, rx, y, FootNote, f, t.Row.Muted, 18);
-            return;
-        }
-        if (!live && tabOf is not (MeterTab.Deaths or MeterTab.Events))
-        {
-            PlateArt.LineRight(dl, rx, y, keptAs, f, t.Row.Muted, 18);
-            return;
-        }
+        if (FootNote != null) return PlateArt.LineRight(dl, rx, y, FootNote, f, t.Row.Muted, 18);
+        if (!live && tabOf is not (MeterTab.Deaths or MeterTab.Events)) return PlateArt.LineRight(dl, rx, y, keptAs, f, t.Row.Muted, 18);
         if (Pace != null && tabOf == MeterTab.Damage)
         {
             var pw = PlateArt.LineRight(dl, rx, y, Pace, f, PaceAhead ? t.Good : t.Bad, 18);
             var lw = PlateArt.LineRight(dl, rx - pw, y, "pace ", f, t.Row.Muted, 18);
             if (Interactive && PaceTip != null && Kit.Pointed(new Vector2(rx - pw - lw, y), new Vector2(rx, y + S(18)))) Kit.Tooltip(PaceTip);
+            return pw + lw;
         }
+        return 0;
     }
 
     /// <summary>A death (Deaths) or an event (Events) on its plate: the time, the mark, the job icon, the words.</summary>
@@ -1271,7 +1347,8 @@ internal sealed class PlateMeter
                 rx -= pw + gap;
             }
         }
-        if (deathCount > 0 && rx - S(30) > x)
+        var deathsW = deathCount > 0 ? PlateArt.Width(deaths, t.Font.Small) + (t.Id == MeterThemeId.Readout ? PlateArt.Width("x", t.Font.Small) : S(3) + S(11)) : 0;
+        if (deathCount > 0 && rx - deathsW - gap > x)
         {
             if (t.Id == MeterThemeId.Readout) rx -= PlateArt.LineRight(dl, rx, min.Y, "x" + deaths, t.Font.Small, t.Death, hCss) + gap;
             else

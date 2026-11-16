@@ -1245,12 +1245,18 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     lower: the window is never shorter than its eight), the last row is you, pinned under a dashed rule, with
     your real rank after your name ("#9"); no alliance view (`PlateRows.Select`). Each row (20 tall, 1
     apart, 4px corners) sits on a near-solid plate (#18181d at 92%, whatever the Background), so its
-    words never touch the game; the bar fills the plate from its left to its share of the top player's,
-    in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
+    words never touch the game; the bar fills its track from the plate's left to its share of the top
+    player's (the track ends 3px before the share column, so a full bar never runs under the share:
+    `PlateColumns.Track`; Mochi keeps its heart's place on every row, so the shares line up; Readout's
+    cells are their own), in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
     `ITextureProvider.GetFromGameIcon(62100 + the ClassJob row)`, `JobIcons`; the role's mark in a
     socket while it loads or for a job it doesn't know), the name (Geist 500 12, cut to fit; yours a
-    weight heavier; _Jobs only_ the job), then in fixed right-aligned columns the number (mono 600 12 in
-    38px) and the share (mono 10 in 32). You: an ember notch at the left and an ember outline at 75%. A
+    weight heavier; _Jobs only_ the job), then in right-aligned columns the number (mono 600 12 in
+    38px) and the share (mono 10 in 32). A column is at least its theme's width and at least as wide as
+    its widest sample measured in the face actually drawn ("88.8k", "8.88M", whole "888,888"; the share
+    "88.8", "100.0", "100%"), and the number's at least the widest number the rows have (`PlateColumns`,
+    tested; measured once a theme, scale, Whole and font build: `Fonts.Generation` counts the atlas's
+    builds), so a face wider in the game than in the mock-ups never runs one number into the next. You: an ember notch at the left and an ember outline at 75%. A
     death: the bar loses its colour, the icon goes grey, the name muted, a red skull and how long they've
     been down ("0:20", to the fight's clock) before the number; for two seconds as it happens the plate
     flashes red at 28%, fading. Pointed at, the row lightens and the details panel opens (below);
@@ -1279,7 +1285,7 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     back). As wide as its theme (248, below), as tall as its rows need (`PlateSizes.Needed`: Ready
     Check's eight and the limit break 238, against the old compact's 272 and the normal meter's 364; a
     light party with no limit break yet 133), the title bar's height on top when it shows. A height
-    the old compact was given (`MeterCompactHeight`, 0.4.0 to 0.6.0) or a width 0.7.0's test builds
+    the old compact was given (`MeterCompactHeight`, 0.4.0 to 0.6.0) or a width 0.7.0
     let you give it (`MeterCompactWidth`) is still read from the settings but ignored, and cleared once
     (`Configuration.Migrate`). Grows down or up as the normal meter (up, the head at the foot and
     everything else the other way up from it); its anchor is shared, and it's moved by its title bar.
@@ -1310,13 +1316,13 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     | Theme | Width | The idea | Bar | You | A death | Faces |
     | --- | --- | --- | --- | --- | --- | --- |
     | Ready Check | 248 | basalt, white hairlines, ember for you | fill (role at 30%, 2px foot) | ember notch and outline | skull and time down | Geist, Geist Mono |
-    | Mochi | 256 | a cream sticker (white edge, pink line, a pink shadow), a pink pill clock with a heart, sparkles | pastel pill | pink outline and a heart | broken heart | Zen Maru Gothic 700/900 |
-    | Native | 262 | slate gradient, a black edge with a gilt rule, a title band ("◆ Damage 3:11 Phase 2"), every word outlined | HP-bar shading | gold outline | red cross | the game's Axis, MiedingerMid, Jupiter |
+    | Mochi | 268 | a cream sticker (white edge, pink line, a pink shadow), a pink pill clock with a heart, sparkles | pastel pill | pink outline and a heart | broken heart | Zen Maru Gothic 700/900 (names 14, labels 12), the numbers and clock Geist 600 (13, 11, 14) |
+    | Native | 262 | slate gradient, a black edge with a gilt rule, a title band ("◆ Damage 3:11 Phase 2"), every word outlined | HP-bar shading | gold outline | red cross | the game's Axis (names, numbers, labels), Jupiter (the title) |
     | Readout | 248 | a terminal: "> 3:11▌", rank "01" and a role letter on each row, scanlines | 16 lit cells | reverse video | "DEAD 2:51", the name struck | Geist Mono |
-    | Neon | 256 | indigo gradient, a magenta edge with alpha-ring glow, a horizon grid in the head | brightening to a hot cap | white outline with rings | glitch (red and cyan a pixel apart) | Geist, Geist Mono, Archivo Expanded capitals |
-    | Grimoire | 268 | parchment, a brown frame, a gilt rule and corner pips, a red rubric capital ("Damage"), ink rules | ink underline over a wash | a red ribbon bookmark | dagger (†), the name struck | Fraunces 500/600 |
+    | Neon | 256 | indigo gradient, a magenta edge with alpha-ring glow, a horizon grid in the head | brightening to a hot cap | white outline with rings | glitch (faint red and cyan copies a pixel apart, at 35%) | Geist, Geist Mono, Archivo Expanded capitals |
+    | Grimoire | 268 | parchment, a brown frame, a gilt rule and corner pips, a red rubric capital ("Damage"), ink rules | ink underline over a wash | a red ribbon bookmark (6 wide, 2 in; the icon 6 past it) | dagger (†), the name struck | Fraunces 500/600 |
 
-    Rows are 20 tall (Readout 17, Grimoire 21, Mochi and Native 22); the head 24 (Readout 20, Neon 28,
+    Rows are 20 tall (Readout 17, Grimoire 21, Native 22, Mochi 24); the head 24 (Readout 20, Neon 28,
     Mochi 30, Native 26, Grimoire 32). **The floor**: Mochi 90%, Readout 82%, Grimoire 92% (their rows have
     no plate of their own, or a light one): the Background slider can't take them lower, so their words
     stay readable over a bright arena (every theme's names are at least 4.5:1 over its rows at the
@@ -1334,11 +1340,15 @@ _Compact_); off, it's the normal meter described first here, unchanged but for t
     fontsource's files, OFL (`Resources/Fonts/OFL-ZenMaruGothic.txt`, `OFL-Fraunces.txt`, beside the
     plugin); Chinese, Korean and Japanese words in them fall back to Geist (`Txt.For`), as the rest of
     the windows draw them. Native draws in the game's own fonts through Dalamud (`NewGameFontHandle`:
-    Axis for names and labels, MiedingerMid for numbers, Jupiter for the title), nothing shipped, and they
-    have Japanese.
+    Axis for names, numbers and labels, Jupiter for the title; MiedingerMid, the party list's numbers,
+    drew no decimal point and a 0 like a C at the meter's sizes), nothing shipped, and they have Japanese.
+    Mochi's words are a step up from the mock-ups (Zen Maru Gothic's small x-height read small in the
+    game) and its numbers and clock are Geist SemiBold (Zen Maru's digits were wide and loose).
   - **Drawn** with what ImGui draws (`Kit/PlateArt.cs`): words outlined (eight offsets in black, then the
     words), digits in cells (centred; the cell the theme's or the widest digit, measured once a font
-    build), spaced capitals, filled glyphs from the mock-ups' 16-unit paths cut into triangles once (the
+    build), words whose first glyph reaches left of its pen or last right of its advance (the game's
+    Jupiter) moved in and measured with it, the head's and foot's words drawn only as they fit whole
+    before the buttons (the foot's right side first, the party's line in what's left), spaced capitals, filled glyphs from the mock-ups' 16-unit paths cut into triangles once (the
     roles' marks, hearts, a star, the ribbon, a diamond, the limit break's bars), a rounded rectangle with
     a vertical gradient (its outline's vertices shaded), two-colour gradients on square ends, glows as
     rings of alpha (never a blur). Nothing is allocated in a frame once warm (the words are made once a
@@ -1706,10 +1716,13 @@ entry).
   world, the cross-world party's `HomeWorld`, and the World sheet's names.
 - Head marker numbers are kept as the game sends them; the site names them from BossMod's data
   where it can (stack, spread, tankbuster…).
-- The 0.7.0 compact meter and its themes want checking in the game (the sample fight shows most of it:
+- The compact meter and its themes (0.7.0, with 0.7.1's fixes) want checking in the game (the sample fight shows most of it:
   `/raidcodex meter preview`, then each theme in Settings): the job icons (62100 + the ClassJob row, framed, at
   16px; grey when dead) and their fallback; Zen Maru Gothic and Fraunces built in the atlas and their digits in
-  cells; the game's Axis, MiedingerMid and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
+  cells; no word or number touching another in any theme (Mochi's bigger words, "9.3 ♥" and "💔 0:30"; Native's
+  "◆ DAMAGE 2:32 PHASE 2" and its Axis numbers with their points, "7.66k" in the limit break's row); every bar's
+  end, Neon's cap and Grimoire's underline stopping short of the share; Neon's dead name reading through its
+  glitch; Grimoire's ribbon clear of your job icon; the game's Axis and Jupiter at Geist's line for their size (`GameFontStyle(family, px ×
   1.3)`: too big or small?); the outlined words' weight; the ground, edge, rings and sparkles drawn outside the
   window (Mochi's sticker shadow and stars, Neon's glow) and the window's own corners matching its theme with the
   title bar showing; the details panel as a tooltip beside the meter, on the left when there's no room on the
@@ -1726,7 +1739,22 @@ entry).
 
 ## Release notes
 
-### 0.7.0 (not released yet)
+### 0.7.1 (not released yet)
+
+- **The compact meter sizes itself.** It can't be resized by hand any more (it only snapped back): its width is its
+  theme's, its height its rows'; a size given it before is let go.
+- **The lock is easy to press again.** Dalamud lets a window be resized from every edge and corner, and the press
+  went to the resize when a button sat in that reach (the meter's lock growing up, in the bottom-right corner). The
+  meter's, the plan window's and the overlays' buttons are now kept out of it (worked out from the font and the
+  window's corners, not guessed), and the window isn't resizable while the mouse is over one of them; it still sizes
+  from everywhere else.
+- **Every theme reads in the game.** The number and share columns are measured in the face the game draws (at
+  least the mock-ups' widths), so a wider face never runs numbers together; the bars end before the share column;
+  the head's and foot's words are drawn only as they fit. Mochi's words are a step bigger (its rows 24 tall, the
+  meter 268 wide) and its numbers Geist SemiBold; Native's numbers are the game's Axis (MiedingerMid lost its
+  decimal points); Neon's dead name glitches more faintly; Grimoire's ribbon is narrower and clear of your icon.
+
+### 0.7.0
 
 - **A new compact meter, and it's the default.** Round four's "Plate": one 24px head (the clock, the phase, the limit
   break's pips, a menu with the tabs, the pulls and pace, the lock), the top eight on near-solid plates that read over
@@ -1737,13 +1765,7 @@ entry).
   Pointed at, a row opens a details panel beside the meter (the figures, the top abilities, deaths, GCDs, potions);
   pressed, the opened-up window as before. _One line_ (its menu) folds it to the clock, the phase, you and your rank,
   the deaths and the pips. It replaces the old compact; your settings move to it once (the normal meter is a switch
-  away, unchanged). It sizes itself, so it can't be resized by hand (it only snapped back): its width is its
-  theme's, its height its rows'; a height given the old compact is let go.
-- **The lock is easy to press again.** Dalamud lets a window be resized from every edge and corner, and the press
-  went to the resize when a button sat in that reach (the meter's lock growing up, in the bottom-right corner). The
-  meter's, the plan window's and the overlays' buttons are now kept out of it (worked out from the font and the
-  window's corners, not guessed), and the window isn't resizable while the mouse is over one of them; it still sizes
-  from everywhere else.
+  away, unchanged).
 - **Six themes** (Settings → Meter → _Theme_, with a live preview): Ready Check (the plugin's look, the default),
   Mochi (cute: a cream sticker, pastel pills, hearts and sparkles), Native (the game's own windows and fonts), Readout
   (a terminal), Neon (synthwave) and Grimoire (a parchment tome). _Decorations_ (on) turns their sparkles, scanlines,
@@ -1756,7 +1778,7 @@ entry).
 - Two fonts travel with the plugin for the themes (Zen Maru Gothic and Fraunces, OFL, latin; about 210 KB), loaded
   only while their theme is picked; Native uses the game's.
 
-### 0.6.0 (not released yet)
+### 0.6.0
 
 - **Every pull goes to your logs.** _Upload my logs_ (Settings → Recording; on, once linked) uploads each pull whole to
   your logs on the Raid Codex as soon as it's kept: gzipped, in the background, one at a time, the oldest first. Pulls
@@ -1770,7 +1792,7 @@ entry).
   pull began (for the logs: who, which patch, and two players' recordings of one pull told apart). Still format version 1.
 - The progress summary (_Track my progress_) goes as before. "The site keeps your newest 30 sends" is gone: it keeps them all.
 
-### 0.5.1 (not released yet)
+### 0.5.1
 
 - **Renamed Raid Codex** (was Raid Planner), as the site's tool is: its name in the plugin installer,
   every window, button, tooltip and chat line. `/raidcodex` is the command; `/raidplan` still works.
