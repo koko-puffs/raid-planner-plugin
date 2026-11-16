@@ -504,8 +504,9 @@ With _Upload my logs_ on (the default) and linked, every kept pull goes whole to
 with, so the site joins them), `name` the pull's (≤ 120), `summary` the summary made as the pull was kept
 (kept in memory for the newest 40; null for one kept before the plugin loaded: the server makes its own
 anyway), `recording` the file as written (copied in unparsed, as a send's). Whole: thinned as a send is
-(`SiteLink.Fit`, the same order) only past 20 MB less 64 KB (`LogUpload.MaxRecording`; the site takes 20 MB
-ungzipped, 10 MB gzipped), which no ordinary pull comes near. The file is read, gzipped and sent on a worker;
+(`SiteLink.Fit`, the same order) only past 8 MB less 64 KB (`LogUpload.MaxRecording`; the site takes 8 MB
+ungzipped, 10 MB gzipped: its Worker has 128 MB, and a recording read there takes several times its size),
+which no ordinary pull comes near (a ten-minute savage pull is under 1 MB). The file is read, gzipped and sent on a worker;
 it waits half a minute and a quarter more for each MB, and stops when the plugin unloads.
 
 What's waiting is worked out each time from the kept pulls, never kept apart (`UploadQueue`): those not sent
@@ -524,6 +525,9 @@ checked four times a second on the framework thread. The answers (contract §1):
 | 503 `busy` | waits its `Retry-After`, and longer each time |
 | other, no connection, no answer | 30 seconds doubling to 15 minutes (`Backoff`) |
 
+A pull that fails three times in a row (no answer, or the site busy or erring: not the hourly limit or saving
+off) is set aside half an hour, doubling to six hours each time it fails again, and the next pull goes first
+(`UploadQueue.Aside`), so one pull the site can't take never holds up the rest; a success or Resume forgets it.
 A clock set back by more than a wait counts as waited. An answer for a call made before the token changed is
 ignored. _Upload since_ (`Configuration.UploadSince`) is set when 0.6.0 first loads (a 0.5 configuration,
 version 1, is moved to version 2: Upload my logs on, from then on; `UploadPrefs.Migrate`) and each time _Upload

@@ -91,7 +91,7 @@ public static class SiteLink
 
     /// <summary>
     /// <see cref="Fit(string)"/> to another limit, measured another way (since 0.6.0: an upload's, <see cref="LogUpload.Fit"/>, by its
-    /// UTF-8 bytes up to 20 MB).
+    /// UTF-8 bytes up to 8 MB).
     /// </summary>
     public static (string Json, bool Thinned)? Fit(string json, int max, Func<string, int> size)
     {

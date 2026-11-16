@@ -375,6 +375,58 @@ public class UploadQueueTests
     }
 
     [Fact]
+    public void A_pull_the_site_keeps_failing_on_is_set_aside_so_the_next_goes()
+    {
+        var q = new UploadQueue();
+        var t = Now;
+        RecordingInfo p = null!;
+        for (var i = 0; i < UploadQueue.TriesBeforeAside; i++)
+        {
+            p = q.Next(Pulls, t, _ => true)!;
+            Assert.Equal("old" + Words.Extension, p.File);
+            // The Worker running out of memory: Cloudflare's error page, no hint.
+            q.Done(p.File, LogUpload.Read(503, "<html>error code: 1102</html>", null), t);
+            t = q.NotBefore > t ? q.NotBefore : t;
+        }
+        Assert.True(q.Aside(p.File, t));
+        // The next one goes, without the first's wait.
+        Assert.Equal("mid" + Words.Extension, q.Next(Pulls, t, _ => true)!.File);
+        q.Done("mid" + Words.Extension, new UploadAnswer(UploadOutcome.Sent, Uuid), t);
+        var rest = Pulls.Select(x => x.File == "mid" + Words.Extension ? x with { SentId = Uuid } : x).ToArray();
+        Assert.Equal("new" + Words.Extension, q.Next(rest, t, _ => true)!.File);
+        q.Done("new" + Words.Extension, new UploadAnswer(UploadOutcome.Sent, Uuid), t);
+        rest = rest.Select(x => x.File == "new" + Words.Extension ? x with { SentId = Uuid } : x).ToArray();
+        Assert.Null(q.Next(rest, t, _ => true));
+        // Half an hour on, it's tried again; a success forgets its failures.
+        var back = q.Next(rest, t + UploadQueue.FirstAside, _ => true)!;
+        Assert.Equal("old" + Words.Extension, back.File);
+        q.Done(back.File, new UploadAnswer(UploadOutcome.Sent, Uuid), t + UploadQueue.FirstAside);
+        Assert.False(q.Aside(back.File, t + UploadQueue.FirstAside));
+    }
+
+    [Fact]
+    public void The_hourly_limit_never_sets_a_pull_aside()
+    {
+        var q = new UploadQueue();
+        var t = Now;
+        for (var i = 0; i < UploadQueue.TriesBeforeAside + 1; i++)
+        {
+            var p = q.Next(Pulls, t, _ => true)!;
+            Assert.Equal("old" + Words.Extension, p.File);
+            q.Done(p.File, new UploadAnswer(UploadOutcome.Wait, Wait: TimeSpan.FromMinutes(5), Hint: "rate"), t);
+            t += TimeSpan.FromMinutes(5);
+        }
+        Assert.False(q.Aside("old" + Words.Extension, t));
+    }
+
+    [Fact]
+    public void An_upload_is_at_most_what_the_site_can_read()
+    {
+        Assert.Equal(8_000_000, LogUpload.MaxRaw);
+        Assert.True(LogUpload.MaxRecording < LogUpload.MaxRaw);
+    }
+
+    [Fact]
     public void An_answer_not_for_the_one_on_its_way_is_ignored()
     {
         var q = new UploadQueue();

@@ -58,8 +58,11 @@ public static class LogUpload
     /// <summary>The body's format.</summary>
     public const int BodyVersion = 1;
 
-    /// <summary>The most the site takes once ungzipped (its 20 MB, counted in millions to be safe).</summary>
-    public const int MaxRaw = 20_000_000;
+    /// <summary>
+    /// The most the site takes once ungzipped (its 8 MB, counted in millions to be safe: the logs' Worker has 128 MB, and a
+    /// recording read takes several times its size there; a bigger pull is thinned to fit, as a send is).
+    /// </summary>
+    public const int MaxRaw = 8_000_000;
 
     /// <summary>The most the site takes gzipped.</summary>
     public const int MaxGzip = 10_000_000;
@@ -223,11 +226,24 @@ public readonly record struct UploadMark(string File, string? SentId, string? Re
 /// since Upload since), so it's the same after a restart. One at a time, the oldest first; after no answer it waits longer each
 /// time (<see cref="Backoff"/>: 30 seconds doubling to 15 minutes); the site's hourly limit and its being busy wait as long as it
 /// says (<c>Retry-After</c>); saving switched off on the site waits half an hour; a refused token or a full account stops it
-/// until <see cref="Resume"/> (linked again, Upload my logs turned on, Upload my older pulls). Game-free; on one thread.
+/// until <see cref="Resume"/> (linked again, Upload my logs turned on, Upload my older pulls). A pull that has failed
+/// <see cref="TriesBeforeAside"/> times in a row (no answer, the site's error) is set aside for a while (half an hour, doubling
+/// to <see cref="LongestAside"/>), so one the site can't take never holds up the ones after it. Game-free; on one thread.
 /// </summary>
 public sealed class UploadQueue
 {
+    /// <summary>Failures in a row before a pull is set aside and the next goes first.</summary>
+    public const int TriesBeforeAside = 3;
+
+    /// <summary>The first time a pull is set aside for (doubling each time after, up to <see cref="LongestAside"/>).</summary>
+    public static readonly TimeSpan FirstAside = TimeSpan.FromMinutes(30);
+
+    public static readonly TimeSpan LongestAside = TimeSpan.FromHours(6);
+
     private readonly Backoff backoff = new(TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(15));
+
+    /// <summary>Each pull's failures in a row, and until when it's set aside (after <see cref="TriesBeforeAside"/>).</summary>
+    private readonly Dictionary<string, (int Fails, DateTime Until)> failing = new(StringComparer.OrdinalIgnoreCase);
     private DateTime notBefore = DateTime.MinValue;
     private TimeSpan notBeforeWait;
 
@@ -261,7 +277,8 @@ public sealed class UploadQueue
         if (now < notBefore && notBefore - now <= notBeforeWait) return null;
         RecordingInfo? oldest = null;
         foreach (var i in all)
-            if (i.SentId == null && i.UploadRefused == null && (oldest == null || i.RecordedAt < oldest.RecordedAt) && wanted(i))
+            if (i.SentId == null && i.UploadRefused == null && (oldest == null || i.RecordedAt < oldest.RecordedAt) && !Aside(i.File, now)
+                && wanted(i))
                 oldest = i;
         if (oldest != null) InFlight = oldest.File;
         return oldest;
@@ -281,8 +298,10 @@ public sealed class UploadQueue
                 backoff.Succeeded();
                 Held = null;
                 SentCount++;
+                failing.Remove(file);
                 return new UploadMark(file, answer.Id, null);
             case UploadOutcome.Refused:
+                failing.Remove(file);
                 return new UploadMark(file, null, answer.Why ?? "The site didn't take it.");
             case UploadOutcome.Stop:
                 Stopped = answer.Why ?? "The site stopped the uploads.";
@@ -291,20 +310,43 @@ public sealed class UploadQueue
                 Hold(now, answer.Wait ?? LogUpload.OffPause);
                 // The site busy: longer each time it's still busy (its Retry-After at least).
                 if (answer.Hint != "rate") backoff.Failed(now);
+                // Busy (an error page, or the site's own): this pull counts a failure; the hourly limit and saving off don't.
+                if (answer.Outcome == UploadOutcome.Wait && answer.Hint != "rate") Failed(file, now);
                 Held = answer.Why;
                 return null;
             default:
                 // "Stopped." is the plugin unloading: nothing to wait for.
                 if (answer.Why == "Stopped.") return null;
                 backoff.Failed(now);
+                Failed(file, now);
                 Held = answer.Why;
                 return null;
         }
     }
 
+    /// <summary>Whether a pull is set aside now (a clock set back by more than the longest counts as over).</summary>
+    public bool Aside(string file, DateTime now) =>
+        failing.TryGetValue(file, out var f) && f.Until > now && f.Until - now <= LongestAside;
+
+    private void Failed(string file, DateTime now)
+    {
+        var fails = (failing.TryGetValue(file, out var f) ? f.Fails : 0) + 1;
+        var until = DateTime.MinValue;
+        if (fails >= TriesBeforeAside)
+        {
+            var times = Math.Min(fails - TriesBeforeAside, 8);
+            var wait = TimeSpan.FromTicks(Math.Min(LongestAside.Ticks, FirstAside.Ticks << times));
+            until = now + wait;
+            // Set aside: the next pull goes after the usual wait, not this one's.
+            backoff.Succeeded();
+        }
+        failing[file] = (fails, until);
+    }
+
     /// <summary>Goes on from where it stopped or waited (linked again, Upload my logs turned on, Upload my older pulls).</summary>
     public void Resume()
     {
+        failing.Clear();
         Stopped = null;
         Held = null;
         notBefore = DateTime.MinValue;
