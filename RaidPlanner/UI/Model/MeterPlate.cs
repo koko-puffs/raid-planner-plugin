@@ -183,6 +183,52 @@ public static class PlateSizes
 }
 
 /// <summary>
+/// The compact meter's number columns as drawn (screen px): each at least its theme's CSS width
+/// (<see cref="MeterTheme.ValueWidth"/>, <see cref="MeterTheme.ShareCol"/>) at the scale, and at least
+/// as wide as the widest of its samples measured in the face actually drawn, so a face wider in the
+/// game than in the mock-ups (Zen Maru Gothic, the game's own) never runs a number into the next. And
+/// the bars' track: from the row's left to just before the share column, so a full bar never runs
+/// under the share. The measuring is the caller's (it pushes the fonts); this is the arithmetic.
+/// </summary>
+public static class PlateColumns
+{
+    /// <summary>The widest three-figure numbers: "88.8k" (eights are the widest digits in most faces), "8.88M".</summary>
+    public static readonly string[] ValueSamples = { "88.8k", "888k", "8.88M" };
+
+    /// <summary>The widest whole numbers a row shows (under a million: more is a party's, at the foot).</summary>
+    public static readonly string[] WholeSamples = { "888,888" };
+
+    /// <summary>The share column's widest: a share ("88.8", alone "100.0"), overheal ("100%").</summary>
+    public static readonly string[] ShareSamples = { "88.8", "100.0", "100%" };
+
+    /// <summary>The gap between the bar's end and the share column (CSS px).</summary>
+    public const float TrackGap = 3;
+
+    /// <summary>The number column: at least the theme's width at the scale, at least its widest sample as measured.</summary>
+    public static float Value(MeterTheme t, bool whole, float scale, Func<string, ThemeFont, float> measure) =>
+        Widest(t.ValueWidth(whole) * scale, whole ? WholeSamples : ValueSamples, t.Font.Num, measure);
+
+    /// <summary>The share column: at least the theme's width at the scale, at least its widest sample as measured.</summary>
+    public static float Share(MeterTheme t, float scale, Func<string, ThemeFont, float> measure) =>
+        Widest(t.ShareCol * scale, ShareSamples, t.Font.Small, measure);
+
+    /// <summary>
+    /// The bar's track (screen px): a row <paramref name="rowWidth"/> wide, less its right padding, what's
+    /// kept beside the share (Mochi's heart), the share column and <see cref="TrackGap"/>: a full bar ends
+    /// there, its share of the top's that much of it.
+    /// </summary>
+    public static float Track(float rowWidth, float padRight, float beside, float shareWidth, float scale) =>
+        MathF.Max(0, rowWidth - padRight - beside - shareWidth - TrackGap * scale);
+
+    private static float Widest(float atLeast, string[] samples, ThemeFont f, Func<string, ThemeFont, float> measure)
+    {
+        var w = atLeast;
+        foreach (var s in samples) w = MathF.Max(w, measure(s, f));
+        return w;
+    }
+}
+
+/// <summary>
 /// The game's job icons by job: the ClassJob row for an English abbreviation (what the meter's rows
 /// carry), and its framed icon (<c>62100 + the row</c>, drawn with Dalamud's texture provider). 0 for
 /// one that isn't known: the meter draws the role's mark in a socket instead.
