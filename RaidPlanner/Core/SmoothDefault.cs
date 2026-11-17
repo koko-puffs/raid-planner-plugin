@@ -1,7 +1,7 @@
 namespace RaidPlanner.Core;
 
 /// <summary>
-/// Settings → Recording → <i>Smoother replays</i> on by default since 0.7.5. Settings saved before it had it off unless
+/// Settings → Recording → <i>Smoother replays</i> on by default since 0.7.6. Settings saved before it had it off unless
 /// someone chose it, so it's turned on once (<see cref="Migrate"/>, version 1); turned off after that, it stays off.
 /// Game-free, so it's tested.
 /// </summary>
