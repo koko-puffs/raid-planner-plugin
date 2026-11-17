@@ -133,7 +133,7 @@ public class MechanicsTests
     public void Hits_and_statuses_never_crowd_out_the_mechanics_or_the_deaths()
     {
         // Actions 7 and 9 are auto-attacks (category 1): the many; any other hit is a mechanic, with the few's room.
-        var b = new RecordingBuilder(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, true, "0.7.7",
+        var b = new RecordingBuilder(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, true, "0.7.8",
             a => a is 7 or 9 ? new ActionInfo("Attack", 0, 0, 0, string.Empty, 0, Category: 1) : new ActionInfo("Spiral", 3, 30, 0, "gl_fan030_1bf", 1));
         b.SetParty(new[] { new Partier(11, "PLD", 1), new Partier(12, "WAR", 1) });
         b.Alive(0, 1, false);

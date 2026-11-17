@@ -5,7 +5,7 @@ using Xunit;
 namespace RaidPlanner.Tests;
 
 /// <summary>
-/// 0.7.7's fixes for stalls in long fights: the party's count in the index (no file read for it), a delete that never waits on
+/// 0.7.8's fixes for stalls in long fights: the party's count in the index (no file read for it), a delete that never waits on
 /// the disk, uploads that back off through an outage, a pull never uploaded twice, and a load that leaves a save in progress alone.
 /// </summary>
 public class StallStoreTests : IDisposable

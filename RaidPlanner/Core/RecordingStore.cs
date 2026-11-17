@@ -15,7 +15,7 @@ namespace RaidPlanner.Core;
 /// A kept pull, as the window lists it without reading its whole file: its file, duty, pull,
 /// when, how long, how it ended, its mechanics, whether the party's places are in it, and the
 /// site's id for it once it's been sent (or uploaded: since 0.6.0 an upload's id is the same kind); since 0.6.0 why
-/// the site's logs refused it for good (<paramref name="UploadRefused"/>: never uploaded again); since 0.7.7 how many of the
+/// the site's logs refused it for good (<paramref name="UploadRefused"/>: never uploaded again); since 0.7.8 how many of the
 /// party it kept (<paramref name="PartyCount"/>; null for a pull listed by an older version, until its file is read).
 /// </summary>
 public sealed record RecordingInfo(
@@ -43,7 +43,7 @@ public sealed record RecordingInfo(
 /// sent ones go, and only then the oldest unsent (since 0.6.0 those still to be uploaded are held, up
 /// to <see cref="MostHeld"/>). Writes go to a temporary file, flushed to the disk, then put in place,
 /// so a crash or a power cut mid-write never leaves half a file. Safe to call from any thread;
-/// <see cref="All"/> and <see cref="Find"/> never wait (the window reads them every frame). Since 0.7.7 the list is
+/// <see cref="All"/> and <see cref="Find"/> never wait (the window reads them every frame). Since 0.7.8 the list is
 /// changed under its lock in memory only, and the index, the marks and the files let go of are written after, one
 /// writer at a time and always the latest list (<see cref="Persist()"/>), so a change never waits on the disk behind another.
 /// </summary>
@@ -72,7 +72,7 @@ public sealed class RecordingStore
     private readonly object gate = new();
 
     /// <summary>
-    /// The disk's lock (since 0.7.7): the index's and the marks' writes and the deletes, one at a time. Taken before
+    /// The disk's lock (since 0.7.8): the index's and the marks' writes and the deletes, one at a time. Taken before
     /// <see cref="gate"/> when both are held, never after.
     /// </summary>
     private readonly object disk = new();
@@ -158,7 +158,7 @@ public sealed class RecordingStore
                     if (known.Contains(file) || gone.Contains(file) || saving.Contains(file)) continue;
                     try
                     {
-                        // Since 0.7.7, an empty file is deleted: a name taken by a save that never finished (a crash before its file was put in place).
+                        // Since 0.7.8, an empty file is deleted: a name taken by a save that never finished (a crash before its file was put in place).
                         if (new FileInfo(path).Length == 0)
                         {
                             TryDelete(path);
@@ -205,7 +205,7 @@ public sealed class RecordingStore
     /// <summary>
     /// A temporary file left by a crash between its flush and its move: a whole recording is put in
     /// place when its own file is missing or empty (the name was taken, the move never came); anything
-    /// else is deleted. Since 0.7.7 one a save is still writing (<see cref="saving"/>) is left alone.
+    /// else is deleted. Since 0.7.8 one a save is still writing (<see cref="saving"/>) is left alone.
     /// Under both locks (no save's last steps, no index or marks write, meanwhile).
     /// </summary>
     private void Recover(string temp)
@@ -325,7 +325,7 @@ public sealed class RecordingStore
     }
 
     /// <summary>
-    /// Since 0.7.7, for the window: a pull is out of the list at once (<see cref="All"/> no longer has it), and its file's
+    /// Since 0.7.8, for the window: a pull is out of the list at once (<see cref="All"/> no longer has it), and its file's
     /// delete and the index's and marks' writes are done on a worker, in turn with every other write. The marks (with it
     /// gone) are written before its file is deleted, so a crash after that still lets it go at the next load; one before
     /// it brings it back. Never waits on the disk.
@@ -408,7 +408,7 @@ public sealed class RecordingStore
     }
 
     /// <summary>
-    /// Since 0.7.7: the files let go of are deleted, then the index and the marks are written as the list is now; one
+    /// Since 0.7.8: the files let go of are deleted, then the index and the marks are written as the list is now; one
     /// writer at a time (<see cref="disk"/>), and a writer whose change a later one already wrote writes nothing, so
     /// writes never go out of order. Called after the change, outside <see cref="gate"/>, so the list never waits on the disk.
     /// </summary>
@@ -502,7 +502,7 @@ public sealed class RecordingStore
     }
 
     /// <summary>
-    /// Under <see cref="gate"/>: a file let go of. Marked gone and deleted by the next <see cref="Persist()"/> (since 0.7.7: never
+    /// Under <see cref="gate"/>: a file let go of. Marked gone and deleted by the next <see cref="Persist()"/> (since 0.7.8: never
     /// under the lock); one the system won't let go yet (held open somewhere) stays marked, to go at the next load.
     /// </summary>
     private void Forget(string file)
@@ -543,7 +543,7 @@ public sealed class RecordingStore
             if (i.SentId != null) o["sentId"] = i.SentId;
             if (i.SentAt is { } at) o["sentAt"] = at.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
             if (i.UploadRefused != null) o["uploadRefused"] = i.UploadRefused;
-            // Since 0.7.7 (an older index hasn't it: unknown until the file's read).
+            // Since 0.7.8 (an older index hasn't it: unknown until the file's read).
             if (i.PartyCount is { } party) o["partyCount"] = party;
             arr.Add(o);
         }
@@ -582,7 +582,7 @@ public sealed class RecordingStore
                     n["sentId"]?.GetValue<string>(),
                     sentAt,
                     n["uploadRefused"]?.GetValue<string>(),
-                    // Since 0.7.7; missing (an older version's index) or not a count: unknown, never the entry left out.
+                    // Since 0.7.8; missing (an older version's index) or not a count: unknown, never the entry left out.
                     n["partyCount"] is JsonValue pv && pv.TryGetValue<int>(out var party) && party >= 0 ? party : null));
             }
             catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException or ArgumentException)

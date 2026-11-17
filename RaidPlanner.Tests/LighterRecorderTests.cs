@@ -7,13 +7,13 @@ using Xunit;
 namespace RaidPlanner.Tests;
 
 /// <summary>
-/// 0.7.7's lighter recording: a nameless enemy's name read at most once a second, the statuses of someone who left ended, and a
+/// 0.7.8's lighter recording: a nameless enemy's name read at most once a second, the statuses of someone who left ended, and a
 /// frame keeping the recorder's dictionaries when nothing in them is left out.
 /// </summary>
 public class LighterRecorderTests
 {
     private static RecordingBuilder Builder(bool party = true) =>
-        new(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, party, "0.7.7", _ => new ActionInfo("Hit", 0, 0, 0, string.Empty, 0));
+        new(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, party, "0.7.8", _ => new ActionInfo("Hit", 0, 0, 0, string.Empty, 0));
 
     [Fact]
     public void A_nameless_enemys_name_is_asked_for_at_most_once_a_second()

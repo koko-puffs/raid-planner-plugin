@@ -389,7 +389,7 @@ public class UploadQueueTests
             t = q.NotBefore > t ? q.NotBefore : t;
         }
         Assert.True(q.Aside(p.File, t));
-        // The next one goes (once the site's wait is over: an error page is the site's, so the wait isn't cut short since 0.7.7).
+        // The next one goes (once the site's wait is over: an error page is the site's, so the wait isn't cut short since 0.7.8).
         Assert.Equal("mid" + Words.Extension, q.Next(Pulls, t, _ => true)!.File);
         q.Done("mid" + Words.Extension, new UploadAnswer(UploadOutcome.Sent, Uuid), t);
         var rest = Pulls.Select(x => x.File == "mid" + Words.Extension ? x with { SentId = Uuid } : x).ToArray();

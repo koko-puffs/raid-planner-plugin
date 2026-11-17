@@ -110,7 +110,7 @@ Every frame while it goes (on the framework thread):
   going up by more than half a second (put on again), is recorded again, a `status` event with
   `re` (or another `st` gain); a self-cast status read with no time yet (the game shows −X until it
   confirms it) isn't a refresh when its time appears. One gone from someone whose list was read is
-  recorded as gone; since 0.7.7 so is every status of someone not read for 5 seconds (gone from the game's objects:
+  recorded as gone; since 0.7.8 so is every status of someone not read for 5 seconds (gone from the game's objects:
   an enemy that left), as of the last time they were read (`RecordingBuilder.StatusLost`), where before it lasted to
   the pull's end. The names and icons come from the game's Status sheet, once each.
 - **The party's casts** (since 0.3.0): each party member's cast bar (`GetCastInfo`), recorded once
@@ -175,7 +175,7 @@ own function first and changes nothing):
   (Dalamud's log says so). Their hooks take four plain arguments and a result and hand them all on
   untouched, so the game's call is never changed even if a patch changes what the function takes;
   the message is read only while a pull is recorded, and not at all when its count is more than
-  the message holds. Since 0.7.7 each message is checked before it's read (`Game/MemoryCheck.cs`): a plausible
+  the message holds. Since 0.7.8 each message is checked before it's read (`Game/MemoryCheck.cs`): a plausible
   address, and memory Windows (or Wine) says is committed and readable for all it could hold (`VirtualQuery`; only the
   address when that can't be asked), since a bad read there would crash the game. A handler whose message fails the
   check, whose count is too high three times, or that's called over 200 times in a second (not map effects) is
@@ -206,7 +206,7 @@ the party, or comes from within 70 yalms of you (`OnHit`). Once in, it stays in.
 the fight, and a helper whose attack everyone dodged must not be lost. The site does the same for
 recordings made before (its `fightOf`). When the pull ends they're sorted: the targetable
 ones with the most HP (and any with half as much or more) are bosses, the other targetable ones
-adds, and those never targetable helpers (only their attacks are kept, not where they stood). Since 0.7.7 a game
+adds, and those never targetable helpers (only their attacks are kept, not where they stood). Since 0.7.8 a game
 helper (sub-kind 11) not targetable yet isn't put in the frames at all as they're taken, rather than taken out of
 them all at the end (dozens a frame through a whole ultimate); one that becomes targetable is in them from then on.
 An enemy seen without a name has it read again at most once a second (`NeedsName(key, t)`), not every frame: most
@@ -300,9 +300,9 @@ everything they do is caught and logged at most every 10 seconds.
 At most 20,000 events and 4,800 frames are kept (9,600 at four a second: Settings → Recording →
 _Smoother replays_, since 0.4.0; on since 0.7.6, turned on once for settings saved before it, `SmoothDefault`). A typical 20-minute pull is about 1.4 MB, and about as much
 again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
-Since 0.7.7 the 20,000 is shared out (`RecordingBuilder.MaxMany`, `DeathRoom`): the many (auto-attacks, statuses,
-aggro) stop at 16,000, so the rest is kept for the few that show the fight (casts, any other hit, since a helper's AoE
-often has no cast, markers, tethers, targets, map effects, waymarks, signs, cancels); deaths and raises go 1,000 past
+Since 0.7.7 the 20,000 is shared out (`RecordingBuilder.MaxMany`, `DeathRoom`): the many (statuses, aggro and,
+since 0.7.8, auto-attacks: in 0.7.7 every hit) stop at 16,000, so the rest is kept for the few that show the fight
+(casts, since 0.7.8 any other hit, since a helper's AoE often has no cast, markers, tethers, targets, map effects, waymarks, signs, cancels); deaths and raises go 1,000 past
 it. A hit not kept still counts as a death's cause.
 Before, whichever came first filled it, and a pull at the cap lost its late mechanics and deaths alike. The
 turns (3,000, `MaxTurns`) never count toward it; nor does the site's ranker, which doesn't rank a pull with
@@ -472,7 +472,7 @@ The kinds:
 Readings come only while the plugin reads them (a pull recorded, before one in a recorded duty, or the
 meter or cooldown tracker on). Cheap: off, the hooks ask one bool; on, lines are gathered in memory and
 written on a worker at a pull's end, a zone change, turning it off, unloading, or past 64 K characters. Since
-0.7.7 what's gathered and what's still waiting for the disk count together toward 256 KB (`MostBuffered`; before, the
+0.7.8 what's gathered and what's still waiting for the disk count together toward 256 KB (`MostBuffered`; before, the
 worker's queue had no cap): past it new lines are dropped and the file says how many; and the busiest lines (each hit,
 each enemy cast, the enmity list) are made only when they'd be kept (`DiagnosticsLog.Room()`), not formatted and
 then dropped. A
@@ -485,14 +485,14 @@ anyone a status line is about): look before you share it.
 
 In the plugin's config folder, `recordings/`, a file each (named for when, the duty and the
 pull), `index.json` listing them (so the window opens without reading every file; made again
-from the files when it's missing or can't be read; since 0.7.7 each entry has its party's count, `partyCount`, so
+from the files when it's missing or can't be read; since 0.7.8 each entry has its party's count, `partyCount`, so
 the window says "N places" without reading the pull's file; an entry from before reads it once, on a worker; older
 versions ignore it), and `marks.json`, what can't be made again
 from the files: each sent pull's id on the site, and the files that couldn't be deleted yet (held
 open by something else: tried again at the next load, never listed again). Every write goes to a
 temporary file, flushed to the disk, then put in place, so a crash or a power cut never leaves
 half a file. A temporary file found at the load is put in place when it's a whole recording and
-its own file is missing or empty (a crash between the flush and the move), else deleted; since 0.7.7 never one a save
+its own file is missing or empty (a crash between the flush and the move), else deleted; since 0.7.8 never one a save
 is still writing (`saving`: before, a load at that moment could put it in place under the save, whose move then failed
 and deleted the pull), and an empty pull file left by a crash during a save (not in the index, not being saved) is
 deleted. Deleting a pull (the window's) takes it off the list at once and does the disk work on a worker
@@ -614,7 +614,7 @@ checked four times a second on the framework thread. The answers (contract §1):
 A pull that fails three times in a row (no answer, or the site busy or erring: not the hourly limit or saving
 off) is set aside half an hour, doubling to six hours each time it fails again, and the next pull goes first
 (`UploadQueue.Aside`), so one pull the site can't take never holds up the rest; a success or Resume forgets it.
-Since 0.7.7 setting a pull aside starts the wait over only when its failures were its own (its file unreadable,
+Since 0.7.8 setting a pull aside starts the wait over only when its failures were its own (its file unreadable,
 another 4xx: `UploadAnswer.ThisPull`); when they were the connection's or the site's (no connection, no answer, 5xx,
 busy, the hourly limit, and a 4xx about the way there: 403, 407, 408, 421, 425) the wait keeps growing to 15 minutes
 until an upload goes through, where before each pull in
@@ -1196,7 +1196,7 @@ reached this phase or left it (moved on or ended) before this second of it. The 
 else the one that reached the furthest phase, then lasted longest.
 
 **When it stops**: after three nonsense effects the meter turns itself off and says why (`IMeterSource.Problem`):
-the game has moved something it reads. Since 0.7.7 they count by stretch (`Core/Meter/AnomalyGuard.cs`): from the
+the game has moved something it reads. Since 0.7.8 they count by stretch (`Core/Meter/AnomalyGuard.cs`): from the
 meter starting to listen, an encounter's end or a zone change to the next, and only while the meter listens (not the
 recorder alone). A stop lasts until the next zone, where it tries again; the third in a session lasts until the plugin
 reloads. Before, three in a whole night (the recorder's too) turned it off until a reload. A layout the game really
@@ -1649,7 +1649,7 @@ for an action with charges. Behind it the recharge fills the row as the compact 
 white at 5.5% (yours ember-washed) to how far it has come, its 1px line along the foot (yours the
 ember gradient); a ready row is washed green at 6%. Pointed at, whose it is and how it's known. The
 limit break gauge last (_Limit break gauge_, on at first: "Limit break" and its bars, the meter's,
-from `IMeterSource.LimitBreak` while the meter's numbers are read; since 0.7.7, with the meter off or stopped, read for
+from `IMeterSource.LimitBreak` while the meter's numbers are read; since 0.7.8, with the meter off or stopped, read for
 the tracker alone, `CombatMeter.GaugeNow`, where before it froze; the meter stays off). Shown when it has a row; with
 _Hide those ready_, only what's recharging is listed (a row comes when it's used, goes when it's back);
 _Yours too_ (on) lists your own.
@@ -1960,21 +1960,12 @@ entry).
 
 ## Release notes
 
-### 0.7.7 (not released yet)
+### 0.7.8 (not released yet)
 
-- **Saving and thinning a long pull leave far less garbage** (more of 0.7.6's work on stalls; the garbage collector's
-  pauses stop the game even when a worker made the garbage):
-  - Each step of thinning a pull too big for the site was written out whole to see whether it fit: up to a dozen
-    strings of several MB each. Each step is now only counted, and the one that fits written once. What's sent is
-    the same, byte for byte.
-  - Writing a pull's file held all of it in the writer's buffer, then a copy, then a string, then its bytes: about
-    seven times the file, on the large-object heap, at every pull kept. It's now written straight to the file, 64 KB
-    at a time, with each frame's ids sorted and named once, not per frame: a 2.5 MB file went from 15 MB of
-    garbage to under 1 MB. The file is the same, byte for byte.
-- **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, auto-attacks, statuses and
-  aggro changes now stop at 16,000, so the casts, mechanics' hits, markers, tethers and the rest late in the pull aren't
-  lost to them;
-  deaths and raises are kept 1,000 past the 20,000. A hit that isn't kept still names what killed someone.
+More of 0.7.6's and 0.7.7's work on stalls in long fights, and fixes from a scan of the whole plugin:
+
+- **A mechanic's hit keeps its room.** Of 0.7.7's 16,000 for the many, only auto-attacks count now (with statuses and
+  aggro): a helper's AoE often comes with no cast, and its hits were counted with the rest.
 - **Less work each frame and each hit in a long fight:**
   - The fight's invisible helpers are no longer put in the frames while they've never been targetable (they were
     taken out at the end anyway): an ultimate's dozens a frame were tens of MB kept to the pull's end.
@@ -1982,7 +1973,7 @@ entry).
   - A nameless enemy's name is read at most once a second, not every frame (most helpers never have one).
   - An enemy's hit on the party no longer makes a dozen small lists; past the cap it only notes what could kill.
 - **The window no longer reads a whole pull's file to count its party.** The list of kept pulls now says how many
-  were there; a pull kept before 0.7.7 has its file read once, as before.
+  were there; a pull kept before 0.7.8 has its file read once, as before.
 - **Deleting a pull doesn't wait on the disk:** it leaves the list at once, the files are written on a worker.
 - **Uploads during an outage wait properly.** With no connection or the site down, the wait between tries keeps
   growing to 15 minutes; before, each waiting pull was read, compressed and sent again back to back. A pull just
@@ -1995,6 +1986,21 @@ entry).
 - **Diagnostics** (if you turned it on) only makes the lines it keeps, and holds at most 256 KB waiting for the disk.
 - **A game patch can't make the map-effect hooks crash the game:** each message is checked readable before it's
   read, and a handler that looks wrong is turned off for the session.
+
+### 0.7.7
+
+- **Saving and thinning a long pull leave far less garbage** (more of 0.7.6's work on stalls; the garbage collector's
+  pauses stop the game even when a worker made the garbage):
+  - Each step of thinning a pull too big for the site was written out whole to see whether it fit: up to a dozen
+    strings of several MB each. Each step is now only counted, and the one that fits written once. What's sent is
+    the same, byte for byte.
+  - Writing a pull's file held all of it in the writer's buffer, then a copy, then a string, then its bytes: about
+    seven times the file, on the large-object heap, at every pull kept. It's now written straight to the file, 64 KB
+    at a time, with each frame's ids sorted and named once, not per frame: a 2.5 MB file went from 15 MB of
+    garbage to under 1 MB. The file is the same, byte for byte.
+- **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, hits, statuses and aggro
+  changes now stop at 16,000, so the casts, markers, tethers and the rest late in the pull aren't lost to them;
+  deaths and raises are kept 1,000 past the 20,000. A hit that isn't kept still names what killed someone.
 
 ### 0.7.6
 

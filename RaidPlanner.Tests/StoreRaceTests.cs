@@ -9,7 +9,7 @@ using Xunit;
 namespace RaidPlanner.Tests;
 
 /// <summary>
-/// 0.7.7's store: a mark made in memory and still waiting for the disk survives a load at that moment (the mark waits outside
+/// 0.7.8's store: a mark made in memory and still waiting for the disk survives a load at that moment (the mark waits outside
 /// the list's lock). The disk's lock is held here (through reflection) to open that moment on purpose.
 /// </summary>
 public class StoreRaceTests : IDisposable

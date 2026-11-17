@@ -40,7 +40,7 @@ public enum UploadOutcome
 /// What became of an upload: <see cref="Outcome"/>, the pull's id on the site when it's stored (<paramref name="Id"/>: the same id
 /// <c>rp_plugin_send</c> gives, so a pull uploaded counts as sent), why not in words for players, how long the site asked to wait,
 /// its hint, whether it was there already, whether it's public now, and whether it went thinned (bigger than the site takes whole).
-/// Since 0.7.7, <paramref name="ThisPull"/>: a failure that's about this pull alone (its file couldn't be read, the site said no
+/// Since 0.7.8, <paramref name="ThisPull"/>: a failure that's about this pull alone (its file couldn't be read, the site said no
 /// to it with a 4xx it doesn't explain), not the connection or the site (no answer, a timeout, a 5xx, busy, the hourly limit).
 /// </summary>
 public sealed record UploadAnswer(UploadOutcome Outcome, string? Id = null, string? Why = null, TimeSpan? Wait = null, string? Hint = null,
@@ -233,7 +233,7 @@ public readonly record struct UploadMark(string File, string? SentId, string? Re
 /// says (<c>Retry-After</c>); saving switched off on the site waits half an hour; a refused token or a full account stops it
 /// until <see cref="Resume"/> (linked again, Upload my logs turned on, Upload my older pulls). A pull that has failed
 /// <see cref="TriesBeforeAside"/> times in a row (no answer, the site's error) is set aside for a while (half an hour, doubling
-/// to <see cref="LongestAside"/>), so one the site can't take never holds up the ones after it. Since 0.7.7 setting one aside
+/// to <see cref="LongestAside"/>), so one the site can't take never holds up the ones after it. Since 0.7.8 setting one aside
 /// lets the next go at once only when the failures were its own (<see cref="UploadAnswer.ThisPull"/>); when they were the
 /// connection's or the site's, the wait keeps growing until an upload goes through, so an outage costs one try every 15 minutes,
 /// not every waiting pull read, gzipped and sent in turn. A pull just uploaded or refused isn't picked again until the store shows
@@ -257,7 +257,7 @@ public sealed class UploadQueue
     private TimeSpan notBeforeWait;
 
     /// <summary>
-    /// Since 0.7.7: pulls uploaded or refused whose mark the store doesn't show yet (it's written on a worker after
+    /// Since 0.7.8: pulls uploaded or refused whose mark the store doesn't show yet (it's written on a worker after
     /// <see cref="Done"/>): never picked again meanwhile. Each goes once the store shows it marked (or not kept), or
     /// <see cref="Settled"/> says the mark failed.
     /// </summary>
@@ -345,7 +345,7 @@ public sealed class UploadQueue
     }
 
     /// <summary>
-    /// Since 0.7.7: the store's mark for <paramref name="file"/> failed (or won't come): it may be picked again. Without this it's
+    /// Since 0.7.8: the store's mark for <paramref name="file"/> failed (or won't come): it may be picked again. Without this it's
     /// let go of once the store shows it marked.
     /// </summary>
     public void Settled(string file) => marking.Remove(file);
@@ -375,7 +375,7 @@ public sealed class UploadQueue
             var wait = TimeSpan.FromTicks(Math.Min(LongestAside.Ticks, FirstAside.Ticks << times));
             until = now + wait;
             // Set aside for its own failures: the next pull goes after the usual wait, not this one's. For the connection's or
-            // the site's (since 0.7.7), the wait keeps growing: only an upload that goes through starts it over.
+            // the site's (since 0.7.8), the wait keeps growing: only an upload that goes through starts it over.
             if (ownFault) backoff.Succeeded();
         }
         failing[file] = (fails, until);

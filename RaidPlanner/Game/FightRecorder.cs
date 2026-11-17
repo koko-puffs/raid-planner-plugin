@@ -791,7 +791,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 var castingNow = ReadCast(b, t, id, npc);
                 // Its facing and place every frame while it's at a mechanic (since 0.7.4: a rotation's steps, a helper's heading).
                 b.Facing(t, id, npc.Position.X, npc.Position.Z, npc.Rotation, castingNow);
-                // A helper never targetable yet has no place or HP in the frames (since 0.7.7): the pull's end takes out every
+                // A helper never targetable yet has no place or HP in the frames (since 0.7.8): the pull's end takes out every
                 // one never targetable anyway, and dozens a frame for a whole ultimate were tens of MB kept to the end.
                 if (npc.BattleNpcKind == HelperKind && !b.EverTargetable(id)) skipFrame = true;
                 else if (hp != null) hp[id] = npc.CurrentHp;
@@ -1226,7 +1226,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (disposed) return;
         var b = current;
         if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
-        // Lists reused hit after hit (since 0.7.7): the builder only reads them, and everything here is on the framework thread.
+        // Lists reused hit after hit (since 0.7.8): the builder only reads them, and everything here is on the framework thread.
         var targets = hitTargets;
         var damage = hitDamage;
         var fx = hitFx;

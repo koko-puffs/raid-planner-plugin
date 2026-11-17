@@ -57,7 +57,7 @@ public sealed class RecordingBuilder
     public const int MaxEvents = 20000;
 
     /// <summary>
-    /// Since 0.7.7: the many (auto-attacks, statuses, aggro) stop here, so the last <see cref="MaxEvents"/> less this is kept for the
+    /// Since 0.7.7: the many (statuses, aggro, and auto-attacks: in 0.7.7 every hit) stop here, so the last <see cref="MaxEvents"/> less this is kept for the
     /// few that show the fight (casts, markers, tethers, targets, map effects, waymarks and the rest). Before, whichever came
     /// first filled the 20,000, and a long pull's late mechanics could be lost to its hits.
     /// </summary>
@@ -298,7 +298,7 @@ public sealed class RecordingBuilder
 
     /// <summary>
     /// Should its name be read this frame (<paramref name="t"/>): a new enemy always; one seen without a name at most every
-    /// <see cref="NameEvery"/> (since 0.7.7: before, every frame, and reading it makes strings; a fight's helpers mostly have
+    /// <see cref="NameEvery"/> (since 0.7.8: before, every frame, and reading it makes strings; a fight's helpers mostly have
     /// none, so a long pull read dozens a frame for nothing).
     /// </summary>
     public bool NeedsName(ulong key, double t)
@@ -452,7 +452,7 @@ public sealed class RecordingBuilder
         if (hp != null && hp.Count != targets.Count) hp = null;
         if (shield != null && shield.Count != targets.Count) shield = null;
         if (px == null || pz == null || px.Count != targets.Count || pz.Count != targets.Count) px = pz = null;
-        // Each target once (the first), the lists kept in step. (Since 0.7.7 by loops into lists reused, not LINQ: a long
+        // Each target once (the first), the lists kept in step. (Since 0.7.8 by loops into lists reused, not LINQ: a long
         // pull has thousands of hits; the caller's lists are only read, never kept.)
         var keep = hitKeep;
         keep.Clear();
@@ -603,7 +603,7 @@ public sealed class RecordingBuilder
 
     /// <summary>
     /// Someone not read this long (seconds: gone from the game's objects, an enemy that left) has their statuses recorded as
-    /// gone, as of the last time they were read (since 0.7.7: before, they lasted to the pull's end on the site, and were
+    /// gone, as of the last time they were read (since 0.7.8: before, they lasted to the pull's end on the site, and were
     /// gone through every frame).
     /// </summary>
     public const double StatusLost = 5.0;
@@ -1021,7 +1021,7 @@ public sealed class RecordingBuilder
     {
         if (!WantsFrame(t)) return;
         lastFrame = t;
-        // Since 0.7.7 the caller's dictionaries become the frame's when nothing in them is left out (the recorder makes new
+        // Since 0.7.8 the caller's dictionaries become the frame's when nothing in them is left out (the recorder makes new
         // ones each frame), not copied again: a long pull's frames are thousands of them.
         var kept = recording.PartyPositions || AllEnemies(at.Keys)
             ? at

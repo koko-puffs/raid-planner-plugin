@@ -200,7 +200,7 @@ public sealed partial class MainWindow
             : new Kit.Fact("Party", "None", Color: Palette.Muted, Sans: true);
 
     /// <summary>
-    /// How many of the party a pull kept: the index's (since 0.7.7); for a pull an older version listed, read from its file once
+    /// How many of the party a pull kept: the index's (since 0.7.8); for a pull an older version listed, read from its file once
     /// on a worker (or taken from the pull's own screen as it reads the file); null until it's known.
     /// </summary>
     private int? PartyCount(RecordingInfo info)
