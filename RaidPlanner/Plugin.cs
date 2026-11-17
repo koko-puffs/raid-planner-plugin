@@ -40,6 +40,14 @@ public sealed class Plugin : IDalamudPlugin
     private readonly LogUploader logs;
     private readonly Fonts fonts;
     private readonly WindowSystem windows = new("RaidPlanner");
+
+    /// <summary>The plugin's windows and overlays drawn, their time watched (<see cref="Game.Stalls"/>).</summary>
+    private void DrawWindows()
+    {
+        var started = Game.Stalls.Start();
+        windows.Draw();
+        Game.Stalls.End("drawing its windows and overlays", started);
+    }
     private readonly MainWindow window;
     private readonly PlanWindow planWindow;
     private readonly MeterWindow meterWindow;
@@ -167,7 +175,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (Services.Commands.AddHandler(name, info)) commands.Add(name);
                 else Services.Log.Warning($"Raid Codex: {name} is taken by another plugin; /raidcodex still works");
             }
-            Services.PluginInterface.UiBuilder.Draw += windows.Draw;
+            Services.PluginInterface.UiBuilder.Draw += DrawWindows;
             Services.PluginInterface.UiBuilder.OpenMainUi += window.ShowMain;
             Services.PluginInterface.UiBuilder.OpenConfigUi += window.ShowSettings;
             Services.Framework.Update += OnUpdate;
@@ -398,7 +406,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         Safely(() => Services.Framework.Update -= OnUpdate);
-        Safely(() => Services.PluginInterface.UiBuilder.Draw -= windows.Draw);
+        Safely(() => Services.PluginInterface.UiBuilder.Draw -= DrawWindows);
         if (window != null)
         {
             Safely(() => Services.PluginInterface.UiBuilder.OpenMainUi -= window.ShowMain);

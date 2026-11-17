@@ -137,6 +137,10 @@ public sealed class LogUploader : IDisposable
         }
         linked = SiteLink.LooksRight(token);
         if (!prefs.UploadLogs || !linked) return;
+        // Never started during a pull: fitting a long pull's file to the site's size, serialising and
+        // compressing it is tens of megabytes of work, and though it's a worker's, the garbage it
+        // leaves can pause the game mid-fight. The next one starts once the pull's over.
+        if (recorder.InPull) return;
         if (queue.Next(store.All, DateTime.UtcNow, Waits) is { } next) Start(next, token);
     }
 
@@ -222,20 +226,39 @@ public sealed class LogUploader : IDisposable
         });
     }
 
+    /// <summary>A store write on a worker (files forced to disk), never the framework thread's; a failure is logged.</summary>
+    private static void OffFramework(Action write, string what)
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                write();
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error(ex, $"Raid Codex couldn't {what}");
+            }
+        });
+    }
+
     private void Finish(RecordingInfo info, int gen, UploadAnswer answer)
     {
         if (site.Closed || gen != generation) return;
         var mark = queue.Done(info.File, answer, DateTime.UtcNow);
         if (mark is { SentId: { } id })
         {
-            store.MarkSent(info, id, DateTimeOffset.UtcNow);
+            // Written on a worker: the store forces each of its two small files to disk, and on the
+            // framework thread that could stall the game (an answer often comes as the next pull starts).
+            var at = DateTimeOffset.UtcNow;
+            OffFramework(() => store.MarkSent(info, id, at), "mark a pull sent");
             summaries.Remove(info.File);
             Services.Log.Information($"Raid Codex uploaded {info.Name}{(answer.Duplicate ? " (already there)" : "")}{(answer.Thinned ? ", thinned" : "")}");
             return;
         }
         if (mark is { Refused: { } why })
         {
-            store.MarkRefused(info, why);
+            OffFramework(() => store.MarkRefused(info, why), "mark a pull refused");
             summaries.Remove(info.File);
             Services.Log.Information($"Raid Codex's upload of {info.Name} was refused: {why}");
             return;

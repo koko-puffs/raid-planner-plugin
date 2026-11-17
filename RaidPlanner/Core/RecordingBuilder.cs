@@ -949,7 +949,27 @@ public sealed class RecordingBuilder
     /// Is it worth keeping: long enough, with a mechanic in it (an enemy's named cast, or a hit that
     /// isn't an auto-attack)? A trash pack that only swung at the tank isn't.
     /// </summary>
-    public bool Worthwhile(double t) => t >= ShortestKept && Timeline.Build(recording).Count > 0;
+    public bool Worthwhile(double t) => t >= ShortestKept && HasMechanics();
+
+    /// <summary>
+    /// Whether any mechanic went off (the timeline has a step): a pass over every event, so for a long
+    /// pull it's asked on the save's worker, never on the framework thread (a TOP pull's 20,000
+    /// events stalled the game at each wipe).
+    /// </summary>
+    public bool HasMechanics() => Timeline.Build(recording).Count > 0;
+
+    private bool recastsRead;
+
+    /// <summary>
+    /// The recording player's own recasts read from the game (<see cref="OwnRecast"/>): on the
+    /// framework thread, as the pull ends, so <see cref="Finish"/> can run on a worker. Finish reads
+    /// them itself when this wasn't called (a test, the save as the plugin unloads).
+    /// </summary>
+    public void ReadOwnRecasts()
+    {
+        OwnRecasts();
+        recastsRead = true;
+    }
 
     /// <summary>
     /// The pull, finished: how long it took and how it ended; the enemies sorted into bosses (the
@@ -991,7 +1011,7 @@ public sealed class RecordingBuilder
             recording.Frames.RemoveAll(f => f.At.Count == 0);
         }
         foreach (var source in casting.Keys.ToList()) Settle(source, t, false);
-        OwnRecasts();
+        if (!recastsRead) OwnRecasts();
         recording.Combat = combat;
         return recording;
     }

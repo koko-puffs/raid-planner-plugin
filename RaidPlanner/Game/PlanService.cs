@@ -136,6 +136,7 @@ public sealed class PlanService : IDisposable
 
     private void OnUpdate(IFramework framework)
     {
+        var started = Stalls.Start();
         try
         {
             Tick();
@@ -144,6 +145,7 @@ public sealed class PlanService : IDisposable
         {
             Services.Log.Error(ex, "Raid Codex's plan couldn't update");
         }
+        Stalls.End("the plan's frame", started);
     }
 
     private void Tick()

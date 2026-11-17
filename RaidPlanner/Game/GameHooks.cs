@@ -96,6 +96,17 @@ public sealed unsafe class GameHooks : IDisposable
     private readonly uint[] targetIds = new uint[EffectBatch.MaxTargets];
     private bool enabled;
 
+    /// <summary>The detours' own time since the frame's start (stopwatch ticks; the game's function's not counted): <see cref="TakeSpentMs"/>.</summary>
+    private long spent;
+
+    /// <summary>The detours' own time over the frame so far (ms), and start counting afresh (the recorder's frame asks, for <see cref="Stalls"/>).</summary>
+    public double TakeSpentMs()
+    {
+        var ms = spent * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        spent = 0;
+        return ms;
+    }
+
     public GameHooks(FightRecorder recorder)
     {
         this.recorder = recorder;
@@ -193,6 +204,7 @@ public sealed unsafe class GameHooks : IDisposable
         ActionEffectHandler.TargetEffects* targetEffects, GameObjectId* targetEntityIds)
     {
         effects!.Original(casterEntityId, casterPtr, targetPos, header, targetEffects, targetEntityIds);
+        var started = Stalls.Start();
         try
         {
             if (header == null || header->ActionId == 0) return;
@@ -258,6 +270,10 @@ public sealed unsafe class GameHooks : IDisposable
         catch (Exception ex)
         {
             Failed(ex, "Raid Codex couldn't read an action effect");
+        }
+        finally
+        {
+            spent += System.Diagnostics.Stopwatch.GetTimestamp() - started;
         }
     }
 
@@ -358,6 +374,7 @@ public sealed unsafe class GameHooks : IDisposable
         GameObjectId targetId, bool isRecorded)
     {
         control!.Original(entityId, category, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, targetId, isRecorded);
+        var started = Stalls.Start();
         try
         {
             // A cast stopped, as sent ([verify] arg2 the action type, arg3 the action, arg4 1 when interrupted).
@@ -372,6 +389,10 @@ public sealed unsafe class GameHooks : IDisposable
         catch (Exception ex)
         {
             Failed(ex, "Raid Codex couldn't read an actor control message");
+        }
+        finally
+        {
+            spent += System.Diagnostics.Stopwatch.GetTimestamp() - started;
         }
     }
 

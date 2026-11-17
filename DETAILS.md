@@ -388,6 +388,27 @@ Since 0.7.4 (the mechanics sweep; still version 1, every key optional):
 combat table whose columns aren't all arrays of the same length, are left out; an optional column not
 as long as its table reads as its default; a value that isn't a number reads as 0; a delta below 0 as 0.
 
+## Stalls (`Game/Stalls.cs`; since 0.7.6)
+
+The plugin's own time on the game's thread is watched, always (it costs a timestamp or two a frame). The
+parts timed:
+- the recorder's frame (`FightRecorder.OnUpdate`);
+- the game's messages its hooks read, summed over the frame (`GameHooks.TakeSpentMs`, the game's own function not
+  counted);
+- the meter's frame and the plan's frame;
+- drawing its windows and overlays (`Plugin.DrawWindows`).
+
+A part over 20 ms in one frame is written to /xllog as a warning ("Raid Codex: the recorder's frame took 63 ms in one
+frame"), each part at most every 5 s. So is a garbage collection that paused the process that long
+(`GC.GetTotalPauseDuration` between frames). That pause is the runtime's, shared with every plugin, and the warning
+says so, with the managed memory then.
+
+Work that's the game's thread's only because it was simple to put there is kept off it:
+- **A pull's end** (`FightRecorder.Keep`): only `RecordingBuilder.ReadOwnRecasts` there. `HasMechanics` and `Finish`
+  run on the save's worker; a pull not `current` any more is touched by nothing else.
+- **An upload's marks** (`LogUploader.Finish`): `MarkSent` and `MarkRefused` on a worker.
+- **Uploads:** none starts while `FightRecorder.InPull`.
+
 ## Diagnostics (`Core/DiagnosticsLog.cs`; Settings → Recording → _Diagnostics_)
 
 Off by default, and **kept as you leave it** (`Configuration.Diagnostics`, since 0.7.5; until then it went off
@@ -1893,6 +1914,21 @@ entry).
 
 - **Smoother replays is on by default.** Where everyone stands is kept four times a second, so the site's replays move
   smoothly. Settings saved before 0.7.6 have it turned on once; turn it off and it stays off.
+- **Less stalling in long fights** (a player's report from The Omega Protocol: inputs dropped, "people
+  teleporting", worse as the night went on):
+  - **A pull's end:** the mechanics check, taking the helpers out of every frame, and settling casts now run on
+    the save's worker, not the game's thread. On a 15-minute pull they took a frame of 50 ms or more, plus tens of
+    megabytes of garbage, at every wipe. Only your own recasts are still read on the game's thread (the game's
+    to read).
+  - **An upload's answer:** marking a pull sent or refused writes two small files, each forced to disk. That's now
+    done on a worker, not the game's thread.
+  - **Uploads wait for the pull to end.** Fitting a long pull's file to the site's 8 MB, then serialising and
+    compressing it, leaves a lot of garbage. Though a worker does it, the garbage collector's pauses stop the game,
+    so a new upload no longer starts during a pull.
+  - **Stalls are written to /xllog.** When the plugin's own work in one frame takes over 20 ms, /xllog gets a
+    warning naming the part (the recorder's frame, the game's messages read, the meter's frame, the plan's frame,
+    drawing its windows), at most every 5 s each. So does a garbage collection that paused the game that long
+    (`Game/Stalls.cs`).
 
 ### 0.7.5
 

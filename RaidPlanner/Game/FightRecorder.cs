@@ -377,6 +377,10 @@ public sealed unsafe class FightRecorder : IDisposable
     private void OnUpdate(IFramework framework)
     {
         if (disposed) return;
+        // What the game waited on (Stalls): the hooks' time since the last frame, this frame's, a long collection.
+        Stalls.Took("reading the game's messages", hooks.TakeSpentMs());
+        Stalls.CheckCollections();
+        var started = Stalls.Start();
         try
         {
             Tick();
@@ -390,6 +394,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 tickFailedAt = DateTime.UtcNow;
             }
         }
+        Stalls.End("the recorder's frame", started);
         try
         {
             // The hooks: on while a pull goes, the meter or anything else wants them, or the moments before a pull are kept;
@@ -667,9 +672,11 @@ public sealed unsafe class FightRecorder : IDisposable
         outcome = null;
         // Only followed: let go of, never kept.
         if (follow) return;
-        if (!b.Worthwhile(t))
+        // Too short: said at once. Whether any mechanic went off is a pass over every event, asked on
+        // the save's worker (Keep), not here: on a long pull it stalled the game as the pull ended.
+        if (t < RecordingBuilder.ShortestKept)
         {
-            NotKept = (t < RecordingBuilder.ShortestKept ? "That pull was too short to keep." : "No mechanics went off in that pull, so it wasn't kept.", DateTime.UtcNow);
+            NotKept = ("That pull was too short to keep.", DateTime.UtcNow);
             return;
         }
         NotKept = null;
@@ -685,7 +692,12 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>A finished pull, written to the store.</summary>
     private void Keep(RecordingBuilder b, double t, Outcome how)
     {
-        var recording = b.Finish(t, how);
+        // Only the game's own recasts are read here (the framework thread's to read); the rest of the
+        // pull's finishing (helpers taken out of every frame, casts settled, the mechanics check) is
+        // the worker's: on a long pull it took a frame of 50 ms or more and a burst of allocations
+        // (the game stalled at each wipe: inputs dropped, people "teleporting"). Once a pull is no
+        // longer `current` nothing else touches its builder.
+        b.ReadOwnRecasts();
         var phase = b.Phase;
         // The phases as the builder counted them (the summary's phases, with its furthest phase), copied for the worker.
         var starts = b.PhaseStarts.ToArray();
@@ -699,6 +711,12 @@ public sealed unsafe class FightRecorder : IDisposable
         {
             try
             {
+                if (!b.HasMechanics())
+                {
+                    if (!disposed) Services.Framework.RunOnFrameworkThread(() => NotKept = ("No mechanics went off in that pull, so it wasn't kept.", DateTime.UtcNow));
+                    return;
+                }
+                var recording = b.Finish(t, how);
                 var info = store.Save(recording);
                 string? summary = null;
                 try

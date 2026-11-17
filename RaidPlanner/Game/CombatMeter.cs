@@ -122,6 +122,7 @@ public sealed unsafe class CombatMeter : IDisposable
     private void OnUpdate(IFramework framework)
     {
         if (disposed) return;
+        var started = Stalls.Start();
         try
         {
             Update();
@@ -130,6 +131,7 @@ public sealed unsafe class CombatMeter : IDisposable
         {
             Failed(ex);
         }
+        Stalls.End("the meter's frame", started);
     }
 
     private void Update()
