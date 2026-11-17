@@ -285,7 +285,7 @@ About 13 to 20 KB a minute more in an eight-player raid. The hooks' detours neve
 everything they do is caught and logged at most every 10 seconds.
 
 At most 20,000 events and 4,800 frames are kept (9,600 at four a second: Settings → Recording →
-_Smoother replays_, since 0.4.0; off). A typical 20-minute pull is about 1.4 MB, and about as much
+_Smoother replays_, since 0.4.0; on since 0.7.5, turned on once for settings saved before it, `SmoothDefault`). A typical 20-minute pull is about 1.4 MB, and about as much
 again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
 
 ## The file (`Core/Recording.cs`)
@@ -1895,6 +1895,8 @@ entry).
   a battle NPC kind of their own) were left out since the first version: only the boss's own casts were kept, so a
   replay showed almost no mechanics and the damage they did to the party was missing from Survival, fails and deaths.
   Their casts, hits, statuses and head markers are recorded now. Recordings made before can't get them back.
+- **Smoother replays is on by default.** Where everyone stands is kept four times a second, so the site's replays move
+  smoothly. Settings saved before 0.7.5 have it turned on once; turn it off and it stays off.
 - **Diagnostics stays on.** Settings → Recording → _Diagnostics_ is kept as you leave it; it no longer turns itself
   off each time the plugin loads.
 
@@ -2073,7 +2075,7 @@ entry).
   (its length, each player's ENCDPS, share and deaths, a line each), for chat.
 - **New columns** in the opened-up window: raises given (Healing), time dead (Taken).
 - Settings → Recording → _Smoother replays_ (under _Record where the party stands_): places four times
-  a second.
+  a second (on by default since 0.7.5).
 - The meter's sample fight has events, a gauge and the new numbers too.
 - **Recorded too** (the site's contract, round four; every new key optional, format still version 1):
   every action and item the party uses (and those in the 30 seconds before the pull, with the

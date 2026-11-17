@@ -224,3 +224,16 @@ public class ArrangeTests
         Assert.Equal(deaths, MeterLayout.Hold(deaths, -1, true));
     }
 }
+
+public class SmoothReplaysTests
+{
+    [Fact]
+    public void TurnedOnOnceForOlderSettingsAndKeptAfter()
+    {
+        // Saved before 0.7.5 with it off: turned on once.
+        Assert.Equal((1, true), RaidPlanner.Core.SmoothDefault.Migrate(0, false));
+        // Turned off after that: it stays off; on stays on.
+        Assert.Equal((1, false), RaidPlanner.Core.SmoothDefault.Migrate(1, false));
+        Assert.Equal((1, true), RaidPlanner.Core.SmoothDefault.Migrate(1, true));
+    }
+}
