@@ -766,6 +766,7 @@ public sealed unsafe class FightRecorder : IDisposable
             var key = (ulong)obj.EntityId;
             int id;
             var member = false;
+            var skipFrame = false;
             if (b.PartyId(key) is { } p)
             {
                 id = p;
@@ -777,8 +778,9 @@ public sealed unsafe class FightRecorder : IDisposable
             {
                 // A field zone: an enemy not in the party's fight is left out until it is (then kept).
                 if (onlyEngaged && b.KnownActor(key) == null && !Engaged(b, npc, you)) continue;
-                // Its name read only while it's needed (a new enemy, or one still nameless): reading it makes a string.
-                id = b.Actor(key, b.NeedsName(key) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
+                // Its name read only while it's needed (a new enemy, or one still nameless, at most once a second): reading it
+                // makes a string.
+                id = b.Actor(key, b.NeedsName(key, t) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
                 var targetable = npc.IsTargetable && !npc.IsDead;
                 if (targetable) b.SeenTargetable(id, npc.MaxHp);
                 else b.SeenMaxHp(id, npc.MaxHp);
@@ -788,11 +790,14 @@ public sealed unsafe class FightRecorder : IDisposable
                 var castingNow = ReadCast(b, t, id, npc);
                 // Its facing and place every frame while it's at a mechanic (since 0.7.4: a rotation's steps, a helper's heading).
                 b.Facing(t, id, npc.Position.X, npc.Position.Z, npc.Rotation, castingNow);
-                if (hp != null) hp[id] = npc.CurrentHp;
+                // A helper never targetable yet has no place or HP in the frames (since 0.7.7): the pull's end takes out every
+                // one never targetable anyway, and dozens a frame for a whole ultimate were tens of MB kept to the end.
+                if (npc.BattleNpcKind == HelperKind && !b.EverTargetable(id)) skipFrame = true;
+                else if (hp != null) hp[id] = npc.CurrentHp;
             }
             else continue;
 
-            if (frame != null) frame[id] = (obj.Position.X, obj.Position.Z, obj.Rotation);
+            if (frame != null && !skipFrame) frame[id] = (obj.Position.X, obj.Position.Z, obj.Rotation);
             if (obj is ICharacter)
             {
                 var chara = (Character*)obj.Address;
@@ -1207,18 +1212,34 @@ public sealed unsafe class FightRecorder : IDisposable
     /// facing only if that isn't a number), with what it did to each party member it hit (the damage,
     /// the hit's flags, their HP before: <see cref="Effects.Taken"/>).
     /// </summary>
+    private readonly List<int> hitTargets = new();
+    private readonly List<long> hitDamage = new();
+    private readonly List<int> hitFx = new();
+    private readonly List<long> hitHp = new();
+    private readonly List<int> hitShield = new();
+    private readonly List<float> hitPx = new();
+    private readonly List<float> hitPz = new();
+
     internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, float rotation, uint action, EffectBatch hit)
     {
         if (disposed) return;
         var b = current;
         if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
-        var targets = new List<int>(hit.Count);
-        var damage = new List<long>(hit.Count);
-        var fx = new List<int>(hit.Count);
-        var hp = new List<long>(hit.Count);
-        var shield = new List<int>(hit.Count);
-        var px = new List<float>(hit.Count);
-        var pz = new List<float>(hit.Count);
+        // Lists reused hit after hit (since 0.7.7): the builder only reads them, and everything here is on the framework thread.
+        var targets = hitTargets;
+        var damage = hitDamage;
+        var fx = hitFx;
+        var hp = hitHp;
+        var shield = hitShield;
+        var px = hitPx;
+        var pz = hitPz;
+        targets.Clear();
+        damage.Clear();
+        fx.Clear();
+        hp.Clear();
+        shield.Clear();
+        px.Clear();
+        pz.Clear();
         for (var i = 0; i < hit.Count; i++)
         {
             if (b.PartyId(hit.Targets[i]) is not { } p) continue;

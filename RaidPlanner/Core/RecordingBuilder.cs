@@ -293,6 +293,32 @@ public sealed class RecordingBuilder
     /// <summary>Is its name still wanted: never seen, or seen without one?</summary>
     public bool NeedsName(ulong key) => !actorIds.TryGetValue(key, out var id) || actorFacts[id].Name.Length == 0;
 
+    /// <summary>How often a nameless enemy's name is read again (seconds): most helpers never have one.</summary>
+    public const double NameEvery = 1.0;
+
+    /// <summary>
+    /// Should its name be read this frame (<paramref name="t"/>): a new enemy always; one seen without a name at most every
+    /// <see cref="NameEvery"/> (since 0.7.7: before, every frame, and reading it makes strings; a fight's helpers mostly have
+    /// none, so a long pull read dozens a frame for nothing).
+    /// </summary>
+    public bool NeedsName(ulong key, double t)
+    {
+        if (!actorIds.TryGetValue(key, out var id)) return true;
+        if (actorFacts[id].Name.Length > 0) return false;
+        if (nameAsked.TryGetValue(id, out var at) && t - at < NameEvery && t >= at) return false;
+        nameAsked[id] = t;
+        return true;
+    }
+
+    private readonly Dictionary<int, double> nameAsked = new();
+
+    // Hit's scratch: which targets are kept (their places in the lists), and those seen.
+    private readonly List<int> hitKeep = new();
+    private readonly HashSet<int> hitSeen = new();
+
+    /// <summary>Could it be targeted at some point so far (a boss or an add; one that never is, is a helper at the end)?</summary>
+    public bool EverTargetable(int actor) => targetable.Contains(actor);
+
     /// <summary>Who someone is in the recording: a party member's number, an enemy's, or 0.</summary>
     public int Who(ulong key) => partyIds.TryGetValue(key, out var p) ? p : actorIds.TryGetValue(key, out var a) ? a : 0;
 
@@ -424,27 +450,44 @@ public sealed class RecordingBuilder
         if (hp != null && hp.Count != targets.Count) hp = null;
         if (shield != null && shield.Count != targets.Count) shield = null;
         if (px == null || pz == null || px.Count != targets.Count || pz.Count != targets.Count) px = pz = null;
-        // Each target once (the first), the lists kept in step.
-        var keep = new List<int>(targets.Count);
-        var seen = new HashSet<int>();
+        // Each target once (the first), the lists kept in step. (Since 0.7.7 by loops into lists reused, not LINQ: a long
+        // pull has thousands of hits; the caller's lists are only read, never kept.)
+        var keep = hitKeep;
+        keep.Clear();
+        hitSeen.Clear();
         for (var i = 0; i < targets.Count; i++)
-            if (targets[i] > 0 && seen.Add(targets[i]))
+            if (targets[i] > 0 && hitSeen.Add(targets[i]))
                 keep.Add(i);
-        var hit = keep.Select(i => targets[i]).ToList();
-        var dmg = damage == null ? null : keep.Select(i => Math.Max(0, damage[i])).ToList();
-        var flags = fx == null ? null : keep.Select(i => fx[i]).ToList();
-        var before = hp == null ? null : keep.Select(i => hp[i] < 0 ? -1 : hp[i]).ToList();
-        var sh = shield == null ? null : keep.Select(i => shield[i] is >= 0 and <= 100 ? shield[i] : -1).ToList();
-        var xs = px == null ? null : keep.Select(i => px[i]).ToList();
-        var zs = pz == null ? null : keep.Select(i => pz![i]).ToList();
-        for (var k = 0; k < hit.Count; k++)
+        foreach (var i in keep)
         {
-            if (hit[k] > 100) continue;
-            var instant = flags != null && (flags[k] & Meter.Effects.FxInstantDeath) != 0;
-            var did = dmg == null || dmg[k] > 0 || instant;
-            if (did) Struck(hit[k], (t, action, source, false), instant || (dmg != null && before != null && before[k] >= 0 && dmg[k] >= before[k]));
+            var on = targets[i];
+            if (on > 100) continue;
+            var dmgI = damage == null ? -1 : Math.Max(0, damage[i]);
+            var instant = fx != null && (fx[i] & Meter.Effects.FxInstantDeath) != 0;
+            var did = damage == null || dmgI > 0 || instant;
+            var hpBefore = hp == null ? -1 : hp[i] < 0 ? -1 : hp[i];
+            if (did) Struck(on, (t, action, source, false), instant || (damage != null && hp != null && hpBefore >= 0 && dmgI >= hpBefore));
         }
-        if (keepIt) recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before, sh, xs, zs));
+        if (!keepIt) return;
+        var n = keep.Count;
+        var hit = new List<int>(n);
+        var dmg = damage == null ? null : new List<long>(n);
+        var flags = fx == null ? null : new List<int>(n);
+        var before = hp == null ? null : new List<long>(n);
+        var sh = shield == null ? null : new List<int>(n);
+        var xs = px == null ? null : new List<float>(n);
+        var zs = pz == null ? null : new List<float>(n);
+        foreach (var i in keep)
+        {
+            hit.Add(targets[i]);
+            dmg?.Add(Math.Max(0, damage![i]));
+            flags?.Add(fx![i]);
+            before?.Add(hp![i] < 0 ? -1 : hp![i]);
+            sh?.Add(shield![i] is >= 0 and <= 100 ? shield![i] : -1);
+            xs?.Add(px![i]);
+            zs?.Add(pz![i]);
+        }
+        recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before, sh, xs, zs));
     }
 
     /// <summary>
@@ -556,17 +599,34 @@ public sealed class RecordingBuilder
         combat.Statuses.Add(row);
     }
 
-    /// <summary>The frame's statuses are read: those gone from the ones read are recorded as gone.</summary>
+    /// <summary>
+    /// Someone not read this long (seconds: gone from the game's objects, an enemy that left) has their statuses recorded as
+    /// gone, as of the last time they were read (since 0.7.7: before, they lasted to the pull's end on the site, and were
+    /// gone through every frame).
+    /// </summary>
+    public const double StatusLost = 5.0;
+
+    private readonly Dictionary<int, double> statusReadAt = new();
+
+    /// <summary>
+    /// The frame's statuses are read: those gone from the ones read are recorded as gone, and so are those of someone not
+    /// read for <see cref="StatusLost"/>.
+    /// </summary>
     public void EndStatuses(double t)
     {
+        foreach (var on in statusRead) statusReadAt[on] = t;
         if (statuses.Count == 0) return;
         statusGone.Clear();
         foreach (var (key, k) in statuses)
         {
-            if (statusSeen.Contains(key) || !statusRead.Contains(key.On)) continue;
+            if (statusSeen.Contains(key)) continue;
+            double at;
+            if (statusRead.Contains(key.On)) at = t;
+            else if (statusReadAt.TryGetValue(key.On, out var last) && t - last >= StatusLost) at = last;
+            else continue;
             statusGone.Add(key);
-            if (k.From == StatusFrom.Enemy && RoomForMany) recording.Events.Add(new StatusEvent(t, key.On, key.Id, 0, 0, false));
-            else if (k.From == StatusFrom.Party) AddStatusRow(new StatusRow(t, key.On, k.Source, key.Id, k.Action, 0, 0, false));
+            if (k.From == StatusFrom.Enemy && RoomForMany) recording.Events.Add(new StatusEvent(at, key.On, key.Id, 0, 0, false));
+            else if (k.From == StatusFrom.Party) AddStatusRow(new StatusRow(at, key.On, k.Source, key.Id, k.Action, 0, 0, false));
         }
         foreach (var key in statusGone) statuses.Remove(key);
     }
@@ -959,9 +1019,14 @@ public sealed class RecordingBuilder
     {
         if (!WantsFrame(t)) return;
         lastFrame = t;
-        var kept = at.Where(kv => kv.Key > 100 || recording.PartyPositions).ToDictionary(kv => kv.Key, kv => kv.Value);
+        // Since 0.7.7 the caller's dictionaries become the frame's when nothing in them is left out (the recorder makes new
+        // ones each frame), not copied again: a long pull's frames are thousands of them.
+        var kept = recording.PartyPositions || AllEnemies(at.Keys)
+            ? at
+            : at.Where(kv => kv.Key > 100).ToDictionary(kv => kv.Key, kv => kv.Value);
         if (kept.Count == 0) return;
-        var hpKept = hp?.Where(kv => kept.ContainsKey(kv.Key)).ToDictionary(kv => kv.Key, kv => Math.Max(0, kv.Value));
+        IReadOnlyDictionary<int, long>? hpKept = hp;
+        if (hp != null && !HpFits(hp, kept)) hpKept = hp.Where(kv => kept.ContainsKey(kv.Key)).ToDictionary(kv => kv.Key, kv => Math.Max(0, kv.Value));
         recording.Frames.Add(new Frame(t, kept, hpKept is { Count: > 0 } ? hpKept : null));
     }
 
@@ -989,6 +1054,21 @@ public sealed class RecordingBuilder
     {
         OwnRecasts();
         recastsRead = true;
+    }
+
+    private static bool AllEnemies(IEnumerable<int> ids)
+    {
+        foreach (var id in ids)
+            if (id <= 100) return false;
+        return true;
+    }
+
+    /// <summary>Every HP is someone kept, and none below 0: the frame can keep the dictionary as it is.</summary>
+    private static bool HpFits(IReadOnlyDictionary<int, long> hp, IReadOnlyDictionary<int, (float X, float Z, float Rotation)> kept)
+    {
+        foreach (var (id, v) in hp)
+            if (v < 0 || !kept.ContainsKey(id)) return false;
+        return true;
     }
 
     /// <summary>
