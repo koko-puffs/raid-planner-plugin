@@ -565,6 +565,8 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>A pull begins: recorded, or (<paramref name="follow"/>) only followed for the plan window.</summary>
     private void Start(bool follow)
     {
+        // No full collection stops the game while the pull goes (since 0.7.9: QuietCollections).
+        QuietCollections.PullBegan();
         ReleaseHeld();
         followOnly = follow;
         var territory = Services.ClientState.TerritoryType;
@@ -659,6 +661,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var follow = followOnly;
         if (b != null) pullEnd = Now;
         current = null;
+        QuietCollections.PullEnded();
         followOnly = false;
         Combat.Remove(sink);
         hooks.Set(MeterWants || prePullOn || WantedByOthers());
@@ -1361,6 +1364,7 @@ public sealed unsafe class FightRecorder : IDisposable
         {
             // The game's functions are let go of first, whatever happens after.
             Guarded(hooks.Dispose);
+            Guarded(QuietCollections.PullEnded);
             Guarded(() => Services.Framework.Update -= OnUpdate);
             Guarded(() => Services.DutyState.DutyWiped -= OnWiped);
             Guarded(() => Services.DutyState.DutyCompleted -= OnCompleted);

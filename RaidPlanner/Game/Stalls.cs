@@ -46,10 +46,15 @@ internal static class Stalls
         var ms = (now - paused).TotalMilliseconds;
         paused = now;
         var g2 = GC.CollectionCount(2);
-        var full = g2 != gen2;
         gen2 = g2;
         if (ms < SlowMs || !Due("gc")) return;
-        Services.Log.Warning($"Raid Codex: garbage collection paused the game for {ms:0} ms{(full ? " (a full collection)" : "")} (the process's, every plugin's together; managed memory {GC.GetTotalMemory(false) / (1024 * 1024)} MB)");
+        // What kind (since 0.7.9): a full one that stopped everything, whether it compacted, how much of the heap was
+        // gaps, and whether a pull had collections quiet (QuietCollections: then only one something asked for, or one
+        // the system needed, stops the game).
+        var info = GC.GetGCMemoryInfo(GCKind.Any);
+        var kind = info.Generation >= 2 ? (info.Concurrent ? "a full background collection" : "a full blocking collection") : $"a generation {info.Generation} collection";
+        var mb = (long b) => b / (1024 * 1024);
+        Services.Log.Warning($"Raid Codex: garbage collection paused the game for {ms:0} ms ({kind}{(info.Compacted ? ", compacting" : "")}; the process's, every plugin's together; managed memory {GC.GetTotalMemory(false) / (1024 * 1024)} MB, {mb(info.FragmentedBytes)} MB of it gaps; quiet collections {(QuietCollections.On ? "on (a pull)" : "off")})");
     }
 
     private static bool Due(string part)

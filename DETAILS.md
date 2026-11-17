@@ -421,7 +421,17 @@ parts timed:
 A part over 20 ms in one frame is written to /xllog as a warning ("Raid Codex: the recorder's frame took 63 ms in one
 frame"), each part at most every 5 s. So is a garbage collection that paused the process that long
 (`GC.GetTotalPauseDuration` between frames). That pause is the runtime's, shared with every plugin, and the warning
-says so, with the managed memory then.
+says so, with the managed memory then; since 0.7.9 also what kind (a full blocking or background collection, a
+generation 0 or 1), whether it compacted, how much of the heap was gaps, and whether quiet collections were on.
+
+**Quiet collections** (`Game/QuietCollections.cs`; since 0.7.9). While a pull goes (recorded or followed) the runtime is
+asked not to stop the game for a full collection (`GCSettings.LatencyMode = SustainedLowLatency`: a full one runs in the
+background instead), and set back as it was when the pull ends or the plugin unloads. After a 970 ms pause in a trial's
+second phase: every plugin shares one heap (3.2 GB that night, mostly other plugins' files: a character-sync plugin had
+just finished an upload), and whichever allocates when a full collection is due stops the game for it. The setting is
+the process's, so it's only taken when nothing else has asked for a low latency, and only given back if it's still
+ours. It can't stop a collection a plugin asks for itself (`GC.Collect`) or one the system needs short of memory; those
+are still said in /xllog. It costs a little memory while on, never time.
 
 Work that's the game's thread's only because it was simple to put there is kept off it:
 - **A pull's end** (`FightRecorder.Keep`): only `RecordingBuilder.ReadOwnRecasts` there. `HasMechanics` and `Finish`
@@ -1960,7 +1970,14 @@ entry).
 
 ## Release notes
 
-### 0.7.8 (not released yet)
+### 0.7.9 (not released yet)
+
+- **No full garbage collection stops the game during a pull.** Every plugin shares one memory heap; when it's big (other
+  plugins' files: 3.2 GB in one report) a full collection can stop the game for a second, whoever set it off. While a
+  pull goes the plugin now asks the runtime to do those in the background, and sets it back after. A collection a plugin
+  forces itself can still pause the game, and /xllog says what kind each long pause was.
+
+### 0.7.8
 
 More of 0.7.6's and 0.7.7's work on stalls in long fights, and fixes from a scan of the whole plugin:
 
