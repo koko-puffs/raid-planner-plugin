@@ -153,6 +153,15 @@ public sealed unsafe class FightRecorder : IDisposable
     private const float HelperNear = 70f;
 
     /// <summary>
+    /// The game's invisible helpers (BNpcBase 9020, 0x233C, and their kin): the actors that cast nearly every
+    /// real AoE of a fight, the boss's own cast mostly the name over its head. A battle NPC of sub-kind 11, which
+    /// Dalamud's <see cref="BattleNpcSubKind"/> has no name for (BossMod's <c>ActorType.Helper = 0x20B</c>: battle
+    /// NPC 2 &lt;&lt; 8, sub-kind 11). Until 0.7.5 only combatants (5) and their parts (1) were read, so every
+    /// helper's cast, hit, status and marker was left out and a replay showed almost no mechanics.
+    /// </summary>
+    internal const BattleNpcSubKind HelperKind = (BattleNpcSubKind)11;
+
+    /// <summary>
     /// Whom the party targeted or was tethered to last frame (entity ids), and this frame so far: an
     /// enemy you're fighting is in your fight even before it turns to you.
     /// </summary>
@@ -744,7 +753,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 // Whom they're fighting (the low half of a target's id is its entity id).
                 if (onlyEngaged && (uint)obj.TargetObjectId is var aim and not (0 or InvalidId)) partyTouching.Add(aim);
             }
-            else if (obj is IBattleNpc npc && npc.BattleNpcKind == BattleNpcSubKind.Combatant)
+            else if (obj is IBattleNpc npc && npc.BattleNpcKind is BattleNpcSubKind.Combatant or HelperKind)
             {
                 // A field zone: an enemy not in the party's fight is left out until it is (then kept).
                 if (onlyEngaged && b.KnownActor(key) == null && !Engaged(b, npc, you)) continue;
@@ -1041,7 +1050,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (obj == null) return (StatusFrom.Enemy, 0, 0);
         if (obj is IBattleNpc npc && npc.OwnerId is not (0 or InvalidId))
             return b.PartyId(npc.OwnerId) is { } owner ? (StatusFrom.Party, owner, npc.OwnerId) : (StatusFrom.Other, 0, 0);
-        if (obj is IBattleNpc enemy && enemy.BattleNpcKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)
+        if (obj is IBattleNpc enemy && enemy.BattleNpcKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)
             return (StatusFrom.Enemy, b.Actor(src, enemy.Name.TextValue, enemy.HitboxRadius, enemy.BaseId), 0);
         return (StatusFrom.Other, 0, 0);
     }
@@ -1209,7 +1218,7 @@ public sealed unsafe class FightRecorder : IDisposable
             // never a pet or a summon (theirs are the party's own actions).
             if (caster == null || caster->GameObject.ObjectKind != FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc) return;
             var kind = (BattleNpcSubKind)caster->GameObject.SubKind;
-            if (kind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) return;
+            if (kind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)) return;
             if (caster->GameObject.OwnerId is not (0 or InvalidId)) return;
             // A field zone: one that hit none of the party, away from you, is someone else's fight.
             if (onlyEngaged && targets.Count == 0
@@ -1263,7 +1272,7 @@ public sealed unsafe class FightRecorder : IDisposable
     private int? EnemyNotSeen(RecordingBuilder b, uint entityId)
     {
         if (Services.Objects.SearchByEntityId(entityId) is not IBattleNpc npc) return null;
-        if (npc.BattleNpcKind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart)) return null;
+        if (npc.BattleNpcKind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)) return null;
         if (npc.OwnerId is not (0 or InvalidId)) return null;
         if (onlyEngaged && !(Services.Objects.LocalPlayer?.Position is { } you && Near(you, npc.Position))) return null;
         return b.Actor(entityId, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId);
