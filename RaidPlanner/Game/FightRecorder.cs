@@ -462,10 +462,11 @@ public sealed unsafe class FightRecorder : IDisposable
         if (agent == null) return;
         countdown.Frame(now, agent->Active, agent->TimeRemaining);
         // The countdown's agent as read ([verify]), as it starts and stops.
-        if (agent->Active != diagCountdown && Diagnostics.Room())
+        // Noted as changed first, then written if there's room: a full log counts one line lost, not one a frame.
+        if (Diagnostics.On && agent->Active != diagCountdown)
         {
             diagCountdown = agent->Active;
-            Diagnostics.Write("countdown", $"active {agent->Active} remaining {agent->TimeRemaining:0.000}");
+            if (Diagnostics.Room()) Diagnostics.Write("countdown", $"active {agent->Active} remaining {agent->TimeRemaining:0.000}");
         }
     }
 
@@ -852,10 +853,10 @@ public sealed unsafe class FightRecorder : IDisposable
         var lb = LimitBreakController.Instance();
         if (lb == null) return;
         b.LimitGauge(t, lb->CurrentUnits, lb->BarCount * lb->BarUnits);
-        if ((lb->CurrentUnits, lb->BarCount, lb->BarUnits) != diagGauge && Diagnostics.Room())
+        if (Diagnostics.On && (lb->CurrentUnits, lb->BarCount, lb->BarUnits) != diagGauge)
         {
             diagGauge = (lb->CurrentUnits, lb->BarCount, lb->BarUnits);
-            Diagnostics.Write("lb-gauge", $"units {lb->CurrentUnits} bars {lb->BarCount} barUnits {lb->BarUnits}");
+            if (Diagnostics.Room()) Diagnostics.Write("lb-gauge", $"units {lb->CurrentUnits} bars {lb->BarCount} barUnits {lb->BarUnits}");
         }
     }
 

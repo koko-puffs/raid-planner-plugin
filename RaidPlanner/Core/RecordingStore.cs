@@ -172,9 +172,18 @@ public sealed class RecordingStore
                         // Not a recording (or one that can't be read): left alone, out of the list.
                     }
                 }
-                // The sent marks are kept apart from the index, so a lost index doesn't lose them.
+                // The sent marks are kept apart from the index, so a lost index doesn't lose them. And one made in memory but
+                // not written yet (a mark waits for the disk outside the list's lock) is kept, never read over.
+                var marked = new Dictionary<string, RecordingInfo>(StringComparer.OrdinalIgnoreCase);
+                foreach (var i in items)
+                    if (i.SentId != null || i.UploadRefused != null) marked.TryAdd(i.File, i);
                 for (var i = 0; i < list.Count; i++)
                 {
+                    if (marked.TryGetValue(list[i].File, out var had))
+                    {
+                        if (list[i].SentId == null && had.SentId != null) list[i] = list[i] with { SentId = had.SentId, SentAt = had.SentAt };
+                        if (list[i].UploadRefused == null && had.UploadRefused != null) list[i] = list[i] with { UploadRefused = had.UploadRefused };
+                    }
                     if (list[i].SentId == null && marks.Sent.TryGetValue(list[i].File, out var sent))
                         list[i] = list[i] with { SentId = sent.Id, SentAt = sent.At };
                     if (list[i].UploadRefused == null && marks.Refused.TryGetValue(list[i].File, out var why))
@@ -317,8 +326,9 @@ public sealed class RecordingStore
 
     /// <summary>
     /// Since 0.7.7, for the window: a pull is out of the list at once (<see cref="All"/> no longer has it), and its file's
-    /// delete and the index's and marks' writes are done on a worker, in turn with every other write. Until then it's
-    /// marked gone, so a crash meanwhile still lets it go at the next load. Never waits on the disk.
+    /// delete and the index's and marks' writes are done on a worker, in turn with every other write. The marks (with it
+    /// gone) are written before its file is deleted, so a crash after that still lets it go at the next load; one before
+    /// it brings it back. Never waits on the disk.
     /// </summary>
     public Task DeleteLater(RecordingInfo info)
     {
@@ -408,7 +418,6 @@ public sealed class RecordingStore
     {
         lock (disk)
         {
-            DeleteDropped();
             IReadOnlyList<RecordingInfo> list;
             string[] goneNow;
             long change;
@@ -418,11 +427,16 @@ public sealed class RecordingStore
                 list = snapshot;
                 goneNow = gone.ToArray();
             }
-            if (change <= written) return;
-            // The marks first: they're what can't be made again from the files.
-            if (marks) WriteMarks(Folder, list, goneNow);
-            if (index) WriteIndex(Folder, list);
-            if (index && marks) written = change;
+            if (change > written)
+            {
+                // The marks first: they're what can't be made again from the files (and say which are gone).
+                if (marks) WriteMarks(Folder, list, goneNow);
+                if (index) WriteIndex(Folder, list);
+                if (index && marks) written = change;
+            }
+            // Then the files let go of, once the marks say they're gone (one deleted is struck off them at the next write;
+            // one still listed is only tried again at the next load).
+            DeleteDropped();
         }
     }
 

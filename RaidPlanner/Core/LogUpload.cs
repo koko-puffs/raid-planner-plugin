@@ -159,8 +159,10 @@ public static class LogUpload
             429 or 503 => new UploadAnswer(UploadOutcome.Wait, Why: "The site is busy.", Wait: wait ?? TimeSpan.FromMinutes(1)),
             404 => new UploadAnswer(UploadOutcome.Pause, Why: "The site can't take uploads right now. The plugin may need updating.", Wait: OffPause),
             >= 500 => new UploadAnswer(UploadOutcome.Retry, Why: $"The site had a problem ({status})."),
-            // A 4xx the contract doesn't name: about this pull, not the site being down.
-            _ => new UploadAnswer(UploadOutcome.Retry, Why: $"The site said no ({status}).", ThisPull: status is >= 400 and < 500),
+            // A 4xx the contract doesn't name: about this pull, not the site being down; but for those about the way there (a
+            // firewall's 403, a proxy's 407, a timeout's 408, 421, 425), which any pull would get.
+            _ => new UploadAnswer(UploadOutcome.Retry, Why: $"The site said no ({status}).",
+                ThisPull: status is >= 400 and < 500 and not (403 or 407 or 408 or 421 or 425)),
         };
     }
 

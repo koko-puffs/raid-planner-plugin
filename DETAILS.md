@@ -300,9 +300,10 @@ everything they do is caught and logged at most every 10 seconds.
 At most 20,000 events and 4,800 frames are kept (9,600 at four a second: Settings → Recording →
 _Smoother replays_, since 0.4.0; on since 0.7.6, turned on once for settings saved before it, `SmoothDefault`). A typical 20-minute pull is about 1.4 MB, and about as much
 again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
-Since 0.7.7 the 20,000 is shared out (`RecordingBuilder.MaxMany`, `DeathRoom`): the many (hits, statuses, aggro)
-stop at 16,000, so the rest is kept for the few that show the fight (casts, markers, tethers, targets, map effects,
-waymarks, signs, cancels); deaths and raises go 1,000 past it. A hit not kept still counts as a death's cause.
+Since 0.7.7 the 20,000 is shared out (`RecordingBuilder.MaxMany`, `DeathRoom`): the many (auto-attacks, statuses,
+aggro) stop at 16,000, so the rest is kept for the few that show the fight (casts, any other hit, since a helper's AoE
+often has no cast, markers, tethers, targets, map effects, waymarks, signs, cancels); deaths and raises go 1,000 past
+it. A hit not kept still counts as a death's cause.
 Before, whichever came first filled it, and a pull at the cap lost its late mechanics and deaths alike. The
 turns (3,000, `MaxTurns`) never count toward it; nor does the site's ranker, which doesn't rank a pull with
 20,000 or more events but its turns (it may have lost what came late).
@@ -496,7 +497,9 @@ is still writing (`saving`: before, a load at that moment could put it in place 
 and deleted the pull), and an empty pull file left by a crash during a save (not in the index, not being saved) is
 deleted. Deleting a pull (the window's) takes it off the list at once and does the disk work on a worker
 (`DeleteLater`); every index and marks write is one at a time, always of the latest list (`Persist`, its own lock),
-and no save, mark or delete holds the list's lock while it writes, so the window never waits on the disk. Names in
+and no save, mark or delete holds the list's lock while it writes, so the window never waits on the disk. The marks
+are written before the files let go of are deleted (a crash between leaves them marked gone, deleted at the next load),
+and a load keeps a mark made in memory that's still waiting for its write. Names in
 the index and the marks count only as plain file names ending `.raidrec.json` (never a folder, a
 drive or the index), and unloading waits a few seconds for pulls still being written. A file that can't be read (not a
 recording, a duplicate key, a value of the wrong kind) is left out of the list, never the list
@@ -613,7 +616,8 @@ off) is set aside half an hour, doubling to six hours each time it fails again, 
 (`UploadQueue.Aside`), so one pull the site can't take never holds up the rest; a success or Resume forgets it.
 Since 0.7.7 setting a pull aside starts the wait over only when its failures were its own (its file unreadable,
 another 4xx: `UploadAnswer.ThisPull`); when they were the connection's or the site's (no connection, no answer, 5xx,
-busy, the hourly limit) the wait keeps growing to 15 minutes until an upload goes through, where before each pull in
+busy, the hourly limit, and a 4xx about the way there: 403, 407, 408, 421, 425) the wait keeps growing to 15 minutes
+until an upload goes through, where before each pull in
 turn was read, compressed and sent again back to back. A pull just uploaded or refused isn't picked again until the
 list shows its mark (or the mark fails: `UploadQueue.Settled`), so a slow disk can't send it twice.
 A clock set back by more than a wait counts as waited. An answer for a call made before the token changed is
@@ -1967,8 +1971,9 @@ entry).
     seven times the file, on the large-object heap, at every pull kept. It's now written straight to the file, 64 KB
     at a time, with each frame's ids sorted and named once, not per frame: a 2.5 MB file went from 15 MB of
     garbage to under 1 MB. The file is the same, byte for byte.
-- **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, hits, statuses and aggro
-  changes now stop at 16,000, so the casts, markers, tethers and the rest late in the pull aren't lost to them;
+- **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, auto-attacks, statuses and
+  aggro changes now stop at 16,000, so the casts, mechanics' hits, markers, tethers and the rest late in the pull aren't
+  lost to them;
   deaths and raises are kept 1,000 past the 20,000. A hit that isn't kept still names what killed someone.
 - **Less work each frame and each hit in a long fight:**
   - The fight's invisible helpers are no longer put in the frames while they've never been targetable (they were

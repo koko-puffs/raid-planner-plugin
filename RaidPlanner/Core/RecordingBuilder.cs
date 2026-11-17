@@ -57,7 +57,7 @@ public sealed class RecordingBuilder
     public const int MaxEvents = 20000;
 
     /// <summary>
-    /// Since 0.7.7: the many (hits, statuses, aggro) stop here, so the last <see cref="MaxEvents"/> less this is kept for the
+    /// Since 0.7.7: the many (auto-attacks, statuses, aggro) stop here, so the last <see cref="MaxEvents"/> less this is kept for the
     /// few that show the fight (casts, markers, tethers, targets, map effects, waymarks and the rest). Before, whichever came
     /// first filled the 20,000, and a long pull's late mechanics could be lost to its hits.
     /// </summary>
@@ -353,7 +353,7 @@ public sealed class RecordingBuilder
     /// <summary>Room for one more of the few (a cast, a marker, a tether...).</summary>
     private bool Room => EventsKept < MaxEvents;
 
-    /// <summary>Room for one more of the many (a hit, a status, an aggro change).</summary>
+    /// <summary>Room for one more of the many (an auto-attack, a status, an aggro change).</summary>
     private bool RoomForMany => EventsKept < MaxMany;
 
     /// <summary>Room for one more death or raise.</summary>
@@ -441,9 +441,11 @@ public sealed class RecordingBuilder
         if (source == 0 || action == 0) return;
         // An auto-attack isn't a mechanic: a boss swinging at its tank as it follows them round would keep it "at a
         // mechanic" most of a pull, and its turns would fill MaxTurns long before the mechanics late in a long pull.
-        if (!AutoAttack(action)) Busy(source, t);
-        // Past MaxMany the hit isn't kept, but it still counts as a death's cause (its action named in the file).
-        var keepIt = RoomForMany;
+        var auto = AutoAttack(action);
+        if (!auto) Busy(source, t);
+        // An auto-attack is one of the many (MaxMany); any other hit is a mechanic (a helper's AoE often has no cast at all),
+        // with the few's room. One not kept still counts as a death's cause (its action named in the file).
+        var keepIt = auto ? RoomForMany : Room;
         Remember(action);
         if (damage != null && damage.Count != targets.Count) damage = null;
         if (fx != null && fx.Count != targets.Count) fx = null;

@@ -132,7 +132,9 @@ public class MechanicsTests
     [Fact]
     public void Hits_and_statuses_never_crowd_out_the_mechanics_or_the_deaths()
     {
-        var b = Builder();
+        // Actions 7 and 9 are auto-attacks (category 1): the many; any other hit is a mechanic, with the few's room.
+        var b = new RecordingBuilder(new DutyInfo("Test", 1, 1), 1, DateTimeOffset.UnixEpoch, true, "0.7.7",
+            a => a is 7 or 9 ? new ActionInfo("Attack", 0, 0, 0, string.Empty, 0, Category: 1) : new ActionInfo("Spiral", 3, 30, 0, "gl_fan030_1bf", 1));
         b.SetParty(new[] { new Partier(11, "PLD", 1), new Partier(12, "WAR", 1) });
         b.Alive(0, 1, false);
         b.Alive(0, 2, false);
@@ -147,7 +149,9 @@ public class MechanicsTests
         b.Cast(2, boss, 8, 3, 100, 100, 0, 0, null, null);
         b.Marker(2, 1, 50);
         b.StatusGained(2, 2, 900, 5, StatusFrom.Enemy, boss, 0, 10f);
-        // A hit not kept still says what killed them.
+        // A castless mechanic's hit is kept past the many's share.
+        b.Hit(2.5, boss, 10, 100, 100, 0, 100, 105, new[] { 1 });
+        // An auto-attack not kept still says what killed them.
         b.Hit(3, boss, 9, 100, 100, 0, 100, 105, new[] { 2 });
         b.Alive(4, 2, true);
         // The few fill the rest; deaths and raises have room past them.
@@ -155,16 +159,17 @@ public class MechanicsTests
         b.Alive(8, 2, false);
         b.Alive(9, 1, true);
         var r = b.Finish(10, Outcome.Wipe);
-        Assert.Equal(RecordingBuilder.MaxMany, r.Events.Count(e => e is HitEvent or AggroEvent));
         Assert.Single(r.Events.OfType<CastEvent>(), c => c.Action == 8);
         Assert.Single(r.Events.OfType<MarkerEvent>(), m => m.Icon == 50);
         Assert.Empty(r.Events.OfType<StatusEvent>());
         Assert.DoesNotContain(r.Events.OfType<HitEvent>(), h => h.Action == 9);
+        Assert.Single(r.Events.OfType<HitEvent>(), h => h.Action == 10);
         var deaths = r.Events.OfType<DeathEvent>().ToList();
         Assert.Equal(2, deaths.Count);
         Assert.Equal(9u, deaths[0].By);
         Assert.Single(r.Events.OfType<RaiseEvent>());
         Assert.Equal(RecordingBuilder.MaxEvents + 2, r.Events.Count(e => e is not TurnEvent));
+        Assert.Equal(RecordingBuilder.MaxMany, r.Events.Count(e => e is HitEvent { Action: 7 } or AggroEvent));
     }
 
     [Fact]
