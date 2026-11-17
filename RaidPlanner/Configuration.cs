@@ -27,10 +27,17 @@ public sealed class Configuration : IPluginConfiguration
     public bool RecordParty { get; set; } = true;
 
     /// <summary>
-    /// Settings → Recording → Smoother replays (0.4.0; off): where everyone stands kept four times a second, not two
-    /// (bigger files: about 30 KB more a minute of an eight-player pull; sending thins them back to two when it must).
+    /// Settings → Recording → Smoother replays (0.4.0; on since 0.7.5, off before): where everyone stands kept four
+    /// times a second, not two (bigger files: about 30 KB more a minute of an eight-player pull; sending thins them back
+    /// to two when it must). Turned on once for settings saved before 0.7.5 (<see cref="SmoothVersion"/>).
     /// </summary>
-    public bool SmoothReplays { get; set; }
+    public bool SmoothReplays { get; set; } = true;
+
+    /// <summary>
+    /// 1 once Smoother replays has been turned on by default (0.7.5, <see cref="Migrate"/>): settings saved before it had
+    /// it off unless chosen, so it's turned on once; turned off after that, it stays off.
+    /// </summary>
+    public int SmoothVersion { get; set; }
 
     /// <summary>How many pulls are kept; the oldest go past it.</summary>
     public int Keep { get; set; } = 20;
@@ -266,6 +273,13 @@ public sealed class Configuration : IPluginConfiguration
         if (arrange != (MeterArrangeVersion, MeterHead, MeterOrder))
         {
             (MeterArrangeVersion, MeterHead, MeterOrder) = arrange;
+            changed = true;
+        }
+        // 0.7.5: Smoother replays on by default, once (turned off after this, it stays off).
+        var smooth = Core.SmoothDefault.Migrate(SmoothVersion, SmoothReplays);
+        if (smooth != (SmoothVersion, SmoothReplays))
+        {
+            (SmoothVersion, SmoothReplays) = smooth;
             changed = true;
         }
         // 0.7.0: the compact meter isn't sized by hand (its width is its theme's, its height its rows'):

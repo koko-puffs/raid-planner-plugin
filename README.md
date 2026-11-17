@@ -77,7 +77,7 @@ with `/rc` in place of `/raidcodex`.
 - **In every duty**: off. On, dungeons and field operations are recorded too (never the Occult
   Crescent).
 - **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
-  working out your own strats. _Smoother replays_ (off) keeps their places four times a second.
+  working out your own strats. _Smoother replays_ (on) keeps their places four times a second.
 - **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first; pulls still to
   be uploaded are held (up to 200).
 - **Upload my logs**: on (once linked). Every pull goes whole to your logs on the Raid Codex as it
