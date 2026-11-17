@@ -87,7 +87,7 @@ public static class SiteLink
     /// says what it lost (<c>combat.thinned</c>). Null when even that's too big (a pull with more events than
     /// the site takes).
     /// </summary>
-    public static (string Json, bool Thinned)? Fit(string json) => Fit(json, MaxBytes, ServerSize);
+    public static (string Json, bool Thinned)? Fit(string json) => Fit(json, MaxBytes, SizeRule.Server);
 
     /// <summary>
     /// <see cref="Fit(string)"/> to another limit, measured another way (since 0.6.0: an upload's, <see cref="LogUpload.Fit"/>, by its
@@ -96,6 +96,104 @@ public static class SiteLink
     public static (string Json, bool Thinned)? Fit(string json, int max, Func<string, int> size)
     {
         if (size(json) <= max) return (json, false);
+        if (Steps(json) is not { } steps) return null;
+        foreach (var candidate in steps)
+        {
+            var text = candidate.ToJson();
+            if (size(text) <= max) return (text, true);
+        }
+        return null;
+    }
+
+    /// <summary>How a recording's size is counted: its UTF-8 bytes (an upload's), or as the database counts it (<see cref="ServerSize"/>, a send's).</summary>
+    public enum SizeRule
+    {
+        Utf8,
+        Server,
+    }
+
+    /// <summary>
+    /// <see cref="Fit(string, int, Func{string, int})"/> with <paramref name="rule"/>'s count, the same answer to the byte
+    /// (tested: <c>ThinningTests</c>), but each step only measured, as its JSON is written into a counter, not made into a
+    /// string: only the one that fits is. Since 0.7.6: a long pull's file thinned up to a dozen times left hundreds of
+    /// megabytes of strings behind, and collecting them paused the game.
+    /// </summary>
+    public static (string Json, bool Thinned)? Fit(string json, int max, SizeRule rule)
+    {
+        if (Measure(json, rule) <= max) return (json, false);
+        if (Steps(json) is not { } steps) return null;
+        foreach (var candidate in steps)
+            if (Measure(candidate, rule) <= max)
+                return (candidate.ToJson(), true);
+        return null;
+    }
+
+    /// <summary>A recording's JSON's size by <paramref name="rule"/>, counted as it's written (nothing kept).</summary>
+    public static long Measure(Recording r, SizeRule rule)
+    {
+        using var counter = new JsonCounter(rule == SizeRule.Server);
+        using (var w = new System.Text.Json.Utf8JsonWriter(counter, new System.Text.Json.JsonWriterOptions { Indented = false }))
+            r.Write(w);
+        return counter.Size;
+    }
+
+    /// <summary>A JSON text's size by <paramref name="rule"/>.</summary>
+    public static long Measure(string json, SizeRule rule) => rule == SizeRule.Server ? ServerSize(json) : Encoding.UTF8.GetByteCount(json);
+
+    /// <summary>
+    /// The JSON's bytes counted as they're written, and (for <see cref="SizeRule.Server"/>) one more for each colon and comma
+    /// outside a string, as <see cref="ServerSize"/> counts them: a UTF-8 byte below 128 is that character, so reading bytes is
+    /// reading characters here.
+    /// </summary>
+    private sealed class JsonCounter : System.IO.Stream
+    {
+        private readonly bool server;
+        private bool inString;
+        private bool escaped;
+
+        public JsonCounter(bool server) => this.server = server;
+
+        public long Size { get; private set; }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            Size += buffer.Length;
+            if (!server) return;
+            foreach (var c in buffer)
+            {
+                if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (c == (byte)'\\') escaped = true;
+                    else if (c == (byte)'"') inString = false;
+                }
+                else if (c == (byte)'"') inString = true;
+                else if (c is (byte)':' or (byte)',') Size++;
+            }
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+
+        public override void Flush()
+        {
+        }
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => Size;
+        public override long Position { get => Size; set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, System.IO.SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// The thinning's steps in order (see <see cref="Fit(string)"/>), each the recording as it would be sent at that step: the
+    /// first that fits is the one sent. Null when the JSON isn't a recording. Made one at a time, as they're asked for.
+    /// </summary>
+    private static System.Collections.Generic.IEnumerable<Recording>? Steps(string json)
+    {
         Recording r;
         try
         {
@@ -105,17 +203,21 @@ public static class SiteLink
         {
             return null;
         }
+        return StepsOf(r);
+    }
+
+    internal static System.Collections.Generic.IEnumerable<Recording> StepsOf(Recording r)
+    {
         var drops = new System.Collections.Generic.List<string>();
-        string Try(System.Collections.Generic.IEnumerable<Frame> frames, bool positions) =>
-            r.With(frames, positions, r.Combat == null || drops.Count == 0 ? r.Combat : r.Combat.Without(drops.ToArray())).ToJson();
+        Recording Try(System.Collections.Generic.IEnumerable<Frame> frames, bool positions) =>
+            r.With(frames, positions, r.Combat == null || drops.Count == 0 ? r.Combat : r.Combat.Without(drops.ToArray()));
 
         var frames = r.Frames;
         // (1) Smoother replays' four frames a second, down to two.
         if (frames.Count >= 2 && (frames[^1].T - frames[0].T) / (frames.Count - 1) < 0.4)
         {
             frames = ByTime(frames, RecordingBuilder.FrameEvery);
-            var two = Try(frames, r.PartyPositions);
-            if (size(two) <= max) return (two, true);
+            yield return Try(frames, r.PartyPositions);
         }
         // (2), (3) The enmity list, then MP and barriers.
         if (r.Combat != null)
@@ -124,18 +226,13 @@ public static class SiteLink
                 // A table with nothing in it isn't dropped (nor said to be).
                 if (Rows(r.Combat, table) == 0) continue;
                 drops.Add(table);
-                var without = Try(frames, r.PartyPositions);
-                if (size(without) <= max) return (without, true);
+                yield return Try(frames, r.PartyPositions);
             }
         // (4) The frames: every 1, 2, 4 seconds; the enemies only, so; none.
         foreach (var step in new[] { 1.0, 2.0, 4.0 })
-        {
-            var thinned = Try(ByTime(frames, step), r.PartyPositions);
-            if (size(thinned) <= max) return (thinned, true);
-        }
+            yield return Try(ByTime(frames, step), r.PartyPositions);
         foreach (var step in new[] { 1.0, 2.0, 4.0 })
-        {
-            var enemies = Try(
+            yield return Try(
                 ByTime(frames, step)
                     .Select(f => f with
                     {
@@ -144,20 +241,15 @@ public static class SiteLink
                     })
                     .Where(f => f.At.Count > 0),
                 false);
-            if (size(enemies) <= max) return (enemies, true);
-        }
-        var none = Try(Array.Empty<Frame>(), false);
-        if (size(none) <= max) return (none, true);
-        if (r.Combat == null) return null;
+        yield return Try(Array.Empty<Frame>(), false);
+        if (r.Combat == null) yield break;
         // (5)–(8) Then the ground placements, the casts, the uses, the ticks.
         foreach (var table in new[] { "area", "cast", "use", "tick" })
         {
             if (Rows(r.Combat, table) == 0) continue;
             drops.Add(table);
-            var without = Try(Array.Empty<Frame>(), false);
-            if (size(without) <= max) return (without, true);
+            yield return Try(Array.Empty<Frame>(), false);
         }
-        return null;
     }
 
     private static int Rows(CombatLog c, string table) => table switch

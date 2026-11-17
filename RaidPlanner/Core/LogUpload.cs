@@ -83,7 +83,7 @@ public static class LogUpload
     /// The recording as it's uploaded: whole when it's at most <see cref="MaxRecording"/> bytes (nearly every pull: a long one
     /// is a few MB), else thinned as a send is (<see cref="SiteLink.Fit(string, int, Func{string, int})"/>); null when even that's too big.
     /// </summary>
-    public static (string Json, bool Thinned)? Fit(string recordingJson) => SiteLink.Fit(recordingJson, MaxRecording, Encoding.UTF8.GetByteCount);
+    public static (string Json, bool Thinned)? Fit(string recordingJson) => SiteLink.Fit(recordingJson, MaxRecording, SiteLink.SizeRule.Utf8);
 
     /// <summary>
     /// The body, gzipped: <c>{ "v": 1, "clientId", "name" (≤ 120), "summary" (the summary's JSON, or null), "recording" }</c>. The

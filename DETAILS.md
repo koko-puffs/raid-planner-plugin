@@ -527,8 +527,12 @@ second, then every two, then four), then the enemies' places only at those steps
 ground placements (`area`); (6) the party's casts (`cast`); (7) what the party used (`use`); (8) the
 ticks (`tick`). Never the effects (`fx`, with their bonus %), statuses, gauge, pre-pull, countdown,
 items or events. Frames are thinned by time (a frame kept as it crosses each step: `SiteLink.ByTime`),
-not by count; an empty table isn't dropped. The block says what it lost (`combat.thinned`); and the
-window says it was thinned. The file itself
+not by count; an empty table isn't dropped. Since 0.7.7 each step is measured, not written out: the
+step's file goes through `Utf8JsonWriter` into a stream that only counts its bytes (`SiteLink.Measure`, with
+the server's added spaces for a send), and only the step that fits is written as text; before, each step
+was a whole string (up to a dozen of them, several MB each, for one long pull). The steps, their order and
+the file sent are the same (`ThinningTests` checks both against the text at every step's size). The block
+says what it lost (`combat.thinned`); and the window says it was thinned. The file itself
 is left whole, and goes into the request as it's written (checked as it's copied, never read into a
 tree of nodes: a big pull's would be a hundred MB for the game's process to collect). Each
 send carries the pull's own id (`p_client_id`, from its file and when it was recorded), so a send
@@ -1910,7 +1914,13 @@ entry).
 
 ## Release notes
 
-### 0.7.6 (not released yet)
+### 0.7.7 (not released yet)
+
+- **Thinning a big pull leaves far less garbage** (more of 0.7.6's work on stalls). Each step of thinning a pull too
+  big for the site was written out whole to see whether it fit: up to a dozen strings of several MB each. Each step
+  is now only counted, and the one that fits written once. What's sent is the same, byte for byte.
+
+### 0.7.6
 
 - **Smoother replays is on by default.** Where everyone stands is kept four times a second, so the site's replays move
   smoothly. Settings saved before 0.7.6 have it turned on once; turn it off and it stays off.
