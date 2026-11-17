@@ -94,4 +94,38 @@ public class ThinningTests
         Assert.Null(SiteLink.Fit("{not json", 5, SiteLink.SizeRule.Utf8));
         Assert.Equal(SiteLink.Fit("{not json", 5, Encoding.UTF8.GetByteCount), SiteLink.Fit("{not json", 5, SiteLink.SizeRule.Utf8));
     }
+
+    [Fact]
+    public void Measuring_a_big_pull_allocates_a_small_part_of_its_size()
+    {
+        var rich = Rich();
+        // Twenty times its frames: a long pull's file, a few MB.
+        var r = rich.WithFrames(Enumerable.Range(0, 20).SelectMany(k => rich.Frames.Select(f => f with { T = f.T + k * 120 })), true);
+        var size = SiteLink.Measure(r, SiteLink.SizeRule.Utf8);
+        Assert.True(size > 1_000_000, $"the pull is {size} bytes: too small to tell");
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        SiteLink.Measure(r, SiteLink.SizeRule.Server);
+        var made = GC.GetAllocatedBytesForCurrentThread() - before;
+        // The writer hands its bytes on every 64 KB: never a buffer of the whole file (before 0.7.7 a measure of this one
+        // allocated about 15 MB; now under 1 MB, the events' order and the combat block's).
+        Assert.True(made < size / 3, $"measuring {size} bytes allocated {made}");
+    }
+
+    [Fact]
+    public void A_kept_pull_is_written_straight_to_its_file_byte_for_byte()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "rp-thin-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new RecordingStore(folder);
+            store.Load();
+            var r = Rich();
+            var info = store.Save(r);
+            Assert.Equal(r.ToJson(), File.ReadAllText(Path.Combine(folder, info.File), new UTF8Encoding(false)));
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, true);
+        }
+    }
 }

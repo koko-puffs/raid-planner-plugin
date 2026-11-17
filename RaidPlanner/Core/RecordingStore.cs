@@ -196,7 +196,6 @@ public sealed class RecordingStore
     /// </summary>
     public RecordingInfo Save(Recording r)
     {
-        var json = r.ToJson();
         var mechanics = r.MechanicCount;
         string file;
         lock (gate)
@@ -213,7 +212,12 @@ public sealed class RecordingStore
         }
         try
         {
-            WriteAtomically(Path.Combine(Folder, file), json);
+            // Written straight to the file (since 0.7.7): never the whole file as a string, its bytes, and a buffer of each.
+            WriteAtomically(Path.Combine(Folder, file), fs =>
+            {
+                using var w = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = false });
+                r.Write(w);
+            });
         }
         catch
         {
@@ -532,15 +536,22 @@ public sealed class RecordingStore
     }
 
     /// <summary>Writes a file whole or not at all: to a temporary file, flushed to the disk, then put in place.</summary>
-    private static void WriteAtomically(string path, string text)
+    private static void WriteAtomically(string path, string text) =>
+        WriteAtomically(path, fs =>
+        {
+            var bytes = Encoding.UTF8.GetBytes(text);
+            fs.Write(bytes, 0, bytes.Length);
+        });
+
+    /// <summary>Writes a file whole or not at all, by <paramref name="write"/> (to a temporary file, flushed to the disk, then put in place).</summary>
+    private static void WriteAtomically(string path, Action<Stream> write)
     {
         var temp = path + ".tmp";
         try
         {
-            using (var fs = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var fs = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024))
             {
-                var bytes = Encoding.UTF8.GetBytes(text);
-                fs.Write(bytes, 0, bytes.Length);
+                write(fs);
                 fs.Flush(true);
             }
             File.Move(temp, path, true);

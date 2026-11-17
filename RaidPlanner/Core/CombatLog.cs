@@ -159,21 +159,33 @@ public sealed class CombatLog
     private static void Column(Utf8JsonWriter w, string name, long[] values)
     {
         w.WriteStartArray(name);
-        foreach (var v in values) w.WriteNumberValue(v);
+        foreach (var v in values)
+        {
+            w.WriteNumberValue(v);
+            Recording.Spill(w);
+        }
         w.WriteEndArray();
     }
 
     private static void Column<T>(Utf8JsonWriter w, string name, List<T> rows, List<int> order, Func<T, long> value)
     {
         w.WriteStartArray(name);
-        foreach (var i in order) w.WriteNumberValue(value(rows[i]));
+        foreach (var i in order)
+        {
+            w.WriteNumberValue(value(rows[i]));
+            Recording.Spill(w);
+        }
         w.WriteEndArray();
     }
 
     private static void Column<T>(Utf8JsonWriter w, string name, List<T> rows, List<int> order, Func<T, double> value)
     {
         w.WriteStartArray(name);
-        foreach (var i in order) w.WriteNumberValue(CastEvent.Round(value(rows[i]), 2));
+        foreach (var i in order)
+        {
+            w.WriteNumberValue(CastEvent.Round(value(rows[i]), 2));
+            Recording.Spill(w);
+        }
         w.WriteEndArray();
     }
 

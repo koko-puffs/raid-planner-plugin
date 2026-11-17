@@ -581,6 +581,19 @@ public sealed class Recording
     /// <summary>The mechanics in it: the enemies' casts, and their hits that came without one.</summary>
     public int MechanicCount => Timeline.Build(this).Count;
 
+    /// <summary>
+    /// Bytes a writer holds before they're handed on (<see cref="Spill"/>). Since 0.7.7: a <see cref="Utf8JsonWriter"/> on a
+    /// stream keeps everything written in its own buffer until it's flushed, so a long pull's file was a buffer of its whole
+    /// size (grown by doubling, on the large-object heap) before a byte reached the stream.
+    /// </summary>
+    internal const int SpillAt = 64 * 1024;
+
+    /// <summary>Hands what the writer holds on to its stream once it's <see cref="SpillAt"/> or more (called in the long loops).</summary>
+    internal static void Spill(Utf8JsonWriter w)
+    {
+        if (w.BytesPending >= SpillAt) w.Flush();
+    }
+
     /// <summary>The recording as its file's JSON (compact).</summary>
     public string ToJson()
     {
@@ -681,18 +694,30 @@ public sealed class Recording
         w.WriteEndObject();
 
         w.WriteStartArray("events");
-        foreach (var e in Events.OrderBy(e => e.T)) e.Write(w);
+        foreach (var e in Events.OrderBy(e => e.T))
+        {
+            e.Write(w);
+            Spill(w);
+        }
         w.WriteEndArray();
 
         w.WriteStartArray("frames");
+        // Each frame's ids in order, and each id's name, made once for them all (not a sort and a string per id a frame).
+        var ids = new List<int>();
+        var idNames = new Dictionary<int, JsonEncodedText>();
         foreach (var f in Frames)
         {
             w.WriteStartObject();
             w.WriteNumber("t", CastEvent.Round(f.T, 2));
             w.WriteStartObject("p");
-            foreach (var (id, (x, z, r)) in f.At.OrderBy(kv => kv.Key))
+            ids.Clear();
+            foreach (var id in f.At.Keys) ids.Add(id);
+            ids.Sort();
+            foreach (var id in ids)
             {
-                w.WriteStartArray(id.ToString(CultureInfo.InvariantCulture));
+                var (x, z, r) = f.At[id];
+                if (!idNames.TryGetValue(id, out var idName)) idNames[id] = idName = JsonEncodedText.Encode(id.ToString(CultureInfo.InvariantCulture));
+                w.WriteStartArray(idName);
                 w.WriteNumberValue(CastEvent.Round(x, 2));
                 w.WriteNumberValue(CastEvent.Round(z, 2));
                 w.WriteNumberValue(CastEvent.Round(r, 3));
@@ -701,6 +726,7 @@ public sealed class Recording
             }
             w.WriteEndObject();
             w.WriteEndObject();
+            Spill(w);
         }
         w.WriteEndArray();
         if (Combat != null)

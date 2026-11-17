@@ -536,7 +536,9 @@ items or events. Frames are thinned by time (a frame kept as it crosses each ste
 not by count; an empty table isn't dropped. Since 0.7.7 each step is measured, not written out: the
 step's file goes through `Utf8JsonWriter` into a stream that only counts its bytes (`SiteLink.Measure`, with
 the server's added spaces for a send), and only the step that fits is written as text; before, each step
-was a whole string (up to a dozen of them, several MB each, for one long pull). The steps, their order and
+was a whole string (up to a dozen of them, several MB each, for one long pull). The writer holds what it
+writes until it's flushed, so `Recording.Write` hands it on every 64 KB (`Recording.Spill`, in the events', the
+frames' and the combat block's loops): a measure of a 2.5 MB file allocates under 1 MB, not 15. The steps, their order and
 the file sent are the same (`ThinningTests` checks both against the text at every step's size). The block
 says what it lost (`combat.thinned`); and the window says it was thinned. The file itself
 is left whole, and goes into the request as it's written (checked as it's copied, never read into a
@@ -1922,9 +1924,15 @@ entry).
 
 ### 0.7.7 (not released yet)
 
-- **Thinning a big pull leaves far less garbage** (more of 0.7.6's work on stalls). Each step of thinning a pull too
-  big for the site was written out whole to see whether it fit: up to a dozen strings of several MB each. Each step
-  is now only counted, and the one that fits written once. What's sent is the same, byte for byte.
+- **Saving and thinning a long pull leave far less garbage** (more of 0.7.6's work on stalls; the garbage collector's
+  pauses stop the game even when a worker made the garbage):
+  - Each step of thinning a pull too big for the site was written out whole to see whether it fit: up to a dozen
+    strings of several MB each. Each step is now only counted, and the one that fits written once. What's sent is
+    the same, byte for byte.
+  - Writing a pull's file held all of it in the writer's buffer, then a copy, then a string, then its bytes: about
+    seven times the file, on the large-object heap, at every pull kept. It's now written straight to the file, 64 KB
+    at a time, with each frame's ids sorted and named once, not per frame: a 2.5 MB file went from 15 MB of
+    garbage to under 1 MB. The file is the same, byte for byte.
 - **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, hits, statuses and aggro
   changes now stop at 16,000, so the casts, markers, tethers and the rest late in the pull aren't lost to them;
   deaths and raises are kept 1,000 past the 20,000. A hit that isn't kept still names what killed someone.
