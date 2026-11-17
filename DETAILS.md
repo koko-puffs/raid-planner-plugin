@@ -390,8 +390,10 @@ as long as its table reads as its default; a value that isn't a number reads as 
 
 ## Diagnostics (`Core/DiagnosticsLog.cs`; Settings → Recording → _Diagnostics_)
 
-Off by default, and **off again each time the plugin loads** (it's never saved: the file holds names and
-grows while it's on). While on, the raw values behind each reading that hasn't been checked in the game
+Off by default, and **kept as you leave it** (`Configuration.Diagnostics`, since 0.7.5; until then it went off
+again each time the plugin loaded, which the user didn't want: "I have also noticed that diagnostics turns itself
+off. Why? Please don't do that."). The file holds names and grows while it's on (a file stops at 5 MB, the newest
+six kept). While on, the raw values behind each reading that hasn't been checked in the game
 (the [verify] notes above and in SPEC4 §7) go to **`diagnostics-<yyyy-MM-dd>.log`** in the recordings folder
 (the plugin's config folder's `recordings/`, beside the pulls). Plain text, one line per reading:
 `21:03:04.123 | zone 1122 <duty or place> | pull 3 @ 12.50 | <kind> | <numbers>` (`no pull` outside one).
@@ -1893,6 +1895,8 @@ entry).
   a battle NPC kind of their own) were left out since the first version: only the boss's own casts were kept, so a
   replay showed almost no mechanics and the damage they did to the party was missing from Survival, fails and deaths.
   Their casts, hits, statuses and head markers are recorded now. Recordings made before can't get them back.
+- **Diagnostics stays on.** Settings → Recording → _Diagnostics_ is kept as you leave it; it no longer turns itself
+  off each time the plugin loads.
 
 ### 0.7.4
 
@@ -2086,7 +2090,7 @@ entry).
   and MP, then the frames as before, then ground placements, casts, uses, ticks (frames by time now).
 - **Fixed**: a hit that did damage and had a status resisted (a stun on a boss immune to it) counted as
   not landed (the game's "status resisted" was read as "fully resisted").
-- **Settings → Recording → Diagnostics** (off; off again each time the plugin loads): while on, the raw
+- **Settings → Recording → Diagnostics** (off; until 0.7.5 off again each time the plugin loaded): while on, the raw
   values behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, items' action
   type, the Raise and Weakness statuses' sources, the enmity list, the gauge, head signs, your recasts,
   ground placements) go to `diagnostics-<date>.log` in the recordings folder, for checking the plugin

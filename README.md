@@ -86,7 +86,7 @@ with `/rc` in place of `/raidcodex`.
 - **Track my progress**: on. How far each pull got, who died to what, the boss's HP left and each
   spot's damage, healing and fails (spots and jobs, no names).
 - **Show it in the server info bar**: on.
-- **Diagnostics**: off (and off again each time the plugin loads). On, what it reads from the game goes
+- **Diagnostics**: off until you turn it on; it stays as you leave it. On, what it reads from the game goes
   to `diagnostics-<date>.log` in the recordings folder, for checking it; the file holds character names.
 - **Plan window**: _Show my plan in duties_ (on), _Lock it where it is_, _Say each step in chat_ (on),
   _Share my step with the site_ (off, so Present can follow), and _Send my party to my roster_, which

@@ -234,8 +234,12 @@ public sealed partial class MainWindow
             config.Save();
         }
         if (SwitchRow(i++, "##diagnostics", "Diagnostics", "Writes what it reads from the game to a file, for checking", recorder.Diagnostics.On,
-                "While on (until the plugin next loads), the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written."))
+                "While on, the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
+        {
             recorder.Diagnostics.On = !recorder.Diagnostics.On;
+            config.Diagnostics = recorder.Diagnostics.On;
+            config.Save();
+        }
         if (ButtonRow(i, "##folder", "Recordings folder", "Where the pulls are kept", "Open", Btn.Outline, false, null, store.Folder))
             Dalamud.Utility.Util.OpenLink(store.Folder);
         Kit.EndPanel();
