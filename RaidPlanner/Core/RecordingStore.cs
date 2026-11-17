@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 namespace RaidPlanner.Core;
 
@@ -14,7 +15,8 @@ namespace RaidPlanner.Core;
 /// A kept pull, as the window lists it without reading its whole file: its file, duty, pull,
 /// when, how long, how it ended, its mechanics, whether the party's places are in it, and the
 /// site's id for it once it's been sent (or uploaded: since 0.6.0 an upload's id is the same kind); since 0.6.0 why
-/// the site's logs refused it for good (<paramref name="UploadRefused"/>: never uploaded again).
+/// the site's logs refused it for good (<paramref name="UploadRefused"/>: never uploaded again); since 0.7.7 how many of the
+/// party it kept (<paramref name="PartyCount"/>; null for a pull listed by an older version, until its file is read).
 /// </summary>
 public sealed record RecordingInfo(
     string File,
@@ -27,7 +29,8 @@ public sealed record RecordingInfo(
     bool PartyPositions,
     string? SentId = null,
     DateTimeOffset? SentAt = null,
-    string? UploadRefused = null)
+    string? UploadRefused = null,
+    int? PartyCount = null)
 {
     public string Name => Words.PullName(Duty, Pull);
 }
@@ -40,7 +43,9 @@ public sealed record RecordingInfo(
 /// sent ones go, and only then the oldest unsent (since 0.6.0 those still to be uploaded are held, up
 /// to <see cref="MostHeld"/>). Writes go to a temporary file, flushed to the disk, then put in place,
 /// so a crash or a power cut mid-write never leaves half a file. Safe to call from any thread;
-/// <see cref="All"/> and <see cref="Find"/> never wait (the window reads them every frame).
+/// <see cref="All"/> and <see cref="Find"/> never wait (the window reads them every frame). Since 0.7.7 the list is
+/// changed under its lock in memory only, and the index, the marks and the files let go of are written after, one
+/// writer at a time and always the latest list (<see cref="Persist()"/>), so a change never waits on the disk behind another.
 /// </summary>
 public sealed class RecordingStore
 {
@@ -60,8 +65,34 @@ public sealed class RecordingStore
     /// <summary>The most kept while some are still to be uploaded (<see cref="MostHeld"/>; lower in tests).</summary>
     public int HoldUpTo { get; set; } = MostHeld;
 
+    /// <summary>Tests only: called while a pull's file is written (its temporary file open, not in place yet).</summary>
+    internal Action? WhileWriting { get; set; }
+
+    /// <summary>The list's lock: held for changes in memory (and the startup's load), never for the index's or marks' writes.</summary>
     private readonly object gate = new();
+
+    /// <summary>
+    /// The disk's lock (since 0.7.7): the index's and the marks' writes and the deletes, one at a time. Taken before
+    /// <see cref="gate"/> when both are held, never after.
+    /// </summary>
+    private readonly object disk = new();
+
     private List<RecordingInfo> items = new();
+
+    /// <summary>Bumped (under <see cref="gate"/>) on every change the index or the marks would show.</summary>
+    private long changes;
+
+    /// <summary>The change last written to both the index and the marks (under <see cref="disk"/>).</summary>
+    private long written = -1;
+
+    /// <summary>Files let go of and still to delete (under <see cref="gate"/>; in <see cref="gone"/> too until they are).</summary>
+    private readonly List<string> dropping = new();
+
+    /// <summary>
+    /// Pulls being saved (their file's name taken, the file not in place yet; under <see cref="gate"/>): a load meanwhile never
+    /// recovers their temporary file or cleans up their empty one.
+    /// </summary>
+    private readonly HashSet<string> saving = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The list as it was last changed, handed out without taking the lock.</summary>
     private volatile IReadOnlyList<RecordingInfo> snapshot = Array.Empty<RecordingInfo>();
@@ -87,78 +118,93 @@ public sealed class RecordingStore
     /// <summary>Reads the index (or, without one, every recording in the folder). Never throws: a bad file or entry is left out.</summary>
     public void Load()
     {
-        lock (gate)
+        lock (disk)
         {
-            Directory.CreateDirectory(Folder);
-            var index = Path.Combine(Folder, IndexFile);
-            var list = new List<RecordingInfo>();
-            var fromIndex = false;
-            try
+            bool writeIndex, writeMarks;
+            lock (gate)
             {
-                if (File.Exists(index))
-                {
-                    list = ReadIndex(File.ReadAllText(index));
-                    fromIndex = true;
-                }
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                list = new List<RecordingInfo>();
-            }
-            var marks = ReadMarks();
-            gone.Clear();
-            foreach (var file in marks.Gone)
-            {
-                if (!TryDelete(Path.Combine(Folder, file))) gone.Add(file);
-            }
-            var marksChanged = gone.Count != marks.Gone.Count;
-            foreach (var path in SafeFiles("*.tmp")) Recover(path);
-
-            // Files the index doesn't know (copied in, or the index lost) are read once.
-            var known = list.Select(i => i.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var path in SafeFiles("*" + Words.Extension))
-            {
-                var file = Path.GetFileName(path);
-                if (known.Contains(file) || gone.Contains(file)) continue;
+                Directory.CreateDirectory(Folder);
+                var index = Path.Combine(Folder, IndexFile);
+                var list = new List<RecordingInfo>();
+                var fromIndex = false;
                 try
                 {
-                    list.Add(InfoOf(file, Recording.Parse(File.ReadAllText(path))));
-                    known.Add(file);
+                    if (File.Exists(index))
+                    {
+                        list = ReadIndex(File.ReadAllText(index));
+                        fromIndex = true;
+                    }
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // Not a recording (or one that can't be read): left alone, out of the list.
+                    list = new List<RecordingInfo>();
                 }
+                var marks = ReadMarks();
+                gone.Clear();
+                foreach (var file in marks.Gone)
+                {
+                    if (!TryDelete(Path.Combine(Folder, file))) gone.Add(file);
+                }
+                var marksChanged = gone.Count != marks.Gone.Count;
+                // Let go of before this load and not deleted yet: still gone.
+                foreach (var file in dropping) gone.Add(file);
+                foreach (var path in SafeFiles("*.tmp")) Recover(path);
+
+                // Files the index doesn't know (copied in, or the index lost) are read once.
+                var known = list.Select(i => i.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var path in SafeFiles("*" + Words.Extension))
+                {
+                    var file = Path.GetFileName(path);
+                    if (known.Contains(file) || gone.Contains(file) || saving.Contains(file)) continue;
+                    try
+                    {
+                        // Since 0.7.7, an empty file is deleted: a name taken by a save that never finished (a crash before its file was put in place).
+                        if (new FileInfo(path).Length == 0)
+                        {
+                            TryDelete(path);
+                            continue;
+                        }
+                        list.Add(InfoOf(file, Recording.Parse(File.ReadAllText(path))));
+                        known.Add(file);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        // Not a recording (or one that can't be read): left alone, out of the list.
+                    }
+                }
+                // The sent marks are kept apart from the index, so a lost index doesn't lose them.
+                for (var i = 0; i < list.Count; i++)
+                {
+                    if (list[i].SentId == null && marks.Sent.TryGetValue(list[i].File, out var sent))
+                        list[i] = list[i] with { SentId = sent.Id, SentAt = sent.At };
+                    if (list[i].UploadRefused == null && marks.Refused.TryGetValue(list[i].File, out var why))
+                        list[i] = list[i] with { UploadRefused = why };
+                }
+                var count = list.Count;
+                items = list
+                    .Where(i => !gone.Contains(i.File) && File.Exists(Path.Combine(Folder, i.File)))
+                    .GroupBy(i => i.File, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+                    .OrderByDescending(i => i.RecordedAt).ToList();
+                writeIndex = !fromIndex || items.Count != count;
+                writeMarks = marksChanged;
+                Changed();
             }
-            // The sent marks are kept apart from the index, so a lost index doesn't lose them.
-            for (var i = 0; i < list.Count; i++)
-            {
-                if (list[i].SentId == null && marks.Sent.TryGetValue(list[i].File, out var sent))
-                    list[i] = list[i] with { SentId = sent.Id, SentAt = sent.At };
-                if (list[i].UploadRefused == null && marks.Refused.TryGetValue(list[i].File, out var why))
-                    list[i] = list[i] with { UploadRefused = why };
-            }
-            var count = list.Count;
-            items = list
-                .Where(i => !gone.Contains(i.File) && File.Exists(Path.Combine(Folder, i.File)))
-                .GroupBy(i => i.File, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
-                .OrderByDescending(i => i.RecordedAt).ToList();
-            if (!fromIndex || items.Count != count) WriteIndex();
-            if (marksChanged) WriteMarks();
-            Changed();
+            if (writeIndex || writeMarks) Persist(writeIndex, writeMarks);
         }
     }
 
     /// <summary>
     /// A temporary file left by a crash between its flush and its move: a whole recording is put in
     /// place when its own file is missing or empty (the name was taken, the move never came); anything
-    /// else is deleted.
+    /// else is deleted. Since 0.7.7 one a save is still writing (<see cref="saving"/>) is left alone.
+    /// Under both locks (no save's last steps, no index or marks write, meanwhile).
     /// </summary>
-    private static void Recover(string temp)
+    private void Recover(string temp)
     {
         try
         {
             var target = temp[..^".tmp".Length];
+            if (saving.Contains(Path.GetFileName(target))) return;
             if (target.EndsWith(Words.Extension, StringComparison.OrdinalIgnoreCase)
                 && (!File.Exists(target) || new FileInfo(target).Length == 0))
             {
@@ -187,7 +233,7 @@ public sealed class RecordingStore
     }
 
     public static RecordingInfo InfoOf(string file, Recording r) =>
-        new(file, r.Duty.Name, r.Pull, r.RecordedAt, r.Duration, r.Outcome, r.MechanicCount, r.PartyPositions);
+        new(file, r.Duty.Name, r.Pull, r.RecordedAt, r.Duration, r.Outcome, r.MechanicCount, r.PartyPositions, PartyCount: r.Party.Count);
 
     /// <summary>
     /// Keeps a pull: writes its file and puts it first in the list; past <see cref="Keep"/>, the oldest
@@ -209,6 +255,8 @@ public sealed class RecordingStore
                 if (n > 999) throw new IOException("No free name for the pull's file.");
                 file = $"{stem} ({n}){Words.Extension}";
             }
+            // Until it's in place, a load meanwhile leaves its temporary file and its empty one alone.
+            saving.Add(file);
         }
         try
         {
@@ -217,24 +265,27 @@ public sealed class RecordingStore
             {
                 using var w = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = false });
                 r.Write(w);
+                WhileWriting?.Invoke();
             });
         }
         catch
         {
             TryDelete(Path.Combine(Folder, file));
+            lock (gate) saving.Remove(file);
             throw;
         }
-        var info = new RecordingInfo(file, r.Duty.Name, r.Pull, r.RecordedAt, r.Duration, r.Outcome, mechanics, r.PartyPositions);
+        var info = new RecordingInfo(file, r.Duty.Name, r.Pull, r.RecordedAt, r.Duration, r.Outcome, mechanics, r.PartyPositions,
+            PartyCount: r.Party.Count);
         lock (gate)
         {
+            saving.Remove(file);
             // The load at startup may have read the file in already.
             items.RemoveAll(i => string.Equals(i.File, file, StringComparison.OrdinalIgnoreCase));
             items.Insert(0, info);
             Prune();
-            WriteIndex();
-            WriteMarks();
             Changed();
         }
+        Persist();
         return info;
     }
 
@@ -257,14 +308,30 @@ public sealed class RecordingStore
     /// <summary>The path of a kept pull's file.</summary>
     public string PathOf(RecordingInfo info) => Path.Combine(Folder, info.File);
 
+    /// <summary>Lets a pull go: out of the list, its file deleted, the index and marks written (all before it returns).</summary>
     public void Delete(RecordingInfo info)
+    {
+        Remove(info);
+        Persist();
+    }
+
+    /// <summary>
+    /// Since 0.7.7, for the window: a pull is out of the list at once (<see cref="All"/> no longer has it), and its file's
+    /// delete and the index's and marks' writes are done on a worker, in turn with every other write. Until then it's
+    /// marked gone, so a crash meanwhile still lets it go at the next load. Never waits on the disk.
+    /// </summary>
+    public Task DeleteLater(RecordingInfo info)
+    {
+        Remove(info);
+        return Task.Run(Persist);
+    }
+
+    private void Remove(RecordingInfo info)
     {
         lock (gate)
         {
             items.RemoveAll(i => string.Equals(i.File, info.File, StringComparison.OrdinalIgnoreCase));
             Forget(info.File);
-            WriteIndex();
-            WriteMarks();
             Changed();
         }
     }
@@ -272,31 +339,33 @@ public sealed class RecordingStore
     /// <summary>Notes that a pull was sent to the site (its id there), so the list says so.</summary>
     public RecordingInfo? MarkSent(RecordingInfo info, string id, DateTimeOffset at)
     {
+        RecordingInfo marked;
         lock (gate)
         {
             var i = items.FindIndex(x => string.Equals(x.File, info.File, StringComparison.OrdinalIgnoreCase));
             if (i < 0) return null;
             items[i] = items[i] with { SentId = id, SentAt = at };
-            WriteMarks();
-            WriteIndex();
             Changed();
-            return items[i];
+            marked = items[i];
         }
+        Persist();
+        return marked;
     }
 
     /// <summary>Notes that the site's logs refused a pull for good (since 0.6.0; why, in words): it's never uploaded again.</summary>
     public RecordingInfo? MarkRefused(RecordingInfo info, string why)
     {
+        RecordingInfo marked;
         lock (gate)
         {
             var i = items.FindIndex(x => string.Equals(x.File, info.File, StringComparison.OrdinalIgnoreCase));
             if (i < 0) return null;
             items[i] = items[i] with { UploadRefused = string.IsNullOrWhiteSpace(why) ? "Refused." : why.Trim() };
-            WriteMarks();
-            WriteIndex();
             Changed();
-            return items[i];
+            marked = items[i];
         }
+        Persist();
+        return marked;
     }
 
     /// <summary>The entry for a file now (it may have been sent since it was read).</summary>
@@ -315,16 +384,64 @@ public sealed class RecordingStore
             Keep = Math.Clamp(keep, 1, 200);
             if (items.Count <= Keep) return;
             Prune();
-            WriteIndex();
-            WriteMarks();
             Changed();
         }
+        Persist();
     }
 
+    /// <summary>Under <see cref="gate"/>: the list as it is now, handed out, and a change to write.</summary>
     private void Changed()
     {
         snapshot = items.ToArray();
         Version++;
+        changes++;
+    }
+
+    /// <summary>
+    /// Since 0.7.7: the files let go of are deleted, then the index and the marks are written as the list is now; one
+    /// writer at a time (<see cref="disk"/>), and a writer whose change a later one already wrote writes nothing, so
+    /// writes never go out of order. Called after the change, outside <see cref="gate"/>, so the list never waits on the disk.
+    /// </summary>
+    private void Persist() => Persist(true, true);
+
+    private void Persist(bool index, bool marks)
+    {
+        lock (disk)
+        {
+            DeleteDropped();
+            IReadOnlyList<RecordingInfo> list;
+            string[] goneNow;
+            long change;
+            lock (gate)
+            {
+                change = changes;
+                list = snapshot;
+                goneNow = gone.ToArray();
+            }
+            if (change <= written) return;
+            // The marks first: they're what can't be made again from the files.
+            if (marks) WriteMarks(Folder, list, goneNow);
+            if (index) WriteIndex(Folder, list);
+            if (index && marks) written = change;
+        }
+    }
+
+    /// <summary>Under <see cref="disk"/>: deletes the files let go of; one the system won't let go yet stays gone (tried again at the next load).</summary>
+    private void DeleteDropped()
+    {
+        string[] files;
+        lock (gate)
+        {
+            if (dropping.Count == 0) return;
+            files = dropping.ToArray();
+            dropping.Clear();
+        }
+        foreach (var file in files)
+        {
+            if (!TryDelete(Path.Combine(Folder, file))) continue;
+            lock (gate)
+                if (gone.Remove(file)) changes++;
+        }
     }
 
     /// <summary>
@@ -370,10 +487,14 @@ public sealed class RecordingStore
         }
     }
 
-    /// <summary>A file let go of: deleted, or (held open somewhere) marked to go at the next load.</summary>
+    /// <summary>
+    /// Under <see cref="gate"/>: a file let go of. Marked gone and deleted by the next <see cref="Persist()"/> (since 0.7.7: never
+    /// under the lock); one the system won't let go yet (held open somewhere) stays marked, to go at the next load.
+    /// </summary>
     private void Forget(string file)
     {
-        if (!TryDelete(Path.Combine(Folder, file))) gone.Add(file);
+        gone.Add(file);
+        dropping.Add(file);
     }
 
     private static bool TryDelete(string path)
@@ -389,10 +510,10 @@ public sealed class RecordingStore
         }
     }
 
-    private void WriteIndex()
+    private static void WriteIndex(string folder, IReadOnlyList<RecordingInfo> list)
     {
         var arr = new JsonArray();
-        foreach (var i in items)
+        foreach (var i in list)
         {
             var o = new JsonObject
             {
@@ -408,11 +529,13 @@ public sealed class RecordingStore
             if (i.SentId != null) o["sentId"] = i.SentId;
             if (i.SentAt is { } at) o["sentAt"] = at.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
             if (i.UploadRefused != null) o["uploadRefused"] = i.UploadRefused;
+            // Since 0.7.7 (an older index hasn't it: unknown until the file's read).
+            if (i.PartyCount is { } party) o["partyCount"] = party;
             arr.Add(o);
         }
         try
         {
-            WriteAtomically(Path.Combine(Folder, IndexFile), arr.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            WriteAtomically(Path.Combine(folder, IndexFile), arr.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -444,7 +567,9 @@ public sealed class RecordingStore
                     n["partyPositions"]?.GetValue<bool>() ?? false,
                     n["sentId"]?.GetValue<string>(),
                     sentAt,
-                    n["uploadRefused"]?.GetValue<string>()));
+                    n["uploadRefused"]?.GetValue<string>(),
+                    // Since 0.7.7; missing (an older version's index) or not a count: unknown, never the entry left out.
+                    n["partyCount"] is JsonValue pv && pv.TryGetValue<int>(out var party) && party >= 0 ? party : null));
             }
             catch (Exception ex) when (ex is InvalidOperationException or FormatException or JsonException or ArgumentException)
             {
@@ -510,10 +635,10 @@ public sealed class RecordingStore
         return marks;
     }
 
-    private void WriteMarks()
+    private static void WriteMarks(string folder, IReadOnlyList<RecordingInfo> list, IEnumerable<string> gone)
     {
         var sent = new JsonObject();
-        foreach (var i in items)
+        foreach (var i in list)
         {
             if (i.SentId == null) continue;
             var o = new JsonObject { ["id"] = i.SentId };
@@ -521,13 +646,13 @@ public sealed class RecordingStore
             sent[i.File] = o;
         }
         var refused = new JsonObject();
-        foreach (var i in items)
+        foreach (var i in list)
             if (i.UploadRefused != null) refused[i.File] = i.UploadRefused;
         var goneList = new JsonArray();
         foreach (var g in gone) goneList.Add(g);
         try
         {
-            WriteAtomically(Path.Combine(Folder, MarksFile), new JsonObject { ["sent"] = sent, ["refused"] = refused, ["gone"] = goneList }.ToJsonString());
+            WriteAtomically(Path.Combine(folder, MarksFile), new JsonObject { ["sent"] = sent, ["refused"] = refused, ["gone"] = goneList }.ToJsonString());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -40,9 +40,11 @@ public enum UploadOutcome
 /// What became of an upload: <see cref="Outcome"/>, the pull's id on the site when it's stored (<paramref name="Id"/>: the same id
 /// <c>rp_plugin_send</c> gives, so a pull uploaded counts as sent), why not in words for players, how long the site asked to wait,
 /// its hint, whether it was there already, whether it's public now, and whether it went thinned (bigger than the site takes whole).
+/// Since 0.7.7, <paramref name="ThisPull"/>: a failure that's about this pull alone (its file couldn't be read, the site said no
+/// to it with a 4xx it doesn't explain), not the connection or the site (no answer, a timeout, a 5xx, busy, the hourly limit).
 /// </summary>
 public sealed record UploadAnswer(UploadOutcome Outcome, string? Id = null, string? Why = null, TimeSpan? Wait = null, string? Hint = null,
-    bool Duplicate = false, bool? Public = null, bool Thinned = false);
+    bool Duplicate = false, bool? Public = null, bool Thinned = false, bool ThisPull = false);
 
 /// <summary>
 /// Uploading a pull whole to the site's logs (since 0.6.0): <c>POST https://logs.kokos-tools.com/v1/upload</c>, the token as
@@ -157,7 +159,8 @@ public static class LogUpload
             429 or 503 => new UploadAnswer(UploadOutcome.Wait, Why: "The site is busy.", Wait: wait ?? TimeSpan.FromMinutes(1)),
             404 => new UploadAnswer(UploadOutcome.Pause, Why: "The site can't take uploads right now. The plugin may need updating.", Wait: OffPause),
             >= 500 => new UploadAnswer(UploadOutcome.Retry, Why: $"The site had a problem ({status})."),
-            _ => new UploadAnswer(UploadOutcome.Retry, Why: $"The site said no ({status})."),
+            // A 4xx the contract doesn't name: about this pull, not the site being down.
+            _ => new UploadAnswer(UploadOutcome.Retry, Why: $"The site said no ({status}).", ThisPull: status is >= 400 and < 500),
         };
     }
 
@@ -207,7 +210,7 @@ public static class LogUpload
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or FormatException)
         {
-            return new UploadAnswer(UploadOutcome.Retry, Why: "The upload couldn't be made.");
+            return new UploadAnswer(UploadOutcome.Retry, Why: "The upload couldn't be made.", ThisPull: true);
         }
     }
 
@@ -228,7 +231,11 @@ public readonly record struct UploadMark(string File, string? SentId, string? Re
 /// says (<c>Retry-After</c>); saving switched off on the site waits half an hour; a refused token or a full account stops it
 /// until <see cref="Resume"/> (linked again, Upload my logs turned on, Upload my older pulls). A pull that has failed
 /// <see cref="TriesBeforeAside"/> times in a row (no answer, the site's error) is set aside for a while (half an hour, doubling
-/// to <see cref="LongestAside"/>), so one the site can't take never holds up the ones after it. Game-free; on one thread.
+/// to <see cref="LongestAside"/>), so one the site can't take never holds up the ones after it. Since 0.7.7 setting one aside
+/// lets the next go at once only when the failures were its own (<see cref="UploadAnswer.ThisPull"/>); when they were the
+/// connection's or the site's, the wait keeps growing until an upload goes through, so an outage costs one try every 15 minutes,
+/// not every waiting pull read, gzipped and sent in turn. A pull just uploaded or refused isn't picked again until the store shows
+/// its mark (<see cref="Settled"/>). Game-free; on one thread.
 /// </summary>
 public sealed class UploadQueue
 {
@@ -246,6 +253,13 @@ public sealed class UploadQueue
     private readonly Dictionary<string, (int Fails, DateTime Until)> failing = new(StringComparer.OrdinalIgnoreCase);
     private DateTime notBefore = DateTime.MinValue;
     private TimeSpan notBeforeWait;
+
+    /// <summary>
+    /// Since 0.7.7: pulls uploaded or refused whose mark the store doesn't show yet (it's written on a worker after
+    /// <see cref="Done"/>): never picked again meanwhile. Each goes once the store shows it marked (or not kept), or
+    /// <see cref="Settled"/> says the mark failed.
+    /// </summary>
+    private readonly HashSet<string> marking = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The file on its way (null: none).</summary>
     public string? InFlight { get; private set; }
@@ -275,10 +289,11 @@ public sealed class UploadQueue
         if (InFlight != null || Stopped != null || !backoff.Ready(now)) return null;
         // A clock set back by more than the wait counts as waited (as Backoff does).
         if (now < notBefore && notBefore - now <= notBeforeWait) return null;
+        if (marking.Count > 0) ForgetMarked(all);
         RecordingInfo? oldest = null;
         foreach (var i in all)
             if (i.SentId == null && i.UploadRefused == null && (oldest == null || i.RecordedAt < oldest.RecordedAt) && !Aside(i.File, now)
-                && wanted(i))
+                && !marking.Contains(i.File) && wanted(i))
                 oldest = i;
         if (oldest != null) InFlight = oldest.File;
         return oldest;
@@ -299,9 +314,11 @@ public sealed class UploadQueue
                 Held = null;
                 SentCount++;
                 failing.Remove(file);
+                marking.Add(file);
                 return new UploadMark(file, answer.Id, null);
             case UploadOutcome.Refused:
                 failing.Remove(file);
+                marking.Add(file);
                 return new UploadMark(file, null, answer.Why ?? "The site didn't take it.");
             case UploadOutcome.Stop:
                 Stopped = answer.Why ?? "The site stopped the uploads.";
@@ -311,24 +328,42 @@ public sealed class UploadQueue
                 // The site busy: longer each time it's still busy (its Retry-After at least).
                 if (answer.Hint != "rate") backoff.Failed(now);
                 // Busy (an error page, or the site's own): this pull counts a failure; the hourly limit and saving off don't.
-                if (answer.Outcome == UploadOutcome.Wait && answer.Hint != "rate") Failed(file, now);
+                // The site's, not the pull's: setting it aside doesn't cut the wait short.
+                if (answer.Outcome == UploadOutcome.Wait && answer.Hint != "rate") Failed(file, now, answer.ThisPull);
                 Held = answer.Why;
                 return null;
             default:
                 // "Stopped." is the plugin unloading: nothing to wait for.
                 if (answer.Why == "Stopped.") return null;
                 backoff.Failed(now);
-                Failed(file, now);
+                Failed(file, now, answer.ThisPull);
                 Held = answer.Why;
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Since 0.7.7: the store's mark for <paramref name="file"/> failed (or won't come): it may be picked again. Without this it's
+    /// let go of once the store shows it marked.
+    /// </summary>
+    public void Settled(string file) => marking.Remove(file);
+
+    /// <summary>Lets go of the pulls just done that the store now shows marked (or no longer keeps).</summary>
+    private void ForgetMarked(IReadOnlyList<RecordingInfo> all)
+    {
+        var still = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var i in all)
+            if (i.SentId == null && i.UploadRefused == null && marking.Contains(i.File))
+                still.Add(i.File);
+        marking.IntersectWith(still);
     }
 
     /// <summary>Whether a pull is set aside now (a clock set back by more than the longest counts as over).</summary>
     public bool Aside(string file, DateTime now) =>
         failing.TryGetValue(file, out var f) && f.Until > now && f.Until - now <= LongestAside;
 
-    private void Failed(string file, DateTime now)
+    /// <summary>A failure for <paramref name="file"/>; <paramref name="ownFault"/>: about this pull alone, not the connection or the site.</summary>
+    private void Failed(string file, DateTime now, bool ownFault)
     {
         var fails = (failing.TryGetValue(file, out var f) ? f.Fails : 0) + 1;
         var until = DateTime.MinValue;
@@ -337,8 +372,9 @@ public sealed class UploadQueue
             var times = Math.Min(fails - TriesBeforeAside, 8);
             var wait = TimeSpan.FromTicks(Math.Min(LongestAside.Ticks, FirstAside.Ticks << times));
             until = now + wait;
-            // Set aside: the next pull goes after the usual wait, not this one's.
-            backoff.Succeeded();
+            // Set aside for its own failures: the next pull goes after the usual wait, not this one's. For the connection's or
+            // the site's (since 0.7.7), the wait keeps growing: only an upload that goes through starts it over.
+            if (ownFault) backoff.Succeeded();
         }
         failing[file] = (fails, until);
     }

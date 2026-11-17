@@ -197,12 +197,12 @@ public sealed class LogUploader : IDisposable
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                answer = new UploadAnswer(UploadOutcome.Retry, Why: "Its file couldn't be read.");
+                answer = new UploadAnswer(UploadOutcome.Retry, Why: "Its file couldn't be read.", ThisPull: true);
             }
             catch (Exception ex)
             {
                 Services.Log.Error(ex, "Raid Codex couldn't upload a pull");
-                answer = new UploadAnswer(UploadOutcome.Retry, Why: "The upload couldn't be made.");
+                answer = new UploadAnswer(UploadOutcome.Retry, Why: "The upload couldn't be made.", ThisPull: true);
             }
             if (site.Closed) return;
             try
@@ -226,8 +226,11 @@ public sealed class LogUploader : IDisposable
         });
     }
 
-    /// <summary>A store write on a worker (files forced to disk), never the framework thread's; a failure is logged.</summary>
-    private static void OffFramework(Action write, string what)
+    /// <summary>
+    /// A store mark on a worker (files forced to disk), never the framework thread's; a failure is logged, and the queue told
+    /// (on the framework thread) so the pull may be picked again. Until the store shows the mark, the queue doesn't pick it.
+    /// </summary>
+    private void MarkOffFramework(string file, Action write, string what)
     {
         _ = Task.Run(() =>
         {
@@ -238,6 +241,15 @@ public sealed class LogUploader : IDisposable
             catch (Exception ex)
             {
                 Services.Log.Error(ex, $"Raid Codex couldn't {what}");
+                if (site.Closed) return;
+                try
+                {
+                    _ = Services.Framework.RunOnFrameworkThread(() => queue.Settled(file));
+                }
+                catch (Exception)
+                {
+                    // Unloaded meanwhile.
+                }
             }
         });
     }
@@ -249,16 +261,17 @@ public sealed class LogUploader : IDisposable
         if (mark is { SentId: { } id })
         {
             // Written on a worker: the store forces each of its two small files to disk, and on the
-            // framework thread that could stall the game (an answer often comes as the next pull starts).
+            // framework thread that could stall the game (an answer often comes as the next pull starts). The queue doesn't
+            // pick it again meanwhile (it would be uploaded twice): it waits for the store to show it sent.
             var at = DateTimeOffset.UtcNow;
-            OffFramework(() => store.MarkSent(info, id, at), "mark a pull sent");
+            MarkOffFramework(info.File, () => store.MarkSent(info, id, at), "mark a pull sent");
             summaries.Remove(info.File);
             Services.Log.Information($"Raid Codex uploaded {info.Name}{(answer.Duplicate ? " (already there)" : "")}{(answer.Thinned ? ", thinned" : "")}");
             return;
         }
         if (mark is { Refused: { } why })
         {
-            OffFramework(() => store.MarkRefused(info, why), "mark a pull refused");
+            MarkOffFramework(info.File, () => store.MarkRefused(info, why), "mark a pull refused");
             summaries.Remove(info.File);
             Services.Log.Information($"Raid Codex's upload of {info.Name} was refused: {why}");
             return;

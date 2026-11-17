@@ -199,9 +199,13 @@ public sealed partial class MainWindow
             ? new Kit.Fact("Party", PartyCount(info) is { } n ? Format.Thousands(n) : "…", "places")
             : new Kit.Fact("Party", "None", Color: Palette.Muted, Sans: true);
 
-    /// <summary>How many of the party a pull kept, read from its file once on a worker (the index doesn't say); null until it's read.</summary>
+    /// <summary>
+    /// How many of the party a pull kept: the index's (since 0.7.7); for a pull an older version listed, read from its file once
+    /// on a worker (or taken from the pull's own screen as it reads the file); null until it's known.
+    /// </summary>
     private int? PartyCount(RecordingInfo info)
     {
+        if (info.PartyCount is { } known) return known;
         if (partyCounts.TryGetValue(info.File, out var n)) return n >= 0 ? n : null;
         partyCounts[info.File] = -1;
         _ = System.Threading.Tasks.Task.Run(() =>

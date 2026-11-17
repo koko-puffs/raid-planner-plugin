@@ -29,6 +29,8 @@ public sealed partial class MainWindow
         if (pullView?.File == info.File) return;
         pullView = new PullState(info.File, null, null, 0);
         var file = info.File;
+        // Its party is counted from this read: the Party fact never starts a second read of the same file meanwhile.
+        partyCounts.TryAdd(file, -1);
         _ = Task.Run(() =>
         {
             try
@@ -59,7 +61,9 @@ public sealed partial class MainWindow
                             : "It's gone for good: it hasn't been sent to the Raid Codex.",
                         "Delete", "Keep it", () =>
                         {
-                            store.Delete(info);
+                            // Out of the list at once; its file's delete and the index's and marks' writes on a worker, never in a frame.
+                            _ = store.DeleteLater(info).ContinueWith(t => Services.Log.Error(t.Exception!, "Raid Codex couldn't delete a pull"),
+                                TaskContinuationOptions.OnlyOnFaulted);
                             screen = Screen.Home;
                             Notify($"Deleted pull {Math.Max(1, info.Pull)}", ToastKind.News, Icon.Trash);
                         }, danger: true, yesIcon: Icon.Trash);
