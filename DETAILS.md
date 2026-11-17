@@ -178,8 +178,14 @@ own function first and changes nothing):
 A hook that can't be made (the game changed under the plugin) is left out, the rest still
 records, and Settings → Recording says what's missing.
 
-Enemies are every combatant battle NPC seen (a hit from one not seen yet counts only if it's a
-combatant or a part of one with no owner: pets and summons are the party's own). In a field
+Enemies are every combatant battle NPC seen, and since 0.7.5 every helper too: the game's invisible
+actors (BNpcBase 9020 and their kin) that cast nearly every real AoE, a battle NPC of sub-kind 11
+(`FightRecorder.HelperKind`; Dalamud's `BattleNpcSubKind` has no name for it, BossMod's
+`ActorType.Helper` is 0x20B). Until 0.7.5 only sub-kinds 5 (combatant) and 1 (a part of one) were
+read, so every helper's cast, hit on the party, status and marker was left out: a replay drew
+almost no mechanics, and Survival missed the damage they did (recordings from then can't get them
+back). A hit from one not seen yet counts only if it's a combatant, a part of one or a helper with
+no owner: pets and summons are the party's own. In a field
 operation's open zone (`GameData.IsFieldZone`: the TerritoryType sheet's TerritoryIntendedUse 41
 Eureka, 48 the Bozjan Southern Front and Zadnor, 61 Occult Crescent's South and North Horn) the
 object table also holds mobs other players are fighting and the next CE's or FATE's enemies, so
@@ -1881,7 +1887,14 @@ entry).
 
 ## Release notes
 
-### 0.7.4 (not released yet)
+### 0.7.5 (not released yet)
+
+- **The fight's helpers are recorded.** The invisible actors that cast nearly every real AoE (the game's helpers,
+  a battle NPC kind of their own) were left out since the first version: only the boss's own casts were kept, so a
+  replay showed almost no mechanics and the damage they did to the party was missing from Survival, fails and deaths.
+  Their casts, hits, statuses and head markers are recorded now. Recordings made before can't get them back.
+
+### 0.7.4
 
 - **The normal meter is as tall as what it shows.** It no longer keeps room for pace and the limit break before
   they come, so there's no empty band at the edge away from its head (a meter growing up with one player had 53px
