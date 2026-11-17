@@ -62,7 +62,7 @@ makes, now and later. It's served by the kokos-tools site (`api/dalamud-repo.js`
 plugin's own `repo.json` from GitHub (this repository's included: the release workflow keeps it up to
 date, as above) and hands Dalamud them all as one list, cached for about ten minutes. This plugin is
 already in its `PLUGIN_REPOS`: until this repository exists and has a release, the site lists only
-Housing Studio. Players change nothing.
+Decorium. Players change nothing.
 
 ## 3. Install it in the game
 
@@ -87,7 +87,7 @@ Installed Dev Plugins.
   README what the plugin does.
 - **Square Enix's terms of service.** Any third-party tool is against them. This one only reads (it
   never acts in the game), but it reads network messages through hooks, and it's new; it lives in
-  Koko's custom repository alongside Housing Studio's. Don't talk about it in the game.
+  Koko's custom repository alongside Decorium's. Don't talk about it in the game.
 - **After every game patch** the API level may go up and the game's code moves:
   - When Dalamud releases a new API (e.g. 16), update `Dalamud.NET.Sdk/15.0.0` in
     `RaidPlanner.csproj` to the new SDK version, fix what the compiler flags, and release; the

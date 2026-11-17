@@ -51,7 +51,7 @@ Record the fights you're in, then make them into plans on
 
 1. In game, `/xlsettings` → **Experimental** → **Custom Plugin Repositories** → add
    `https://www.kokos-tools.com/dalamud/repo.json` (Koko's repository: already there if you use
-   Housing Studio) → tick it → **Save and Close**.
+   Decorium) → tick it → **Save and Close**.
 2. `/xlplugins` → **All Plugins** → **Raid Codex** → **Install**.
 3. `/raidcodex` (or `/rc`) opens it.
 

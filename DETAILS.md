@@ -490,7 +490,7 @@ after a success) and `LiveShare` (below).
 
 ## Sending (`Core/SiteLink.cs`, `UI/Views/Send.cs`)
 
-As Housing Studio's plugin sends a house: the token from the site (`rpp_` and 43 letters, pasted
+As Decorium's plugin sends a house: the token from the site (`rpp_` and 43 letters, pasted
 in Settings → Account, kept masked, never logged), and a POST to the site's database function
 `rp_plugin_send` with the site's publishable key, the token in the body. Its answer is the pull's
 id there (the window then offers _Open it_, `/raid-codex?from-game=<id>`), or a refusal in the
