@@ -120,7 +120,8 @@ public sealed class Plugin : IDalamudPlugin
             // The tracker listens to the recorder's parser and keeps its hooks on while it's shown.
             recorder.HooksWanted = () => cooldowns.WantsHooks;
             cooldownWindow.InDuty = () => recorder.DutyHere != null;
-            cooldownWindow.Gauge = () => meter.Source.LimitBreak;
+            // The meter's gauge, read for the tracker when the meter's off (it would freeze otherwise).
+            cooldownWindow.Gauge = meter.GaugeNow;
             // Since 0.5.0: the plan's cooldowns, while it follows a pull (the tracker's "planned in 8 s"; the callouts' "You: Reprisal").
             cooldownWindow.PlanNow = () => plans.Plan is { } p && plans.PlanClock is { } c ? (p, c) : null;
             calloutWindow.YourSpot = () => PartyMembers.YourSpot(data);

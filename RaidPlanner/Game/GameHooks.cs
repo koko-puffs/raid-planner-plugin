@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
@@ -91,6 +92,42 @@ public sealed unsafe class GameHooks : IDisposable
     /// </summary>
     private static readonly (byte Low, byte Index)[] BatchedLayout = { (10, 18), (18, 34), (26, 50) };
 
+    /// <summary>
+    /// One batched handler's hook, its layout, and whether its messages are still read. The pattern is the plugin's
+    /// only guess at where code is, so what's read is checked before it's read (<see cref="OnBatchedMapEffects"/>), and
+    /// a handler whose messages don't look like map effects isn't read again this session (the game's own call goes on).
+    /// </summary>
+    private sealed class BatchedHandler(byte low, byte index)
+    {
+        public readonly byte Low = low;
+        public readonly byte Index = index;
+
+        /// <summary>The most map effects its message holds (4, 8 or 12).</summary>
+        public int Most => (Low - 2) / 2;
+
+        /// <summary>The bytes its message can take up: the count, the halves and the indexes.</summary>
+        public int Extent => Index + Most;
+
+        public Hook<BatchedMapEffects>? Hook;
+
+        /// <summary>Given up on: its messages aren't read any more.</summary>
+        public volatile bool Off;
+
+        /// <summary>Messages whose count was more than it holds.</summary>
+        public int OutOfRange;
+
+        /// <summary>Messages read in the second that began at <see cref="SecondFrom"/> (Environment.TickCount64).</summary>
+        public int ThisSecond;
+
+        public long SecondFrom;
+    }
+
+    /// <summary>A batched handler's count past what it holds this many times: not the message it was taken for.</summary>
+    private const int MostOutOfRange = 3;
+
+    /// <summary>More batched map-effect messages than this in a second: not map effects (they come a few a pull).</summary>
+    private const int MostASecond = 200;
+
     private readonly List<Hook<BatchedMapEffects>> batched = new();
     private readonly EffectBatch batch = new();
     private readonly uint[] targetIds = new uint[EffectBatch.MaxTargets];
@@ -149,15 +186,14 @@ public sealed unsafe class GameHooks : IDisposable
             {
                 for (var i = 0; i < found.Length; i++)
                 {
-                    var layout = BatchedLayout[i];
-                    Hook<BatchedMapEffects>? hook = null;
-                    hook = Services.GameInterop.HookFromAddress<BatchedMapEffects>(found[i], (a1, a2, a3, a4) =>
+                    var handler = new BatchedHandler(BatchedLayout[i].Low, BatchedLayout[i].Index);
+                    handler.Hook = Services.GameInterop.HookFromAddress<BatchedMapEffects>(found[i], (a1, a2, a3, a4) =>
                     {
-                        var result = hook!.Original(a1, a2, a3, a4);
-                        if (recorder.Listening) OnBatchedMapEffects((byte*)a2, layout.Low, layout.Index);
+                        var result = handler.Hook!.Original(a1, a2, a3, a4);
+                        if (!handler.Off && recorder.Listening) OnBatchedMapEffects(handler, a2);
                         return result;
                     });
-                    batched.Add(hook);
+                    batched.Add(handler.Hook);
                 }
             }
             else
@@ -294,7 +330,7 @@ public sealed unsafe class GameHooks : IDisposable
         var parser = recorder.Combat;
         var owner = OwnerOf(caster, casterPtr);
         var member = parser.MemberOf(caster, owner);
-        if (member == 0) return;
+        if (member == 0 || !diag.Room()) return;
         diag.Write("action-type", $"caster {caster:X8} member {member:X8} type {header->ActionType} id {header->ActionId} seq {header->GlobalSequence} targets {header->NumTargets}");
     }
 
@@ -310,7 +346,8 @@ public sealed unsafe class GameHooks : IDisposable
         if (member != 0)
         {
             if (batch.ActionType != ActionTypeAction) return;
-            if (parser.IsArea(batch.Action))
+            // Each line only when it would be kept (DiagnosticsLog.Room): nothing is formatted for one that would be dropped.
+            if (parser.IsArea(batch.Action) && diag.Room())
             {
                 if (targetPos != null) diag.Write("ground", $"caster {batch.Caster:X8} action {batch.Action} at {targetPos->X:0.00} {targetPos->Y:0.00} {targetPos->Z:0.00}");
                 else diag.Write("ground", $"caster {batch.Caster:X8} action {batch.Action} at none");
@@ -318,20 +355,24 @@ public sealed unsafe class GameHooks : IDisposable
             if (CombatLists.IsAutoAttack(parser.Category(batch.Action))) return;
             for (var i = 0; i < batch.Count; i++)
                 foreach (var e in batch.EffectsOf(i))
-                    if (e.Type is Effects.Damage or Effects.BlockedDamage or Effects.ParriedDamage)
+                    if ((e.Type is Effects.Damage or Effects.BlockedDamage or Effects.ParriedDamage) && diag.Room())
                         diag.Write("party-hit", $"caster {batch.Caster:X8} action {batch.Action} target {batch.Targets[i]:X8} type {e.Type} p0 {e.Param0:X2} p1 {e.Param1:X2} bonus {unchecked((sbyte)e.Param2)} p3 {e.Param3:X2} p4 {e.Param4:X2} value {e.Value}");
             return;
         }
         for (var i = 0; i < batch.Count; i++)
         {
-            if (!parser.IsParty(batch.Targets[i])) continue;
-            var text = new System.Text.StringBuilder();
+            if (!parser.IsParty(batch.Targets[i]) || !diag.Room()) continue;
+            // One builder kept for it (the detours run on the game's thread), each effect appended the invariant way in place.
+            var text = diagEffects.Clear();
             foreach (var e in batch.EffectsOf(i))
                 if (e.Type != 0)
-                    text.Append(System.FormattableString.Invariant($" [{e.Type} {e.Param0:X2} {e.Param1:X2} {e.Param2:X2} {e.Param3:X2} {e.Param4:X2} {e.Value}]"));
+                    text.Append(CultureInfo.InvariantCulture, $" [{e.Type} {e.Param0:X2} {e.Param1:X2} {e.Param2:X2} {e.Param3:X2} {e.Param4:X2} {e.Value}]");
             diag.Write("enemy-hit", $"source {batch.Caster:X8} action {batch.Action} target {batch.Targets[i]:X8} hp {batch.Hp[i]} shield {batch.Shield[i]} effects{text}");
         }
     }
+
+    /// <summary>An enemy hit's effects as text, for its diagnostics line (made again for each, never a new builder).</summary>
+    private readonly System.Text.StringBuilder diagEffects = new(256);
 
     /// <summary>The game's own look-up of a character by entity id (its battle characters only), or null.</summary>
     private static BattleChara* Look(uint entityId)
@@ -378,7 +419,7 @@ public sealed unsafe class GameHooks : IDisposable
         try
         {
             // A cast stopped, as sent ([verify] arg2 the action type, arg3 the action, arg4 1 when interrupted).
-            if (category == CancelCast && diag.On)
+            if (category == CancelCast && diag.Room())
                 diag.Write("cancel-cast", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
             // A head marker: its icon, and ([verify], BossMod's reading) whom it points at.
             if (category == HeadMarker) recorder.OnMarker(entityId, arg1, arg2);
@@ -439,26 +480,61 @@ public sealed unsafe class GameHooks : IDisposable
         }
     }
 
-    /// <summary>Several map effects at once: their count first, then each one's state halves and index (BossMod's reading).</summary>
-    private void OnBatchedMapEffects(byte* data, byte offLow, byte offIndex)
+    /// <summary>
+    /// Several map effects at once: their count first, then each one's state halves and index (BossMod's reading). The
+    /// handler was found by a byte pattern, so before anything's read: called far more often than map effects come, or a
+    /// message that isn't readable memory (<see cref="MemoryCheck"/>: a wrong pointer would crash the game, uncatchably),
+    /// and the handler isn't the one it was taken for; nor is it after a few counts past what its message holds. Such a
+    /// handler is given up on for the session (logged once); the game's own call is never touched.
+    /// </summary>
+    private void OnBatchedMapEffects(BatchedHandler h, nint message)
     {
         try
         {
-            if (data == null) return;
+            if (message == 0) return;
+            var now = Environment.TickCount64;
+            if (now - h.SecondFrom >= 1000)
+            {
+                h.SecondFrom = now;
+                h.ThisSecond = 0;
+            }
+            if (++h.ThisSecond > MostASecond)
+            {
+                GiveUp(h, $"called more than {MostASecond} times in a second");
+                return;
+            }
+            if (!MemoryCheck.CanRead(message, h.Extent))
+            {
+                GiveUp(h, $"its message at {message:X} isn't readable memory");
+                return;
+            }
+            var data = (byte*)message;
             // More than the message holds: not the message this was taken for (the game changed); nothing's read.
             var count = (int)*data;
-            if (count > (offLow - 2) / 2) return;
+            if (count > h.Most)
+            {
+                if (++h.OutOfRange >= MostOutOfRange) GiveUp(h, $"its message said {count} map effects, more than the {h.Most} it holds");
+                return;
+            }
             for (var i = 0; i < count; i++)
             {
-                var low = *(ushort*)(data + 2 * i + offLow);
+                var low = *(ushort*)(data + 2 * i + h.Low);
                 var high = *(ushort*)(data + 2 * i + 2);
-                recorder.OnMapEffect(data[i + offIndex], low | ((uint)high << 16));
+                recorder.OnMapEffect(data[i + h.Index], low | ((uint)high << 16));
             }
         }
         catch (Exception ex)
         {
             Failed(ex, "Raid Codex couldn't read batched map effects");
         }
+    }
+
+    /// <summary>A batched handler that isn't what the pattern took it for: not read again this session (said once).</summary>
+    private static void GiveUp(BatchedHandler h, string why)
+    {
+        if (h.Off) return;
+        h.Off = true;
+        Services.Log.Warning($"Raid Codex stopped reading a batched map-effect handler ({why}): the game has probably changed, so arena changes sent in batches aren't recorded");
     }
 
     /// <summary>Every hook let go of, each whatever happens to the others (one left in the game would call into an unloaded plugin).</summary>

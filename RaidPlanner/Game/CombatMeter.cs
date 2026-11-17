@@ -22,8 +22,12 @@ namespace RaidPlanner.Game;
 /// Since 0.5.0 the party is <see cref="PartyMembers"/>'s: a cross-world party outside a duty counts (before, only you did).
 ///
 /// It turns itself off rather than show nonsense: when the parser has dropped three effects that make
-/// no sense (<see cref="CombatParser.Anomalies"/>), the game has moved something it reads; the session
-/// says so (<see cref="MeterSession.Problem"/>) until the plugin is updated.
+/// no sense (<see cref="CombatParser.Anomalies"/>) in one stretch while the meter listens, the game has
+/// probably moved something it reads; the session says so (<see cref="MeterSession.Problem"/>). The
+/// stretches and how long a stop lasts (until the next zone; the third for good) are <see cref="AnomalyGuard"/>'s.
+///
+/// The limit break gauge is read for the cooldown tracker too (<see cref="GaugeNow"/>), whether or not
+/// the meter's on.
 ///
 /// Since 0.4.0 it also tells the session the limit break gauge each frame, which party members carry
 /// Weakness or Brink of Death (during an encounter), and, four times a second with the targetability,
@@ -32,9 +36,6 @@ namespace RaidPlanner.Game;
 /// </summary>
 public sealed unsafe class CombatMeter : IDisposable
 {
-    /// <summary>Anomalies before the meter stops.</summary>
-    private const int TooOdd = 3;
-
     /// <summary>How often the enemies' targetability is read during an encounter (seconds).</summary>
     private const double TargetsEvery = 0.25;
 
@@ -51,6 +52,8 @@ public sealed unsafe class CombatMeter : IDisposable
     private double nextTargets;
     private bool disposed;
     private DateTime failedAt;
+    private readonly AnomalyGuard odd = new();
+    private bool wasInEncounter;
 
     public CombatMeter(Configuration config, GameData data, FightRecorder recorder)
     {
@@ -96,6 +99,8 @@ public sealed unsafe class CombatMeter : IDisposable
     {
         Session.Stop();
         recorder.Combat.Forget();
+        // A stop that isn't for good lasts until here: the meter tries again in the new zone.
+        if (odd.NewZone(recorder.Combat.Anomalies)) Session.Problem = null;
     });
 
     private void Guarded(Action action)
@@ -145,13 +150,18 @@ public sealed unsafe class CombatMeter : IDisposable
         {
             recorder.Combat.Add(Session);
             listening = true;
+            // Only nonsense while the meter listens counts against it (the recorder's parser runs without it too).
+            odd.Restart(recorder.Combat.Anomalies);
         }
         recorder.MeterWants = true;
-        if (recorder.Combat.Anomalies >= TooOdd)
+        if (odd.Check(recorder.Combat.Anomalies))
         {
             Session.Stop();
-            Session.Problem = "The meter has stopped: what it reads from the game made no sense (a hit or a heal too big to be real), "
-                + "so the game has probably moved something. An update to the plugin should bring it back.";
+            Session.Problem = odd.ForGood
+                ? "The meter has stopped: what it reads from the game made no sense (a hit or a heal too big to be real), "
+                    + "so the game has probably moved something. An update to the plugin should bring it back."
+                : "The meter has stopped: what it reads from the game made no sense (a hit or a heal too big to be real). "
+                    + "It tries again in the next zone.";
             Detach();
             return;
         }
@@ -180,16 +190,50 @@ public sealed unsafe class CombatMeter : IDisposable
             var weak = Weakness(me.EntityId, Session.InEncounter);
             party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true, weak);
         }
-        var lb = LimitBreakController.Instance();
-        if (lb != null) Session.Gauge(lb->CurrentUnits, lb->BarCount, lb->BarUnits);
+        ReadGauge();
         var t = recorder.Now;
         Session.Frame(t, party.AsSpan(0, count), anyInCombat);
+        // An encounter's end (here, or a wipe or a clear since the last frame) begins a new stretch.
+        if (wasInEncounter && !Session.InEncounter) odd.Restart(recorder.Combat.Anomalies);
+        wasInEncounter = Session.InEncounter;
 
         if (Session.InEncounter && t >= nextTargets)
         {
             nextTargets = t + TargetsEvery;
             ReportTargets();
         }
+    }
+
+    /// <summary>
+    /// The limit break gauge now, for the cooldown tracker (asked as it draws, while it shows the gauge): the one the
+    /// meter read this frame while it's on, else read here, so it keeps moving while the meter is off (outside a duty
+    /// without Everywhere, turned off, or stopped) without the meter listening again.
+    /// </summary>
+    public LimitBreakGauge? GaugeNow()
+    {
+        if (disposed) return null;
+        if (listening) return Session.LimitBreak;
+        try
+        {
+            ReadGauge();
+        }
+        catch (Exception ex)
+        {
+            Failed(ex);
+        }
+        return Session.LimitBreak;
+    }
+
+    /// <summary>The game's limit break gauge into the session (none when logged out).</summary>
+    private void ReadGauge()
+    {
+        if (!Services.ClientState.IsLoggedIn)
+        {
+            Session.Gauge(0, 0, 0);
+            return;
+        }
+        var lb = LimitBreakController.Instance();
+        if (lb != null) Session.Gauge(lb->CurrentUnits, lb->BarCount, lb->BarUnits);
     }
 
     /// <summary>

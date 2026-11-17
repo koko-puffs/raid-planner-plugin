@@ -21,6 +21,9 @@ namespace RaidPlanner.Core;
 /// <see cref="FlushAt"/> characters. A file stops at <see cref="FileCap"/> bytes: it's moved aside to
 /// <c>diagnostics-&lt;date&gt;.1.log</c> (one older part kept) and a new one begun; only the newest
 /// <see cref="KeepFiles"/> such files are kept. Nothing here ever throws: a line that can't be written is lost.
+/// The game side's busiest readings (every hit) ask <see cref="Room"/> before they make their line, so a line that
+/// wouldn't be kept isn't made at all: past <see cref="MostBuffered"/> characters gathered or still waiting for the
+/// disk, lines are dropped (and counted in the file) rather than piled up in memory.
 /// Game-free (the game side makes the lines), so it's tested.
 /// </summary>
 public sealed class DiagnosticsLog : IDisposable
@@ -31,7 +34,7 @@ public sealed class DiagnosticsLog : IDisposable
     /// <summary>Characters gathered before they're written whatever else happens.</summary>
     public const int FlushAt = 64 * 1024;
 
-    /// <summary>Characters gathered at most (when the disk won't take them): past it lines are dropped.</summary>
+    /// <summary>Characters gathered or waiting for the disk at most (when the disk won't take them): past it lines are dropped.</summary>
     public const int MostBuffered = 4 * FlushAt;
 
     /// <summary>How many diagnostics files are kept in the folder (the newest).</summary>
@@ -48,6 +51,12 @@ public sealed class DiagnosticsLog : IDisposable
     private Task writing = Task.CompletedTask;
     private volatile bool on;
     private int dropped;
+
+    /// <summary>Characters handed to the worker and not yet written (under <see cref="gate"/>).</summary>
+    private int pending;
+
+    /// <summary>Characters gathered plus <see cref="pending"/>: what <see cref="Room"/> reads without the lock.</summary>
+    private volatile int held;
 
     /// <param name="folder">Where the recordings are (the plugin's config folder's recordings folder).</param>
     /// <param name="clock">The local time (the tests' own).</param>
@@ -86,6 +95,22 @@ public sealed class DiagnosticsLog : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Would a line be kept now: on, and room for it (<see cref="MostBuffered"/>, with what's still waiting for the disk)?
+    /// Asked before a line is made on a busy path, so nothing is formatted for a line that would be dropped. While on and
+    /// full, the line asked about is counted as lost (the file says how many). Cheap: two reads, nothing allocated.
+    /// </summary>
+    public bool Room()
+    {
+        if (!on) return false;
+        if (held < MostBuffered) return true;
+        lock (gate) dropped++;
+        return false;
+    }
+
+    /// <summary>What the worker waits on before it writes (the tests' slow disk), or null.</summary>
+    internal System.Threading.ManualResetEventSlim? HoldWrites { get; init; }
 
     /// <summary>The file today's lines go to.</summary>
     public string FileFor(DateTime day) => Path.Combine(folder, Prefix + day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + Extension);
@@ -129,12 +154,14 @@ public sealed class DiagnosticsLog : IDisposable
             var full = false;
             lock (gate)
             {
-                if (buffer.Length + line.Length > MostBuffered)
+                // Full as Room tells it (the line that reaches the cap is kept).
+                if (buffer.Length + pending >= MostBuffered)
                 {
                     dropped++;
                     return;
                 }
                 buffer.Append(line);
+                held = buffer.Length + pending;
                 full = buffer.Length >= FlushAt;
             }
             if (full) Flush();
@@ -165,7 +192,13 @@ public sealed class DiagnosticsLog : IDisposable
             }
             if (lost > 0) text += $"{clock().ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)} | diagnostics | {lost} lines lost (the file couldn't be written fast enough)\n";
             var day = clock();
-            lock (gate) writing = writing.ContinueWith(_ => Append(day, text), TaskScheduler.Default);
+            lock (gate)
+            {
+                // Held until the worker has written it (or failed to).
+                pending += text.Length;
+                held = buffer.Length + pending;
+                writing = writing.ContinueWith(_ => Written(day, text), TaskScheduler.Default);
+            }
         }
         catch (Exception)
         {
@@ -185,6 +218,28 @@ public sealed class DiagnosticsLog : IDisposable
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    /// <summary>On the worker: the text written (<see cref="Append"/>), and no longer held, whatever happened.</summary>
+    private void Written(DateTime day, string text)
+    {
+        try
+        {
+            HoldWrites?.Wait();
+            Append(day, text);
+        }
+        catch (Exception)
+        {
+            // Lost.
+        }
+        finally
+        {
+            lock (gate)
+            {
+                pending -= text.Length;
+                held = buffer.Length + pending;
+            }
         }
     }
 
