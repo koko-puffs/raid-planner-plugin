@@ -287,6 +287,12 @@ everything they do is caught and logged at most every 10 seconds.
 At most 20,000 events and 4,800 frames are kept (9,600 at four a second: Settings → Recording →
 _Smoother replays_, since 0.4.0; on since 0.7.6, turned on once for settings saved before it, `SmoothDefault`). A typical 20-minute pull is about 1.4 MB, and about as much
 again with its combat block; one at the caps can be 4 to 6 MB, which is sent thinned (see Sending).
+Since 0.7.7 the 20,000 is shared out (`RecordingBuilder.MaxMany`, `DeathRoom`): the many (hits, statuses, aggro)
+stop at 16,000, so the rest is kept for the few that show the fight (casts, markers, tethers, targets, map effects,
+waymarks, signs, cancels); deaths and raises go 1,000 past it. A hit not kept still counts as a death's cause.
+Before, whichever came first filled it, and a pull at the cap lost its late mechanics and deaths alike. The
+turns (3,000, `MaxTurns`) never count toward it; nor does the site's ranker, which doesn't rank a pull with
+20,000 or more events but its turns (it may have lost what came late).
 
 ## The file (`Core/Recording.cs`)
 
@@ -1919,6 +1925,9 @@ entry).
 - **Thinning a big pull leaves far less garbage** (more of 0.7.6's work on stalls). Each step of thinning a pull too
   big for the site was written out whole to see whether it fit: up to a dozen strings of several MB each. Each step
   is now only counted, and the one that fits written once. What's sent is the same, byte for byte.
+- **A very long pull keeps its mechanics and deaths.** Of the 20,000 events a pull keeps, hits, statuses and aggro
+  changes now stop at 16,000, so the casts, markers, tethers and the rest late in the pull aren't lost to them;
+  deaths and raises are kept 1,000 past the 20,000. A hit that isn't kept still names what killed someone.
 
 ### 0.7.6
 

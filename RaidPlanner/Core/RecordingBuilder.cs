@@ -56,6 +56,16 @@ public sealed class RecordingBuilder
     /// <summary>The most kept of each, so a very long pull still makes a file the site takes (about 2 MB at most).</summary>
     public const int MaxEvents = 20000;
 
+    /// <summary>
+    /// Since 0.7.7: the many (hits, statuses, aggro) stop here, so the last <see cref="MaxEvents"/> less this is kept for the
+    /// few that show the fight (casts, markers, tethers, targets, map effects, waymarks and the rest). Before, whichever came
+    /// first filled the 20,000, and a long pull's late mechanics could be lost to its hits.
+    /// </summary>
+    public const int MaxMany = 16000;
+
+    /// <summary>Since 0.7.7: deaths and raises are kept up to this many past <see cref="MaxEvents"/> (never lost to the rest).</summary>
+    public const int DeathRoom = 1000;
+
     public const int MaxFrames = 4800;
 
     /// <summary>How often positions are kept for this pull (<see cref="FrameEvery"/>, or <see cref="SmoothFrameEvery"/>).</summary>
@@ -311,8 +321,17 @@ public sealed class RecordingBuilder
         if (id != 0 && !recording.Statuses.ContainsKey(id)) recording.Statuses[id] = statusInfo(id) ?? new StatusInfo(string.Empty, 0);
     }
 
-    /// <summary>Room for one more event (the turn events have their own cap: <see cref="MaxTurns"/>).</summary>
-    private bool Room => recording.Events.Count - turns < MaxEvents;
+    /// <summary>The events kept but the turns (they have their own cap: <see cref="MaxTurns"/>).</summary>
+    private int EventsKept => recording.Events.Count - turns;
+
+    /// <summary>Room for one more of the few (a cast, a marker, a tether...).</summary>
+    private bool Room => EventsKept < MaxEvents;
+
+    /// <summary>Room for one more of the many (a hit, a status, an aggro change).</summary>
+    private bool RoomForMany => EventsKept < MaxMany;
+
+    /// <summary>Room for one more death or raise.</summary>
+    private bool RoomForDeath => EventsKept < MaxEvents + DeathRoom;
 
     /// <summary>The turn events kept (since 0.7.4).</summary>
     public int Turns => turns;
@@ -397,7 +416,8 @@ public sealed class RecordingBuilder
         // An auto-attack isn't a mechanic: a boss swinging at its tank as it follows them round would keep it "at a
         // mechanic" most of a pull, and its turns would fill MaxTurns long before the mechanics late in a long pull.
         if (!AutoAttack(action)) Busy(source, t);
-        if (!Room) return;
+        // Past MaxMany the hit isn't kept, but it still counts as a death's cause (its action named in the file).
+        var keepIt = RoomForMany;
         Remember(action);
         if (damage != null && damage.Count != targets.Count) damage = null;
         if (fx != null && fx.Count != targets.Count) fx = null;
@@ -424,7 +444,7 @@ public sealed class RecordingBuilder
             var did = dmg == null || dmg[k] > 0 || instant;
             if (did) Struck(hit[k], (t, action, source, false), instant || (dmg != null && before != null && before[k] >= 0 && dmg[k] >= before[k]));
         }
-        recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before, sh, xs, zs));
+        if (keepIt) recording.Events.Add(new HitEvent(t, source, action, x, z, rotation, hitX, hitZ, hit, dmg, flags, before, sh, xs, zs));
     }
 
     /// <summary>
@@ -482,7 +502,7 @@ public sealed class RecordingBuilder
         if (!again) return true;
         if (k.From == StatusFrom.Enemy)
         {
-            if (Room) recording.Events.Add(new StatusEvent(t, on, id, k.Source, Math.Max(0, k.Remaining), true, stacks, true));
+            if (RoomForMany) recording.Events.Add(new StatusEvent(t, on, id, k.Source, Math.Max(0, k.Remaining), true, stacks, true));
         }
         else
         {
@@ -516,7 +536,7 @@ public sealed class RecordingBuilder
             case StatusFrom.Enemy:
                 // A Raise status the game names no one for: when it landed, if not by whom.
                 if (on <= 100 && kinds.RaiseStatus(id) && Down(on)) raiseStatus[on] = (t, 0);
-                if (!Room) return;
+                if (!RoomForMany) return;
                 RememberStatus(id);
                 recording.Events.Add(new StatusEvent(t, on, id, source, left, true, stacks));
                 return;
@@ -545,7 +565,7 @@ public sealed class RecordingBuilder
         {
             if (statusSeen.Contains(key) || !statusRead.Contains(key.On)) continue;
             statusGone.Add(key);
-            if (k.From == StatusFrom.Enemy && Room) recording.Events.Add(new StatusEvent(t, key.On, key.Id, 0, 0, false));
+            if (k.From == StatusFrom.Enemy && RoomForMany) recording.Events.Add(new StatusEvent(t, key.On, key.Id, 0, 0, false));
             else if (k.From == StatusFrom.Party) AddStatusRow(new StatusRow(t, key.On, k.Source, key.Id, k.Action, 0, 0, false));
         }
         foreach (var key in statusGone) statuses.Remove(key);
@@ -640,7 +660,7 @@ public sealed class RecordingBuilder
         if (actor == 0) return;
         if (aggro.TryGetValue(actor, out var was) && was == on) return;
         aggro[actor] = on;
-        if (Room) recording.Events.Add(new AggroEvent(t, actor, on));
+        if (RoomForMany) recording.Events.Add(new AggroEvent(t, actor, on));
     }
 
     /// <summary>
@@ -804,7 +824,7 @@ public sealed class RecordingBuilder
         }
         raiseStatus.Remove(who);
         raiseUse.Remove(who);
-        if (!Room) return;
+        if (!RoomForDeath) return;
         // What killed them: the last that could (it landed within the time, and was as big as their HP
         // or an instant death), else the last that hit them. A hit's damage is taken off a moment after the
         // game says it landed, so a bleed's tick can come between it and their HP reaching 0.
@@ -837,7 +857,7 @@ public sealed class RecordingBuilder
         }
         raiseStatus.Remove(who);
         raiseUse.Remove(who);
-        if (Room) recording.Events.Add(new RaiseEvent(t, who, by, at, lb));
+        if (RoomForDeath) recording.Events.Add(new RaiseEvent(t, who, by, at, lb));
     }
 
     /// <summary>Something that did them harm: the last to hit them, and (<paramref name="lethal"/>) the last that could kill.</summary>
