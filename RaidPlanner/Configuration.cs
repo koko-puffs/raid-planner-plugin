@@ -39,6 +39,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowInBar { get; set; } = true;
 
     /// <summary>
+    /// Settings → Recording → <i>Diagnostics</i>: kept as you leave it (since 0.7.5; before, it went off each time the
+    /// plugin loaded, which the user didn't want). Off by default.
+    /// </summary>
+    public bool Diagnostics { get; set; }
+
+    /// <summary>
     /// Upload my logs (since 0.6.0; on): every kept pull goes whole to your logs on the Raid Codex as it ends (when linked). Replaces
     /// 0.5's Send each pull (off by default), which a 0.5 configuration's value is dropped for (<see cref="Migrate"/>).
     /// </summary>

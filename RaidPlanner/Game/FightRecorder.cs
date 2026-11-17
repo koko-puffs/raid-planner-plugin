@@ -179,6 +179,8 @@ public sealed unsafe class FightRecorder : IDisposable
         sink = new RecordingSink(() => Current, () => pullStart);
         Diagnostics = new DiagnosticsLog(store.Folder) { Context = DiagnosticsContext };
         PartyMembers.Diagnostics = Diagnostics;
+        // As you left it (Settings → Recording; kept since 0.7.5).
+        Diagnostics.On = config.Diagnostics;
         diagSink = new DiagnosticsSink(this);
         hooks = new GameHooks(this);
         Services.Framework.Update += OnUpdate;
