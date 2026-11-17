@@ -462,7 +462,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (agent == null) return;
         countdown.Frame(now, agent->Active, agent->TimeRemaining);
         // The countdown's agent as read ([verify]), as it starts and stops.
-        if (Diagnostics.On && agent->Active != diagCountdown)
+        if (agent->Active != diagCountdown && Diagnostics.Room())
         {
             diagCountdown = agent->Active;
             Diagnostics.Write("countdown", $"active {agent->Active} remaining {agent->TimeRemaining:0.000}");
@@ -852,7 +852,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var lb = LimitBreakController.Instance();
         if (lb == null) return;
         b.LimitGauge(t, lb->CurrentUnits, lb->BarCount * lb->BarUnits);
-        if (Diagnostics.On && (lb->CurrentUnits, lb->BarCount, lb->BarUnits) != diagGauge)
+        if ((lb->CurrentUnits, lb->BarCount, lb->BarUnits) != diagGauge && Diagnostics.Room())
         {
             diagGauge = (lb->CurrentUnits, lb->BarCount, lb->BarUnits);
             Diagnostics.Write("lb-gauge", $"units {lb->CurrentUnits} bars {lb->BarCount} barUnits {lb->BarUnits}");
@@ -868,7 +868,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var ui = UIState.Instance();
         if (ui == null) return;
         var hate = &ui->Hate;
-        if (Diagnostics.On) DiagnoseHate(hate);
+        if (Diagnostics.Room()) DiagnoseHate(hate);
         if (hate->HateTargetId is 0 or InvalidId || b.KnownActor(hate->HateTargetId) is not { } on) return;
         var n = 0;
         var count = Math.Clamp(hate->HateArrayLength, 0, hateBuffer.Length);
@@ -946,7 +946,7 @@ public sealed unsafe class FightRecorder : IDisposable
         var aimed = loc.X != 0 || loc.Z != 0;
         b.Cast(Math.Max(0, start), id, cast->ActionId, cast->TotalCastTime, npc.Position.X, npc.Position.Z, cast->Rotation, target,
             aimed ? loc.X : null, aimed ? loc.Z : null, cast->Interruptible);
-        if (Diagnostics.On)
+        if (Diagnostics.Room())
             Diagnostics.Write("enemy-cast", $"actor {npc.EntityId:X8} action {cast->ActionId} cast {cast->TotalCastTime:0.00} interruptible {cast->Interruptible} target {cast->TargetId.ObjectId:X8}");
         if (CastBegan is { } listeners)
         {
@@ -1005,7 +1005,7 @@ public sealed unsafe class FightRecorder : IDisposable
             var action = kind == StatusFrom.Party ? Combat.ActionFor(onEntity, id, member) : 0;
             b.StatusGained(t, on, id, from, kind, source, list[i].Param, list[i].RemainingTime, action);
             // The Raise status's source on someone down, and Weakness's or Brink's ([verify] the raiser; no one or the member).
-            if (Diagnostics.On && (data.Kinds.RaiseStatus(id) || data.Kinds.Weakness(id) > 0))
+            if ((data.Kinds.RaiseStatus(id) || data.Kinds.Weakness(id) > 0) && Diagnostics.Room())
                 Diagnostics.Write("status", $"on {onEntity:X8} {NameOf(onEntity)} status {id} {data.StatusName(id)} source {list[i].SourceObject.ObjectId:X8} {NameOf(list[i].SourceObject.ObjectId)} kind {kind} param {list[i].Param} left {list[i].RemainingTime:0.0} hp {((Character*)chara)->CharacterData.Health}");
         }
     }
