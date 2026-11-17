@@ -23,7 +23,7 @@ public sealed record SendResult(string? Id, string? Why, bool TokenRefused = fal
 
 /// <summary>
 /// Sending a pull to your Raid Codex, with the token made on the site (Settings → Raid Codex
-/// → In-game plugin), as Housing Studio's plugin sends a house. The plugin calls the site's
+/// → In-game plugin), as Decorium's plugin sends a house. The plugin calls the site's
 /// database function <c>rp_plugin_send</c> with the site's publishable key, as the site itself
 /// would; the token says whose account it goes to, and it waits there under From the game until
 /// it's made a plan. The token is never logged.

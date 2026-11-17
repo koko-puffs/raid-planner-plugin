@@ -11,7 +11,7 @@ namespace RaidPlanner.UI;
 /// ImGui.Begin only what can't touch the title bar's buttons: colours (the near-black bar, basalt
 /// at 96% for the window, the white hairline edge), the 14px window corners and no window padding.
 /// The title bar keeps Dalamud's own font and frame padding, so its ☰, ▼ and × sit and hit exactly
-/// as in every other Dalamud window (Housing Studio's 0.3.0 pushed a font there, which made each
+/// as in every other Dalamud window (Decorium's 0.3.0 pushed a font there, which made each
 /// button's hit box about 41px wide while they stand 17px apart). Inside the window: no item spacing
 /// (every gap is the mock-up's own, placed by the views), and ImGui's own controls in the tokens.
 /// </summary>
