@@ -468,7 +468,16 @@ The kinds:
   3 the action, 4 interrupted?).
 - `hot-dot` (since 0.7.10): actor control 23 as sent, whatever its second argument: the actor, party or not, its
   arguments 1–6 (as read: 1 the status, 2 the kind, 3 damage or 4 a heal, 3 the amount, 4 or 5 the source). A 0.7.8
-  recording of a 7-minute fight with three jobs' DoTs up had no `tick` rows at all.
+  recording of a 7-minute fight with three jobs' DoTs up had no `tick` rows at all. A 0.8.0 log of a White Mage on a
+  housing ward's striking dummy (Dia ticking for most of a minute, Regen) had none for the dummy or the White Mage
+  either: the ticks don't come as this message there. The only ones were another player's Lucid Dreaming, every 3 s:
+  `args 0 11 550 <id> 0 0`, so the layout read is right (no status, kind 11 MP gained, 550, a source), and kind 11
+  isn't a heal (it's left out).
+- `actor-control` (since 0.8.1): every other actor-control category about the party or an enemy (an id from
+  0x40000000), as sent: the category, arguments 1–8 and the target. To see which message the ticks do come in.
+- `fly-text` (since 0.8.1): each number the game shows flying off a character (`IFlyTextGui.FlyTextCreated`, read
+  and never changed): its kind (a DoT's tick is `AutoAttackOrDot`), values, icons and words. A tick that flies with
+  no message above it came some other way than the plugin listens.
 - `party-hit`: each of the party's damage effects (autos left out): action, caster, target, the effect's
   type, Param0, Param1, the bonus % (Param2, signed), Param3, Param4, the value.
 - `enemy-hit`: an enemy's hit on a party member: every effect on them as sent `[type p0 p1 p2 p3 p4
@@ -2195,6 +2204,10 @@ entry).
 ## Release notes
 
 ### 0.8.1 (not released yet)
+
+- **Diagnostics look further for DoT and HoT ticks** (`actor-control`, `fly-text`): a 0.8.0 log showed a White
+  Mage's Dia and Regen ticks never come as the message the plugin reads them from, so the plugin now writes the
+  other messages about the party and enemies, and each number flying off the screen, to find where they do.
 
 - **Windows sized for your screen** (Settings → Windows → Size, `/raidcodex size`): on a screen taller than 1440 px
   every window, its words, icons and spacing are bigger, as much as the screen is taller (150% on 4K), unless

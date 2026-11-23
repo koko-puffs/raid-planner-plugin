@@ -60,6 +60,9 @@ public sealed unsafe class GameHooks : IDisposable
     /// <summary>An action, not an item or a mount (the effect's action type).</summary>
     private const byte ActionTypeAction = 1;
 
+    /// <summary>Where the game's ids for enemies and other non-players start (players' are 0x10…).</summary>
+    private const uint EnemyIds = 0x40000000;
+
     /// <summary>The id the game gives objects that exist only on your screen.</summary>
     private const uint InvalidId = 0xE0000000;
 
@@ -173,6 +176,17 @@ public sealed unsafe class GameHooks : IDisposable
         {
             missing.Add("head markers and damage-over-time ticks");
             Services.Log.Error(ex, "Raid Codex couldn't hook actor control");
+        }
+        try
+        {
+            // Diagnostics only: each number the game shows flying off a character (a DoT's tick shows as one), to tell a
+            // tick the game got some other way than an actor-control message (since 0.8.1). Read, never changed.
+            Services.FlyText.FlyTextCreated += OnFlyText;
+            flyTextOn = true;
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Warning(ex, "Raid Codex couldn't watch the flying numbers (Diagnostics only)");
         }
         try
         {
@@ -466,6 +480,11 @@ public sealed unsafe class GameHooks : IDisposable
             // not one tick row, so what (if anything) comes as category 23 wants seeing ([verify] the arguments' order).
             if (category == HotDot && diag.Room())
                 diag.Write("hot-dot", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
+            // Every other category about the party or an enemy, as sent (since 0.8.1): a White Mage's Dia on a striking
+            // dummy and Regen came as no category-23 message at all (only another player's Lucid Dreaming did, kind 11 for
+            // MP), so where the ticks do come wants seeing.
+            else if (category is not (CancelCast or HeadMarker) && (entityId is >= EnemyIds and < InvalidId || recorder.Combat.IsParty(entityId)) && diag.Room())
+                diag.Write("actor-control", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} cat {category} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6} {arg7} {arg8} target {(ulong)targetId:X}");
             // A head marker: its icon, and ([verify], BossMod's reading) whom it points at.
             if (category == HeadMarker) recorder.OnMarker(entityId, arg1, arg2);
             else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4, arg5);
@@ -583,9 +602,37 @@ public sealed unsafe class GameHooks : IDisposable
     }
 
     /// <summary>Every hook let go of, each whatever happens to the others (one left in the game would call into an unloaded plugin).</summary>
+    private bool flyTextOn;
+
+    /// <summary>A number flying off a character, for Diagnostics (`fly-text`): its kind, its values and its words, as the game made it.</summary>
+    private void OnFlyText(ref Dalamud.Game.Gui.FlyText.FlyTextKind kind, ref int val1, ref int val2, ref Dalamud.Game.Text.SeStringHandling.SeString text1,
+        ref Dalamud.Game.Text.SeStringHandling.SeString text2, ref uint color, ref uint icon, ref uint damageTypeIcon, ref float yOffset, ref bool handled)
+    {
+        try
+        {
+            if (!diag.Room()) return;
+            diag.Write("fly-text", $"kind {kind} values {val1} {val2} icon {icon} damage-icon {damageTypeIcon} text {text1?.TextValue} | {text2?.TextValue}");
+        }
+        catch (Exception ex)
+        {
+            Failed(ex, "Raid Codex couldn't read a flying number");
+        }
+    }
+
     public void Dispose()
     {
         enabled = false;
+        if (flyTextOn)
+        {
+            try
+            {
+                Services.FlyText.FlyTextCreated -= OnFlyText;
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Warning(ex, "Raid Codex couldn't stop watching the flying numbers");
+            }
+        }
         Release(effects);
         Release(control);
         Release(mapEffects);

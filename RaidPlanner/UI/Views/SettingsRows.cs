@@ -626,7 +626,7 @@ public sealed partial class MainWindow
             case SettingId.Diagnostics:
                 if (SwitchRow(i, "##diagnostics", n, l, recorder.Diagnostics.On,
                         "While on, the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit "
-                        + "break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
+                        + "break gauge, head signs, your recasts, DoT and HoT ticks and the numbers flying off characters) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
                 {
                     recorder.Diagnostics.On = !recorder.Diagnostics.On;
                     config.Diagnostics = recorder.Diagnostics.On;
