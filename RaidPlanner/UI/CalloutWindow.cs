@@ -14,7 +14,7 @@ namespace RaidPlanner.UI;
 /// <summary>
 /// The on-screen callouts (Settings → Plan window, `/raidcodex callouts`): while your plan follows a
 /// pull, its next few steps over the fight, each with a countdown to when it goes off (the plan's
-/// own times, as the cue follower moves its clock: <see cref="PlanService.PlanClock"/>). Since 0.8.2 the
+/// own times, as the cue follower moves its clock: <see cref="PlanService.PlanClock"/>). Since 0.8.3 the
 /// first on a card, its countdown in a ring that empties as it comes, the mechanic's name over its
 /// callout (Archivo Expanded ExtraBold in capitals) and your cooldowns in a chip; the next ones as rows
 /// under it (<see cref="DrawContent"/>). An optional sound a few seconds before each step: one of the
@@ -64,7 +64,7 @@ public sealed class CalloutWindow : OverlayWindow
         return lines.Count > 0;
     }
 
-    // Sizes (CSS px; smaller callouts' in brackets), since 0.8.2: the window's 12 down and 14 in; the first step on a card
+    // Sizes (CSS px; smaller callouts' in brackets), since 0.8.3: the window's 12 down and 14 in; the first step on a card
     // (12 [8] over and under, 12 [9] in at its left, 14 [12] at its right, 12 corners), its countdown in a ring 64 [44]
     // wide, 14 [11] from its words; the next steps as rows 32 [26] tall, 4 apart, 8 under the card, their times centred
     // under the ring.
@@ -133,7 +133,7 @@ public sealed class CalloutWindow : OverlayWindow
     }
 
     /// <summary>
-    /// Since 0.8.2 (until then a countdown column beside the words, the first big and the rest in smaller capitals): the
+    /// Since 0.8.3 (until then a countdown column beside the words, the first big and the rest in smaller capitals): the
     /// first step on a card of its own, its countdown in a ring that empties as it comes (ember in its last seconds, the
     /// card washed ember; at its time, "NOW" on an ember disc and the card's edge ember), the mechanic's name over the
     /// callout and your cooldowns in an ember chip under it; the next steps as quiet rows, their times under the ring.

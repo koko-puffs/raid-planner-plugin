@@ -915,7 +915,7 @@ public sealed partial class MainWindow
         y += Kit.EyebrowH + S(8);
         var o = config.CalloutOverlay;
         var bg = Math.Clamp(o.Background, 0, 1);
-        // The callouts' own look in small (CalloutWindow, since 0.8.2): the first step on a card with its countdown ring,
+        // The callouts' own look in small (CalloutWindow, since 0.8.3): the first step on a card with its countdown ring,
         // the next as rows with their times under the ring.
         var pad = S(10);
         var ring = S(o.Compact ? 28 : 34);
