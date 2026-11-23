@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using System.Threading;
 using Dalamud.Interface.Utility;
@@ -21,17 +22,20 @@ public static class UiScale
     /// <summary>The scale the size setting and the screen want now (<see cref="Factor"/> follows once the fonts are built at it).</summary>
     public static float Wanted { get; private set; } = 1;
 
-    /// <summary>The scale the windows were drawn at when the plugin last ran (<see cref="Configuration.WindowScaleWas"/>).</summary>
-    public static float Was { get; private set; } = 1;
+    /// <summary>
+    /// Screen px per CSS px the windows were drawn at when the plugin last ran (Dalamud's scale times the plugin's:
+    /// <see cref="Configuration.WindowScaleWas"/>): the sizes ImGui remembers from then are at it.
+    /// </summary>
+    public static float WasTotal { get; private set; } = 1;
 
     /// <summary>Counts <see cref="Factor"/>'s moves.</summary>
     public static int Generation => Volatile.Read(ref generation);
 
-    /// <summary>As the plugin starts: the scale the fonts are first built at, and the one the windows were last drawn at.</summary>
-    public static void Start(float factor, float was)
+    /// <summary>As the plugin starts: the scale the fonts are first built at, and the total the windows were last drawn at.</summary>
+    public static void Start(float factor, float wasTotal)
     {
         Factor = Wanted = factor;
-        Was = was > 0 ? was : 1;
+        WasTotal = wasTotal > 0 ? wasTotal : 1;
     }
 
     public static void Want(float factor) => Wanted = factor;
@@ -42,37 +46,50 @@ public static class UiScale
         Factor = factor;
         Interlocked.Increment(ref generation);
     }
+
+    /// <summary>A size (screen px) kept to 95% of the screen's width and 90% of its height (screen px; zero: not known).</summary>
+    public static Vector2 OnScreen(Vector2 size, Vector2 screen) => new(
+        screen.X > 0 ? MathF.Min(size.X, screen.X * CssLimits.ScreenShare) : size.X,
+        screen.Y > 0 ? MathF.Min(size.Y, screen.Y * CssLimits.ScreenHeightShare) : size.Y);
 }
 
 /// <summary>
-/// A window ImGui sizes (its size kept as you leave it): grown or shrunk with the plugin's scale when it moves, from
-/// the size it was last drawn at, so its words keep their room (the main window, the plan window, the opened-up meter).
-/// It starts from the scale the windows were drawn at when the plugin last ran, so a window ImGui remembers from then
-/// follows too.
+/// A window ImGui sizes (its size kept as you leave it): grown or shrunk with the windows' scale (Dalamud's times the
+/// plugin's) when it moves, from the size it was last drawn at, so its words keep their room (the main window, the plan
+/// window, the opened-up meter). It starts from the scale the windows were drawn at when the plugin last ran: until the
+/// window has been drawn, ImGui's size for it is the one from then (<see cref="Seen"/>, for its limits that frame).
 /// </summary>
 public sealed class ScaleFollower
 {
-    private float seen = UiScale.Was;
+    private float seen = UiScale.WasTotal;
+
+    /// <summary>The scale its size was last known at (screen px per CSS px).</summary>
+    public float Seen => seen;
 
     /// <summary>
-    /// In PreDraw: the window's new size (Dalamud's units, for <see cref="Window.Size"/> with
-    /// <c>ImGuiCond.Always</c> for one frame) when the scale has moved since it was last drawn at
-    /// <paramref name="drawn"/> (screen px; zero before it's been drawn, which waits); else null.
+    /// In PreDraw: the window's new size (Dalamud's units, for <see cref="Window.Size"/> with <c>ImGuiCond.Always</c> for
+    /// one frame) when the scale has moved since it was last drawn at <paramref name="drawn"/> (screen px; zero before
+    /// it's been drawn, which waits), kept on the <paramref name="screen"/>; else null.
     /// </summary>
-    public Vector2? Resize(Vector2 drawn)
+    public Vector2? Resize(Vector2 drawn, Vector2 screen)
     {
-        var f = UiScale.Factor;
-        if (System.MathF.Abs(f - seen) < 0.001f || drawn.X <= 0 || drawn.Y <= 0) return null;
-        var by = f / seen;
-        seen = f;
-        return drawn * by / ImGuiHelpers.GlobalScale;
+        var now = Theme.Scale;
+        if (MathF.Abs(now - seen) < 0.001f || drawn.X <= 0 || drawn.Y <= 0) return null;
+        var size = UiScale.OnScreen(drawn * (now / seen), screen);
+        seen = now;
+        return size / ImGuiHelpers.GlobalScale;
     }
 }
 
-/// <summary>A window's smallest and largest size (CSS px), given to Dalamud at the plugin's scale (worked out again only when it moves).</summary>
+/// <summary>A window's smallest and largest size (CSS px), given to Dalamud at a scale (worked out again only when something it hangs on moves).</summary>
 public sealed class CssLimits
 {
-    private float at = -1;
+    /// <summary>How much of the screen's width and height a window's smallest size may take at most (<see cref="Within"/>).</summary>
+    public const float ScreenShare = 0.95f;
+
+    public const float ScreenHeightShare = 0.9f;
+
+    private (float Scale, float Units, Vector2 Screen) at = (-1, -1, default);
     private WindowSizeConstraints given;
 
     public CssLimits(Vector2 min, Vector2 max)
@@ -84,41 +101,23 @@ public sealed class CssLimits
     public Vector2 Min { get; }
     public Vector2 Max { get; }
 
-    /// <summary>How much of the screen's width a window's smallest size may take at most (<see cref="Within"/>).</summary>
-    public const float ScreenShare = 0.95f;
-
-    private (float Factor, Vector2 Screen) withinAt = (-1, default);
-    private WindowSizeConstraints within;
+    /// <summary>For <see cref="Window.SizeConstraints"/>, at the windows' scale now.</summary>
+    public WindowSizeConstraints Now => Within(default, Theme.Scale);
 
     /// <summary>
-    /// For <see cref="Window.SizeConstraints"/>, the smallest size kept to 95% of the screen's width and 90% of its height
-    /// (screen px; zero: not known), so a big window at a big size never needs more than the screen has.
+    /// For <see cref="Window.SizeConstraints"/>, at <paramref name="scale"/> (screen px per CSS px; the windows' now if
+    /// 0), the smallest kept to 95% of the screen's width and 90% of its height (screen px; zero: not known), so a big
+    /// window at a big size never needs more than the screen has.
     /// </summary>
-    public WindowSizeConstraints Within(Vector2 screen)
+    public WindowSizeConstraints Within(Vector2 screen, float scale = 0)
     {
-        var f = UiScale.Factor;
-        if (withinAt.Factor == f && withinAt.Screen == screen) return within;
-        withinAt = (f, screen);
-        var min = Min * f;
+        if (scale <= 0) scale = Theme.Scale;
         var units = ImGuiHelpers.GlobalScale;
-        if (units > 0 && screen.X > 0) min.X = System.MathF.Min(min.X, screen.X * ScreenShare / units);
-        if (units > 0 && screen.Y > 0) min.Y = System.MathF.Min(min.Y, screen.Y * 0.9f / units);
-        within = new WindowSizeConstraints { MinimumSize = min, MaximumSize = Vector2.Max(Max * f, min) };
-        return within;
-    }
-
-    /// <summary>For <see cref="Window.SizeConstraints"/>.</summary>
-    public WindowSizeConstraints Now
-    {
-        get
-        {
-            var f = UiScale.Factor;
-            if (f != at)
-            {
-                at = f;
-                given = new WindowSizeConstraints { MinimumSize = Min * f, MaximumSize = Max * f };
-            }
-            return given;
-        }
+        if (units <= 0) units = 1;
+        if (at.Scale == scale && at.Units == units && at.Screen == screen) return given;
+        at = (scale, units, screen);
+        var min = UiScale.OnScreen(Min * scale, screen) / units;
+        given = new WindowSizeConstraints { MinimumSize = min, MaximumSize = Vector2.Max(Max * scale / units, min) };
+        return given;
     }
 }

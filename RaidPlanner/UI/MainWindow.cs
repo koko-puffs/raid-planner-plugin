@@ -71,7 +71,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
         Size = Theme.Units(FirstSize);
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = Limits.Within(Vector2.Zero);
+        SizeConstraints = Limits.Within(Vector2.Zero, UiScale.WasTotal);
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
         dialogs.AddedWindowFlags = ImGuiWindowFlags.NoCollapse;
     }
@@ -214,8 +214,6 @@ public sealed partial class MainWindow : Window, IDisposable
     public override void PreDraw()
     {
         var vp = ImGui.GetMainViewport().Size;
-        // At least 1040 wide (Settings' sidebar beside its pages), but never wider or taller than the screen allows.
-        SizeConstraints = Limits.Within(vp);
         if (!firstSizeFitted)
         {
             // The first size could be wider or taller than the screen, with the footer off it (Size is in Dalamud's units).
@@ -230,13 +228,16 @@ public sealed partial class MainWindow : Window, IDisposable
             sizedOnce = false;
             SizeCondition = ImGuiCond.FirstUseEver;
         }
-        if (follower.Resize(lastSize) is { } resized)
+        if (follower.Resize(lastSize, vp) is { } resized)
         {
             // The windows' size moved (Settings → Windows → Size): it grows or shrinks with it.
             Size = resized;
             SizeCondition = ImGuiCond.Always;
             sizedOnce = true;
         }
+        // At least 1040 wide (Settings' sidebar beside its pages), never wider or taller than the screen allows; at the
+        // scale its size is from (until it's drawn, ImGui's from last time: the follower grows it after).
+        SizeConstraints = Limits.Within(vp, follower.Seen);
         Theme.PushFrame();
     }
 

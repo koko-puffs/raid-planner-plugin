@@ -195,7 +195,7 @@ public sealed partial class MeterWindow : Window
         this.fonts = fonts;
         Size = Theme.Units(new Vector2(330, OpenHeight));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = Sizes.Now;
+        SizeConstraints = Sizes.Within(default, UiScale.WasTotal);
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
         IsOpen = config.ShowMeter;
@@ -413,7 +413,8 @@ public sealed partial class MeterWindow : Window
         // Folded (or empty) it's as tall as what it shows, as wide as it was (ImGui fits the height to what
         // was drawn; the width is set, so it's kept: known once it's been drawn).
         var fits = widthKnown && view is View.Nothing or View.Stopped or View.Folded;
-        SizeConstraints = fits ? FitSizes.Now : Sizes.Now;
+        // Before it's been drawn its size is ImGui's from last time, at the scale it was drawn at then (its width is read at it).
+        SizeConstraints = fits ? FitSizes.Now : widthKnown ? Sizes.Now : Sizes.Within(default, UiScale.WasTotal);
         var height = float.NaN;
         if (fits)
         {
@@ -589,7 +590,8 @@ public sealed partial class MeterWindow : Window
             DrawPlate(top, w, bottom, m);
             return;
         }
-        widthCss = w / Theme.Scale;
+        // Its first width is ImGui's from last time, at the scale the windows were drawn at then.
+        widthCss = w / (widthKnown ? Theme.Scale : UiScale.WasTotal);
         widthKnown = true;
         previewInFoot = false;
         // A death's row's height in its faces, for the height fitted to the Deaths tab before it's drawn.

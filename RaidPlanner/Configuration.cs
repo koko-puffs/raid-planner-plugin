@@ -252,10 +252,11 @@ public sealed class Configuration : IPluginConfiguration
     public int WindowSize { get; set; } = UI.Model.WindowSize.Fit;
 
     /// <summary>
-    /// The plugin's own scale the windows were last drawn at (1 before 0.8.0): the windows ImGui sizes (the main window,
-    /// the plan window, the opened-up meter) are grown or shrunk from it when it's another as the plugin starts.
+    /// Screen px per CSS px the windows were last drawn at (Dalamud's scale times the plugin's; 0 before 0.8.0, when it
+    /// was Dalamud's alone): the sizes ImGui remembers from then are at it, so the windows it sizes (the main window, the
+    /// plan window, the meter) are grown or shrunk from it, and fitting the screen builds the fonts at it first.
     /// </summary>
-    public float WindowScaleWas { get; set; } = 1;
+    public float WindowScaleWas { get; set; }
 
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();

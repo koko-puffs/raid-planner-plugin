@@ -1013,12 +1013,16 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   frame, so the words and the windows move together, and what's measured in a font (keyed on `S(1)` and
   `Fonts.Generation`) is measured again. Dalamud's window sizes are in its own units (it multiplies them by its
   scale), so the plugin gives them times its own (`Theme.Units`, `CssLimits` for the smallest and largest); the
-  windows ImGui sizes (the main window, the plan window, the opened-up meter) grow or shrink by the same ratio when
-  it moves (`ScaleFollower`, from the size they were last drawn at), and the overlays and the meter, sized by the
-  plugin every frame, follow by themselves (their saved widths and heights are CSS px). The scale drawn at is kept
-  (`Configuration.WindowScaleWas`): fitting starts the fonts at it (the screen isn't known before the first frame),
-  and a window ImGui remembers from last time is grown from it. The title bars stay Dalamud's own size (its font
-  and buttons, as above).
+  windows ImGui sizes (the main window, the plan window, the opened-up meter) grow or shrink when the whole scale
+  (Dalamud's times the plugin's, so a change of Dalamud's own that fitting makes up for moves nothing) moves, by its
+  ratio, from the size they were last drawn at, kept on the screen (`ScaleFollower`); their smallest sizes are kept
+  to 95% of the screen's width and 90% of its height (`CssLimits.Within`). The overlays and the meter, sized by the
+  plugin every frame, follow by themselves (their saved widths and heights are CSS px). The whole scale drawn at is
+  kept (`Configuration.WindowScaleWas`; before 0.8.0, Dalamud's alone): ImGui's remembered sizes are at it, so until
+  a window has been drawn its limits are at it (not clamped by the new scale's) and the follower then grows it, and
+  the meter reads its first width at it; fitting starts the fonts at it (the screen isn't known before the first
+  frame). A minimised game (a screen under 200px tall) keeps the size it has. The title bars stay Dalamud's own size
+  (its font and buttons, as above).
 - **Toasts** (`Frame.Toast`): raised near-solid, 10px corners, a hairline, an icon in its colour
   (it worked green, it didn't red, news ember), at most one action in ember-light ("Open", "Why"), and
   a 2px bar along its foot counting its 2.6 seconds down in its colour; it waits while pointed at and

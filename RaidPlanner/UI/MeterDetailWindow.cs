@@ -71,7 +71,7 @@ public sealed class MeterDetailWindow : Window
         this.fonts = fonts;
         Size = Theme.Units(new Vector2(1180, 560));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = Limits.Now;
+        SizeConstraints = Limits.Within(Vector2.Zero, UiScale.WasTotal);
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse;
     }
 
@@ -107,18 +107,19 @@ public sealed class MeterDetailWindow : Window
 
     public override void PreDraw()
     {
-        SizeConstraints = Limits.Now;
+        var vp = ImGui.GetMainViewport().Size;
         if (sizedOnce)
         {
             sizedOnce = false;
             SizeCondition = ImGuiCond.FirstUseEver;
         }
-        if (follower.Resize(drawnSize) is { } resized)
+        if (follower.Resize(drawnSize, vp) is { } resized)
         {
             Size = resized;
             SizeCondition = ImGuiCond.Always;
             sizedOnce = true;
         }
+        SizeConstraints = Limits.Within(vp, follower.Seen);
         // A theme draws its own ground and frame (as the compact meter does); Ready Check's is the kit's window.
         if (Rc) Theme.PushFrame();
         else Theme.PushFrame(Vector4.Zero, T.Win.Radius, Vector4.Zero);

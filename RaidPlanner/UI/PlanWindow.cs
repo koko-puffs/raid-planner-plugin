@@ -90,7 +90,7 @@ public sealed class PlanWindow : Window
         this.fonts = fonts;
         Size = Theme.Units(new Vector2(340, 520));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = Limits.Now;
+        SizeConstraints = Limits.Within(Vector2.Zero, UiScale.WasTotal);
         // A plan on screen during a fight shouldn't close on Escape, take the game's focus, or click.
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
@@ -138,14 +138,15 @@ public sealed class PlanWindow : Window
             sizedOnce = false;
             SizeCondition = ImGuiCond.FirstUseEver;
         }
-        SizeConstraints = Limits.Now;
-        if (Drawn is { } was && follower.Resize(was.Size) is { } resized)
+        var vp = ImGui.GetMainViewport().Size;
+        if (Drawn is { } was && follower.Resize(was.Size, vp) is { } resized)
         {
             // The windows' size moved (Settings → Windows → Size): it grows or shrinks with it.
             Size = resized;
             SizeCondition = ImGuiCond.Always;
             sizedOnce = true;
         }
+        SizeConstraints = Limits.Within(vp, follower.Seen);
         if (putAt is { } put)
         {
             putAt = null;

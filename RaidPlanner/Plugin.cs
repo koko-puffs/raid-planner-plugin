@@ -111,7 +111,11 @@ public sealed class Plugin : IDalamudPlugin
 
             // The windows' size (Settings → Windows → Size): fitting the screen, the scale it gave last time (the screen
             // isn't known until the first frame: FollowScale moves it then if it's another).
-            UiScale.Start(config.WindowSize == WindowSize.Fit ? WindowScaleWas() : WindowSize.Factor(config.WindowSize, 0, 1), WindowScaleWas());
+            var wasTotal = WindowScaleWas();
+            var units = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+            UiScale.Start(config.WindowSize == WindowSize.Fit
+                ? Math.Clamp(MathF.Round(wasTotal / (units > 0 ? units : 1) * 20) / 20, 1, WindowSize.FitMost)
+                : WindowSize.Factor(config.WindowSize, 0, 1), wasTotal);
             fonts = new Fonts(UiScale.Factor);
             window = new MainWindow(config, store, recorder, site, plans, uploads, logs, fonts);
             planWindow = new PlanWindow(config, plans, recorder, data, fonts);
@@ -322,8 +326,19 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    /// <summary>The scale the windows were drawn at when the plugin last ran (1 before 0.8.0, or if the file says something odd).</summary>
-    private float WindowScaleWas() => config.WindowScaleWas is >= 0.5f and <= 4f ? config.WindowScaleWas : 1;
+    /// <summary>
+    /// Screen px per CSS px the windows were drawn at when the plugin last ran: Dalamud's scale alone before 0.8.0 (or if
+    /// the file says something odd).
+    /// </summary>
+    private float WindowScaleWas()
+    {
+        if (config.WindowScaleWas is >= 0.25f and <= 8f) return config.WindowScaleWas;
+        var units = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+        return units > 0 ? units : 1;
+    }
+
+    /// <summary>The game's screen height (px) as last drawn, for /raidcodex size's answer.</summary>
+    private float screenHeight;
 
     private DateTime scaleFailedAt;
 
@@ -335,12 +350,19 @@ public sealed class Plugin : IDalamudPlugin
     {
         try
         {
-            var wanted = WindowSize.Factor(config.WindowSize, Dalamud.Bindings.ImGui.ImGui.GetMainViewport().Size.Y, Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
-            UiScale.Want(wanted);
-            fonts.Follow(wanted, Dalamud.Bindings.ImGui.ImGui.GetTime());
-            if (MathF.Abs(UiScale.Factor - config.WindowScaleWas) > 0.001f)
+            // Minimised (no screen to speak of): the size stays as it is, not fitted to nothing.
+            var height = Dalamud.Bindings.ImGui.ImGui.GetMainViewport().Size.Y;
+            if (height >= 200) screenHeight = height;
+            if (screenHeight > 0 || config.WindowSize != WindowSize.Fit)
             {
-                config.WindowScaleWas = UiScale.Factor;
+                var wanted = WindowSize.Factor(config.WindowSize, screenHeight, Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
+                UiScale.Want(wanted);
+                fonts.Follow(wanted, Dalamud.Bindings.ImGui.ImGui.GetTime());
+            }
+            var total = Theme.Scale;
+            if (MathF.Abs(total - config.WindowScaleWas) > 0.001f)
+            {
+                config.WindowScaleWas = total;
                 config.Save();
             }
         }
@@ -366,7 +388,7 @@ public sealed class Plugin : IDalamudPlugin
             PlanService.Print($"{CommandWords.Main} size takes fit, or a size from {WindowSize.Smallest} to {WindowSize.Largest} (%).");
             return;
         }
-        var factor = config.WindowSize == WindowSize.Fit ? UiScale.Wanted : config.WindowSize / 100f;
+        var factor = WindowSize.Factor(config.WindowSize, screenHeight, Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
         PlanService.Print(config.WindowSize == WindowSize.Fit
             ? $"The windows fit your screen: {WindowSize.Words(factor)}."
             : $"The windows are {WindowSize.Words(factor)}.");
