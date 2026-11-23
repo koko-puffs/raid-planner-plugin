@@ -115,8 +115,8 @@ dotnet build RaidPlanner.sln -c Release
 For a dev build in the game: Dalamud Settings → Experimental → Dev Plugin Locations → the full path
 to `RaidPlanner/bin/x64/Debug/RaidPlanner.dll`.
 
-See [DETAILS.md](DETAILS.md) for how it works, and [docs/PUBLISHING.md](docs/PUBLISHING.md) to
-release it. It's a third-party plugin from its own repository, so Dalamud's team hasn't reviewed
+See [DETAILS.md](DETAILS.md) for how it works, [docs/PUBLISHING.md](docs/PUBLISHING.md) to
+release it, and [docs/IN-GAME-CHECKS.md](docs/IN-GAME-CHECKS.md) for what to try in the game to confirm what it reads. It's a third-party plugin from its own repository, so Dalamud's team hasn't reviewed
 it, and plugins are against Square Enix's terms of service: use it at your own risk.
 
 Licence: AGPL-3.0 (see LICENSE). The bundled Geist, Geist Mono, Archivo, Zen Maru Gothic and Fraunces

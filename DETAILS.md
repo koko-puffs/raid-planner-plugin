@@ -2044,7 +2044,7 @@ Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Go
               themes) and their OFL licences, embedded in the DLL (the licences beside it)
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
 tools/      the icon (icon.svg → images/icon.png)
-docs/       PUBLISHING.md
+docs/       PUBLISHING.md, IN-GAME-CHECKS.md (what to try in the game to confirm what it reads)
 ```
 
 ## Commands
