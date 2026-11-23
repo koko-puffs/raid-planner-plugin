@@ -19,7 +19,7 @@ namespace RaidPlanner.Game;
 /// faced, whom it hit and what it did to each: how a stack is told from a spread, how the many
 /// mechanics with no cast bar are seen at all, and every number the meter and the combat block
 /// have), the actor-control messages that put a head marker over someone (category 34, read after
-/// the game has unscrambled it) and that carry a DoT's or HoT's tick (category 23), and a map effect
+/// the game has unscrambled it) and that carry a DoT's or HoT's tick (categories 1541 and 1540 since 0.8.2; 23 before), and a map effect
 /// (the arena changing). The plugin only listens: each detour calls the game's own function first
 /// and changes nothing. The hooks are on while a pull is recorded or followed, and while the meter
 /// is on (<see cref="Set"/>). If one can't be made (the game changed), the rest still works and

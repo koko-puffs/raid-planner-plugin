@@ -223,7 +223,7 @@ public sealed unsafe class FightRecorder : IDisposable
     public bool MeterWants { get; set; }
 
     /// <summary>
-    /// Settings → Recording → Diagnostics (since 0.4.0; off, and not kept: off again each time the plugin loads): the raw
+    /// Settings → Recording → Diagnostics (since 0.4.0; off at first, and since 0.7.5 kept as you leave it): the raw
     /// values behind the readings not yet checked in the game, written to <c>diagnostics-&lt;date&gt;.log</c> in the recordings
     /// folder while it's on (<see cref="DiagnosticsLog"/>).
     /// </summary>

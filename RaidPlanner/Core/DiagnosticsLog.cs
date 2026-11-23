@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace RaidPlanner.Core;
 
 /// <summary>
-/// Settings → Recording → <i>Diagnostics</i> (since 0.4.0; off, and off again each time the plugin loads): while
+/// Settings → Recording → <i>Diagnostics</i> (since 0.4.0; off at first, and since 0.7.5 kept as you leave it): while
 /// on, the raw values behind each reading the plugin hasn't been able to check in the game (the [verify] notes:
 /// a cast stopped, a hit's bonus % and flags, an item's action type, the Raise and Weakness statuses' sources, the
 /// enmity list, the limit break gauge, the head signs, your own recasts, where a ground action was placed…) are

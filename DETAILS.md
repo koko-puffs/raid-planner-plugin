@@ -1268,7 +1268,7 @@ ids (the party list's; since 0.5.0, outside a duty, a cross-world party's group:
 recorded; just you alone), read four times a second: **cross-world parties count in the meter
 everywhere** (before 0.5.0, outside a duty only your own numbers were). Damage between party members isn't kept,
 nor anything between two others; a barrier (a status named on `CombatLists.ShieldNames`, found on the
-English Status sheet) is a shield put on, never healing. A tick (actor control 23) goes to the party
+English Status sheet) is a shield put on, never healing. A tick (actor control 1541 a DoT's, 1540 a HoT's, since 0.8.2; 23 before) goes to the party
 member the game names (a pet's owner); a damage tick that names no one, on an enemy, is shared
 between the party members with one of the jobs' DoTs (`CombatLists.DotNames`) on it then (the tick's
 own status when it names one): a whole share each, the remainder to the first in the party list (the
