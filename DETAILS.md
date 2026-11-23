@@ -443,7 +443,7 @@ Work that's the game's thread's only because it was simple to put there is kept 
 - **An upload's marks** (`LogUploader.Finish`): `MarkSent` and `MarkRefused` on a worker.
 - **Uploads:** none starts while `FightRecorder.InPull`.
 
-## Diagnostics (`Core/DiagnosticsLog.cs`; Settings → Recording → _Diagnostics_)
+## Diagnostics (`Core/DiagnosticsLog.cs`; Settings → Advanced → _Diagnostics_)
 
 Off by default, and **kept as you leave it** (`Configuration.Diagnostics`, since 0.7.5; until then it went off
 again each time the plugin loaded, which the user didn't want: "I have also noticed that diagnostics turns itself
@@ -741,7 +741,7 @@ way is known by its client id: its answer takes it off only if it's still first,
 can be dropped for room while its call is out. The queue is only in memory: what's waiting when the
 game closes isn't sent.
 
-_Send my party to my roster_ (Settings → Plans) sends `rp_plugin_roster` your party's names by spot
+_Send my party to my roster_ (Settings → Plan and callouts) sends `rp_plugin_roster` your party's names by spot
 (`PartyRoster`: the recording's spots from `Core/Roles.cs`, the eight only, names cut to 40), which
 replaces your roster on the site. It's the only call with names in it, and only when you press it.
 It's refused with fewer than 2 names ("Your party can't be read here; try in the duty."): sending what's
@@ -849,7 +849,7 @@ it, in mono capitals ("13 / 19 · 2:44 · P2", the step's number two figures and
 written time and its phase when it has them), and two 32px square quiet icon buttons with 8px
 corners: the plans list (washed white while its menu is open) and the lock (ember-washed when
 locked; quiet and open when not; there even when not linked). Locked (`PlanWindowLocked`, also
-Settings → Plan window → _Lock it where it is_), Dalamud's own moving and resizing are off and a
+Settings → Windows → Plan window → _Lock it where it is_), Dalamud's own moving and resizing are off and a
 click doesn't bring it to the front. It never takes focus as it appears, Escape doesn't close it,
 and it makes no window sounds. Under the header the step's callout big (Archivo Expanded 800 at
 22px in capitals, lines 1.02 apart, three at most), its name under it (13px, muted) when the
@@ -1072,29 +1072,61 @@ above, 18 below), a footer on the basalt band where a screen has one.
   site keep; before the review it counted back from the recording's end, which runs on past the wipe). Reading it, the party in a row over a running cast bar; a file that won't read,
   the Boss awake ("This pull won't open"); nothing in it, asleep ("Nothing went off"). The footnote
   in muted (it's read); the footer has the send with _Send to Raid Codex_ filling the row.
-- **Settings** (`Views/Settings.cs`): the square back button, "Settings" as a small callout, the tabs
-  _Recording_, _Plan window_, _Meter_, _Cooldowns_ (0.4.0), _Account_ over a hairline (dense, 32 tall
-  at 13px, when the window is too narrow for them at 40). Each a slab of rows: the setting's
-  name (550 14px) over one muted line, its control at the right (switch, 40px stepper, dense segments
-  or button); a sub-row 34 in; a row that can't be used dims its words and control and says why in
-  the text colour ("Link your account first: Account", the link going there). **Recording**: _Record
-  fights by themselves_, _In every duty_ (a sub-row), _Record where the party stands_ with _Smoother
-  replays_ under it (0.4.0; off while places aren't kept), _Keep the
-  last_, _Upload my logs_ (0.6.0; waiting for a link) with, while it's on, the sub-rows _Upload my older
-  pulls_ · Upload (its line what's waiting, what holds it up, or why it stopped) and _Who sees your logs_
-  · Open (the site's Settings → Your logs), _Track my progress_ (waiting for a link), _Show it in the server
-  info bar_, _Recordings folder_ · Open; a hook the game hides is said in an amber warning box.
-  **Plan window**: _Show my plan in duties_, _Lock it where it is_, _Say each step in chat_ (the
-  setting once called Callouts: on the site a callout is the step's big words), _Share my step with
-  the site_ and _Send my party to my roster_ (both waiting for a link), _Plan window_ · Show or Hide;
-  the roster's result as a sent line or a red box; the note on names; then **On-screen callouts**
-  (0.4.0, a section of its own: below, The overlays). **Meter**: below. **Cooldowns**: below, The
-  overlays. **Account**:
-  linked, a ready tick, a green _Linked_ tag and the token masked in mono, _Unlink_ dense; not
-  linked, the instructions, the 40px well field (the token in mono, masked) lined up with the other
-  rows' controls with _Link_ as the telegraph, a bad token said in red with an icon under it, and
-  _Get a token_; _The Raid Codex_ · Open; the note on keeping the token. At the foot, the version in
-  mono and _What's new_.
+- **Settings** (`Views/Settings.cs`, its rows in `Views/SettingsRows.cs`; 0.8.0): under the window's tabs (Home,
+  Pulls, Settings). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
+  setting_ (the 40px well field with the search icon; a quiet × beside it clears it), then the eight pages with
+  their icons (the one you're on lit, its icon ember, its words 600): _Features_, _Recording and uploads_,
+  _Damage meter_, _Plan and callouts_, _Party cooldowns_, _Windows_, _Account and privacy_, _Advanced_; at its
+  foot the version in mono and _What's new_. Narrower, a page picker (the page's icon and title and a chevron,
+  opening a menu of the pages) and the search share a row above the page instead, and the version and _What's
+  new_ go to the page's foot. The pages, their sections, every row's name and line, and the search are
+  `Model/SettingsIndex` (tested); a row is drawn by what it is (`SettingId`) wherever it's shown.
+  - **A page**: its title as a small callout, one muted line saying what it's for (the meter's, the plan's and
+    the cooldowns' end "Where it sits: Windows", a link), and _Reset this page_ (quiet, top right; it asks first,
+    then puts the page's settings back to a new configuration's: not its buttons, not the windows' Show rows
+    on Windows, never where a window sits; Features and Account have none). Then its sections: an eyebrow (mono
+    capitals, muted; a faint hint at its right, as Uploads' "Linked to your Raid Codex") over a slab of rows,
+    each the setting's name (550 14px) over one muted line, its control at the right (switch, 40px stepper,
+    dense segments, slider or button); a sub-row 34 in; a row that can't be used dims its words and control and
+    says why in the text colour ("Link your account first: Account", the link going there; "With Record where
+    the party stands on."). The rarely changed settings fold under one dashed row, "3 more: smoother replays,
+    the server info bar, recordings folder" (its words the rows inside; closed at first, open for the session
+    once pressed, a chevron up while open), opening their slab under it. The notes, 13px muted, at the foot.
+  - **Find a setting**: typing lists every row whose name or line has each word typed (case, quotes and
+    accents don't matter), and each cooldown by its name, jobs or kind, grouped by page and section ("Damage
+    meter · The numbers") with _Go ›_ to the page; each row works there as on its page (the theme tiles, the
+    account and the cooldowns' kinds, drawn in their page's own panels, are a _Go_ row). A row shown on two
+    pages (the meter's _Grows_ and _Background_ on Damage meter and Windows) is found once, at its home.
+  - **Features**: the six main parts as cards in two columns (one when narrow): a well with its icon (ember
+    while on), its name, its switch (Upload my logs through `LogUploader.SetOn`, the rest `SetFeatures`; Plan
+    and callouts is the plan window and the callouts together), its line (`Features.Line`), a status tag
+    (`FeatureStatus`: "Ready" green, "Recording" or "3 waiting to upload" ember, "In duties", "Everywhere" or
+    "Plan: TOP v3" plain, "Off" faint, "Needs an account" or "Stopped" amber) and _Settings ›_ to its page
+    (_Link ›_ to Account while it needs an account, its switch dimmed). Under them a box: "Not sure what you
+    need? The setup guide walks through it again." with _Run the setup guide_.
+  - **Recording and uploads**: **Recording**: _Record my pulls_, then _Which duties_ (Raids and trials, Every
+    duty: the old _In every duty_), _Record where the party stands_ and _Keep the last_ under it. **Uploads**:
+    _Upload my logs_ (waiting for a link), _Upload my older pulls_ · Upload (its line what's waiting, what
+    holds it up, or why it stopped; dimmed until linked with Upload my logs on), _Who sees my logs_ · Change
+    on the site (the site's Settings → Your logs), _Track my progress_ (waiting for a link). More: _Smoother
+    replays_ (dimmed while places aren't kept), _Show it in the server info bar_, _Recordings folder_ · Open.
+    A hook the game hides is said in an amber warning box (here and on Advanced).
+  - **Damage meter**, **Plan and callouts**, **Party cooldowns**: below (The meter's windows, The overlays).
+  - **Windows**: a box saying _Arrange windows_ shows every window at once to drag each into place, with the
+    button (`StartArrange`; "Arranging…" while it's on); then a section each for the **Damage meter** (_Show the
+    meter_, _Lock it where it is_ with _Click-through when locked_ under it, _Grows_, _Background_), the **Plan
+    window** (_Show my plan in duties_, _Lock it where it is_, _The plan window_ · Show or Hide), the
+    **Callouts** and the **Party cooldowns** (each: its Show, _Lock it where it is_, _Click-through when
+    locked_, _Grows_, _Background_).
+  - **Account and privacy**: **Your account**: linked, a ready tick, a green _Linked_ tag and the token masked
+    in mono, _Unlink_ dense; not linked, the instructions, the 40px well field (the token in mono, masked) with
+    _Link_ as the telegraph, a bad token said in red with an icon under it, and _Get a token_; _The Raid
+    Codex_ · Open. **Privacy**: _Who sees my logs_ · Change on the site. The notes: keeping the token, and
+    what goes to the site (logs with names, progress without, the roster only when pressed, the step only,
+    the meter's numbers never).
+  - **Advanced**: **Diagnostics**: _Diagnostics_, _Recordings folder_ · Open. **Damage meter**: _Use ACT's
+    numbers_ (not in this version: dimmed, saying so), _Kept fights_ · Clear. **Setup**: _The setup guide_ ·
+    Run the setup guide.
 - **The server info bar** (`Plugin.cs`): the game's own text: "● Rec 2:31" while recording, "Pull 3
   kept" for 10 seconds after; its tooltip says what a click does ("… Click to open the Raid Codex
   plugin."; it promised a send before 0.3.0). A click opens Home.
@@ -1326,7 +1358,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   the room the oldest are cut (64 are kept for the feed); the foot counts them by kind, the most said
   first ("2 deaths · 1 raise · 3 interrupts"), and an empty fight says what will show. The tab
   menu counts them as it does deaths.
-- **The limit break gauge** (0.4.0; `IMeterSource.LimitBreak`; Settings → Meter → _Limit break gauge_:
+- **The limit break gauge** (0.4.0; `IMeterSource.LimitBreak`; Settings → Damage meter → _Limit break gauge_:
   Head, Foot or Off, Foot at first): while a fight is on, "LB" in faint mono 9 and a bar each the party
   has (16 wide, 3 apart, 5 tall; compact's pips are its own, below): a full one the cast bar's ember gradient with a faint
   ember-light ring, the one filling its share in deep ember, the rest a track (`MeterText.Bars`,
@@ -1478,7 +1510,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     HPS, overheal, share, healing, crit, max heal; Taken: taken, a second, share, max hit, deaths, time
     dead), the top four abilities with a slim bar in the role's colour, "0 deaths · 74 GCDs · 1 potion",
     and "Click: the full table and recap". Worked out once a snapshot for the member pointed at.
-  - **Themes** (Settings → Meter → _Theme_; `MeterTheme`, Ready Check at first): a token table each
+  - **Themes** (Settings → Damage meter → _Theme_; `MeterTheme`, Ready Check at first): a token table each
     (`Model/MeterTheme.cs`, `MeterThemes.All`): the faces (name, number, small, head, label: face, size,
     outlined as the game's words are, digits drawn in cells for a face without tabular figures, capitals
     spaced), the window (its ground or a vertical gradient, its **floor**, corners, padding, the head's
@@ -1541,7 +1573,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   furthest) starred ("Pull 4 · the best", added at the end when it's older), each with its length in
   mono and its outcome's tag; other duties' after; and _Pace against_ (Best, Last, Off) and _Compact_
   (a switch) at its foot. While the sample is on, _Stop the sample_ first.
-- **The sample fight** (`Model/MeterPreview`): Settings → Meter's _Show a sample fight_, the empty
+- **The sample fight** (`Model/MeterPreview`): Settings → Damage meter's _Play a sample fight_, the empty
   meter's _See a sample_, or `/raidcodex meter preview` show the meter mid-fight with made-up numbers,
   to place it (and size the normal meter): the mock-ups' pull 12 in Example Arena, eight players, played from 2:15 with
   its clock running and its numbers moving four times a second (bursts in the buffs at the pull and
@@ -1605,33 +1637,32 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   events' marks in its good, bad and accent, the recap's headline in its death colour. The table's and
   the abilities' columns are as wide as the widest words they show, the head's and every cell's,
   measured in the face drawn (`DetailColumns`, tested; again for a new snapshot, theme, scale or font
-  build): the limit break's "–" and "1,337,000" no longer run together. Settings → Meter → _Theme_ says
+  build): the limit break's "–" and "1,337,000" no longer run together. Settings → Damage meter → _Theme_ says
   it's both windows' look. A line under each tab
   says how its numbers are worked out (Events: casts are GCDs, an interrupt is credited to whoever's
   interrupt hit the cast in the second before, time dead leaves out the wipe).
-- **Settings → Meter**: _Show the meter_ (`/raidcodex meter` too) with _Where_ (In duties,
-  Everywhere) and _Hide out of combat_ under it; _The number_ (ENCDPS, DPS); _Pets in their owners'
-  rows_ and _Limit break on its own row_ (always, as ACT counts them: shown on and dimmed); _Names_
-  (Names, Jobs only); _Lock it where it is_ (its tooltip: compact is never sized by hand) with
-  _Click-through when locked_ under it; since 0.7.4 three small segmented choices in place of 0.7.3's one
-  _Grows_ (which flipped the head and the order with it), each with a one-line hint: _Grows_ (Down, Up: "The
-  edge that stays put as it grows"), _Head_ (Top, Bottom: "The clock, tabs, pulls and lock") and _Order_
-  (Highest first, Lowest first: "Reading down the list"), both meters', the theme's live preview following
-  Head and Order; _Limit break gauge_ (Head, Foot, Off;
-  0.4.0; compact's pips are in its head, or none with Off); _Theme_ (since 0.7.2 a row of its own, before
-  _Compact_: it's both meters' and the opened-up window's look) with _Role colours_ and _Decorations_ under
-  it, then _Compact_ (on at first since 0.7.0) with _Whole numbers_ under it (compact's alone). _Theme_ (since 0.7.0: the six as tiles, a swatch of each one's ground and roles, its name and where it sits in
-  the range, the one picked edged in ember, its idea under them and in a tile's tooltip; beside them the
-  live preview, the sample fight playing in that theme at its real size, as the meter draws it, from the
-  same drawer: `PlateMeter`, not interactive), _Role colours_ (The theme's, The game's: the bars and job
-  icons' sockets, in both meters, the opened-up window and the cooldown tracker too), _Decorations_ (on;
-  both meters and the opened-up window), _Whole numbers_; _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it;
-  a theme with a floor says "Readout keeps 82% at least", compact or not); _See it in a
-  fight_ · _Show a sample fight_ (_Stop the sample_ while it's on; dimmed while a real fight is on,
-  "After this fight"); _A fight ends after_ (2 to 15 s) and _Keep the
-  last_ (5 to 50), read by the meter's session; _Pace against_; _Use ACT's numbers_ (not in this
-  version: dimmed, saying so); _Kept fights_ · Clear. When the meter has stopped itself
-  (`IMeterSource.Problem`), an amber warning box says why.
+- **Settings → Damage meter** (0.8.0; `/raidcodex meter settings` opens it). **When it shows**: _Show the meter_
+  (`/raidcodex meter` too) with _Where_ (In duties, Everywhere) and _Hide it out of combat_ under it. **How it
+  looks**, one slab: _Size_ (Compact, Detailed: `MeterCompact`, Detailed a fresh install's since 0.8.0; the
+  meter's own menu has it too), _Theme_ (the six as tiles in three columns, two when narrow: a swatch of each
+  one's ground with two bars in its roles' colours and its name under it, the one picked edged in ember, where it
+  sits in the range and its idea in a tile's tooltip, the picked one's idea under them) and _Role colours_ (Theme's,
+  Game's: the bars and job icons' sockets, in both meters, the opened-up window and the cooldown tracker too);
+  beside them (under them when narrow) the live **Preview**, the sample fight playing in that theme at its real
+  size, as the meter draws it, from the same drawer (`PlateMeter`, not interactive; following Head, Order and the
+  gauge), and _Play a sample fight_ under it (_Stop the sample_ while it's on; dimmed while a real fight is on,
+  "After this fight"). **The numbers**: _What it ranks by_ (ENCDPS, DPS, with what each counts) and _Show_ (Names,
+  Jobs only). Then "12 more": _Grows_ (Down, Up: "The edge that stays put as it grows"; since 0.7.4 three small
+  choices in place of 0.7.3's one, which flipped the head and the order with it), _Head_ (Top, Bottom) and _Order_
+  (Highest first, Lowest first), both meters'; _Limit break gauge_ (Head, Foot, Off; 0.4.0; compact's pips are in its
+  head, or none with Off); _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it; a theme
+  with a floor says "Readout keeps 82% at least"); _A fight ends after_ (2 to 15 s) and _Keep the last_ (5 to 50),
+  read by the meter's session; _Pace against_; _Decorations_ (on; both meters and the opened-up window); _Whole
+  numbers_ (compact's alone: dimmed with Detailed, saying so); _Pets in their owners' rows_ and _Limit break on its
+  own row_ (always, as ACT counts them: shown on and dimmed). _Lock it where it is_ (its tooltip: compact is never
+  sized by hand) and _Click-through when locked_ are on Windows, with _Grows_ and _Background_ again; _Use ACT's
+  numbers_ (not in this version) and _Kept fights_ · Clear on Advanced. When the meter has stopped itself
+  (`IMeterSource.Problem`), an amber warning box under the page's head says why.
 
 ## The overlays: cooldowns and callouts (`UI/OverlayWindow.cs`, `UI/CooldownWindow.cs`, `UI/PartyCooldowns.cs`, `UI/CalloutWindow.cs`)
 
@@ -1653,7 +1684,7 @@ window not resizable while the mouse is over it). Each has its settings apart in
 (`Configuration.Cooldowns`, `.CalloutOverlay`: shown, where, locked, click-through, Grows, compact,
 background, width, anchor), and the plugin keeps each window open while it's shown or sampled.
 
-**The party cooldown tracker** (`CooldownWindow`; Settings → Cooldowns; `/raidcodex cooldowns`; off at
+**The party cooldown tracker** (`CooldownWindow`; Settings → Party cooldowns; `/raidcodex cooldowns`; off at
 first, in duties or everywhere). Small rows, one a party member's tracked cooldown, by kind (raid
 buffs, party mitigation, the healers' party heals and mitigation, Swiftcast, the tanks' Provoke,
 Shirk and invulnerabilities, interrupts and stuns), then as the catalogue lists them, then in spot
@@ -1682,7 +1713,7 @@ _Yours too_ (on) lists your own.
   Liturgy of the Bell, Asylum, Plenary Indulgence, Sacred Soil, Summon Seraph, Seraphism,
   Macrocosmos, Earthly Star, Physis II, Philosophia (off); Swiftcast for the raisers (on); Provoke,
   Shirk, Hallowed Ground, Holmgang, Living Dead, Superbolide (off); Interject, Head Graze, Low Blow,
-  Leg Sweep (off). Settings → Cooldowns lists them by kind with a switch each (`CooldownPicks`
+  Leg Sweep (off). Settings → Party cooldowns lists them by kind with a switch each (`CooldownPicks`
   keeps only what you changed) and the kind's head turning them all on or off ("Turn all on", "Turn all off").
 - **How it knows** (`PartyCooldowns`, the game side): the Action sheet read once in English on a
   worker (`CooldownCatalog.Match`, tested: rows that are the player's and not PvP, by name, each
@@ -1722,7 +1753,7 @@ _Yours too_ (on) lists your own.
   as picked) are marked: a planned Rampart, which the tracker doesn't follow, isn't. The sample marks
   the MT's Reprisal every half a minute.
 
-**The on-screen callouts** (`CalloutWindow`; Settings → Plan window → On-screen callouts;
+**The on-screen callouts** (`CalloutWindow`; Settings → Plan and callouts → On-screen callouts;
 `/raidcodex callouts`; on at first). While your plan follows a pull (`PlanService.Following`, its
 clock running: a cue has matched, `PlanService.PlanClock`; with recording off, the callouts being on
 is enough for a pull to be followed, as the plan window being open is), its next steps over the fight, each with
@@ -1756,13 +1787,27 @@ says one ("You: Reprisal −3 s").
 - A plan is read once for the callouts (`CalloutPlan`: each step's time and words, the timed steps
   in the order they go off), so a frame makes nothing but its lines. A countdown still to come
   reads at least "1" (never "0"), as the tracker's times do.
-- **Settings → Plan window → On-screen callouts**: _Show the callouts_, _How far ahead_, _How many_, _A
-  sound before each step_, _Which sound_, _How early_, _Hear it_, then the window's own: _Lock it
-  where it is_ with _Click-through when locked_, _Grows_, _Compact_, _Background_ (0 to 100%, 45% at
-  first), and _See them_ · _Show a sample_ (made-up steps a few seconds apart, counting down and
-  starting again every 50 seconds). **Settings → Cooldowns** has the same window rows, the sample
-  (_See it_: the meter's sample party, each cooldown used now and then), _Where_, _Yours too_, _Hide
-  those ready_, _Limit break gauge_, then the kinds.
+- **Settings → Plan and callouts** (0.8.0; `/raidcodex callouts settings` opens it). **Plan window**: _Show my
+  plan in duties_; _Plan for this duty_ (in a duty with plans for it, a button with the plan shown, opening a menu
+  of your plans for the duty, the one shown ticked, and _Read them again_; picked here it's remembered for the duty
+  as the plan window's list does; else it says why); _The plan window_ · Show or Hide; _Say each step in chat_ (the
+  setting once called Callouts). **On-screen callouts**, one slab: _Show the callouts_ with _How far ahead_, _How many
+  at once_, _A sound before each step_ and _Which sound_ (`<se.1>` to `<se.16>`, stepping it plays it, _Hear it_
+  beside it: its icon alone where the row is narrow) under it; beside them (under them when narrow) a small
+  **Preview** of the callouts as they'll look (as many as _How many at once_, at most three, on their background,
+  smaller with _Smaller callouts_; made-up steps and "You: Rampart, Reprisal") and _Show sample callouts_ under it
+  (made-up steps a few seconds apart, counting down and starting again every 50 seconds; _Stop the sample_ while
+  on). **With your static**: _Share my step with the site_ and _Send my party to my roster_ (both waiting for a
+  link; the roster's result under the slab as a sent line or a red box). Then "3 more": _How early the sound
+  plays_ (1 to 10 s), _Smaller callouts_ (the callouts' Compact), _The callouts' background_ (0 to 100%, 45% at
+  first; on Windows too). The callouts' and the plan window's _Lock it where it is_, the callouts' _Click-through
+  when locked_ and _Grows_ are on Windows.
+- **Settings → Party cooldowns** (0.8.0; `/raidcodex cooldowns settings` opens it). **What shows**: _Show the
+  tracker_ with _Where_ under it, _Yours too_, _See it_ · Show a sample (the meter's sample party, each cooldown
+  used now and then). Then each kind's section: its eyebrow, "3 of 12" and _Turn all on_ (or off) at its right, and
+  a switch for each of its cooldowns (its name over its jobs). Then "3 more": _Hide those ready_, _Limit break
+  gauge_, _Smaller rows_ (the tracker's Compact). Its _Lock it where it is_, _Click-through when locked_, _Grows_ and
+  _Background_ are on Windows.
 
 ## Layout
 
@@ -1783,19 +1828,20 @@ RaidPlanner/
               in the game (PlanService), summaries and the roster (Uploads), uploading every pull
               (LogUploader), the party (PartyMembers), your gear (GearReader), and the game's version
               and server time (GameClock)
-  UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
+  UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings and SettingsRows), PlanWindow and its board
               (PlanBoard, BoardArt), MeterWindow (MeterWindow.Plate.cs: compact) and MeterDetailWindow,
               the compact meter's drawer in its themes (PlateMeter), the overlays (OverlayWindow:
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
               Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, the themes' drawing:
-              PlateArt); Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
+              PlateArt, Settings' panes, sections, more row and tags: SettingsParts);
+              Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
-              settings (Overlay),
+              settings (Overlay), Settings' pages, rows, search and the Features cards' tags (SettingsIndex),
               /raidcodex's words (Commands), SVG
               paths, dashes), tested
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
@@ -1811,7 +1857,7 @@ docs/       PUBLISHING.md
 being recorded (and keeps it); `/raidcodex plan` shows or hides the plan window; `/raidcodex next` and
 `/raidcodex prev` move its step; `/raidcodex send last` sends the newest kept pull; `/raidcodex meter`
 shows or hides the meter, `/raidcodex meter unlock` gives it the mouse back (and unlocks it),
-`/raidcodex meter big` opens it up, `/raidcodex meter settings` opens Settings → Meter, `/raidcodex meter
+`/raidcodex meter big` opens it up, `/raidcodex meter settings` opens Settings → Damage meter, `/raidcodex meter
 preview` (or `meter sample`) shows the sample fight in it (again to stop; not while a real fight is on).
 What follows `/raidcodex` is read in lower case with runs of spaces as one (`CommandWords.Normalize`).
 Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the party cooldown tracker and
