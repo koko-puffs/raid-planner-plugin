@@ -1979,6 +1979,9 @@ entry).
 
 ### 0.7.10 (not released yet)
 
+- **A cast is written once.** One whose start read a third of a second off was written again as a new cast (Ihuykatumu's
+  Wing of Lightning: every helper's twice); while an enemy's cast of an action goes, it's that one.
+
 - **A cast points the way its caster faced.** The game leaves a cast's own facing at 0, so every recorded cast faced
   south, and the Raid Codex's replay drew a line or a cone that no hit followed pointing the wrong way. Casts now carry
   the caster's facing as they began.

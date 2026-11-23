@@ -70,7 +70,7 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>The hook's count of attacks as the pull began (<see cref="GameHooks.EffectsSeen"/>).</summary>
     private long effectsAtStart;
     private double pullEnd = double.NaN;
-    private readonly Dictionary<int, (uint Action, double Start)> casting = new();
+    private readonly Dictionary<int, (uint Action, double Start, double End)> casting = new();
     private readonly Dictionary<int, (uint Action, double Start)> partyCasting = new();
     private readonly RecordingSink sink;
     private readonly uint[] partyBuffer = new uint[24];
@@ -953,8 +953,11 @@ public sealed unsafe class FightRecorder : IDisposable
             return false;
         }
         var start = t - cast->CurrentCastTime;
-        if (casting.TryGetValue(id, out var had) && had.Action == cast->ActionId && Math.Abs(had.Start - start) < 0.3) return true;
-        casting[id] = (cast->ActionId, start);
+        // The same cast while it goes (since 0.7.10: by its start alone, one read 0.3 s off was written again as a new
+        // cast: Ihuykatumu's Wing of Lightning, every helper's twice). An enemy can't cast the same thing twice at once.
+        if (casting.TryGetValue(id, out var had) && had.Action == cast->ActionId &&
+            (Math.Abs(had.Start - start) < 0.3 || t < had.End - 0.05)) return true;
+        casting[id] = (cast->ActionId, start, start + cast->TotalCastTime);
         var target = cast->TargetId.ObjectId is var tid and not 0 and not 0xE0000000 ? b.Who(tid) : 0;
         var loc = cast->TargetLocation;
         var aimed = loc.X != 0 || loc.Z != 0;
