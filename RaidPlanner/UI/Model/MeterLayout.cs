@@ -119,7 +119,7 @@ public sealed record MeterSizes(
     int FootPx)
 {
     /// <summary>
-    /// The mock-up's meter: a 36px head, 27px tabs, 26px pace, 6px under them (since 0.8.1; it was the columns' heads,
+    /// The mock-up's meter: a 36px head, 27px tabs, 26px pace, 6px under them (since 0.8.2; it was the columns' heads,
     /// ENCDPS and %, 20 tall), 25px rows, a 27px limit break, a 28px foot.
     /// </summary>
     public static readonly MeterSizes Normal = new(36, 27, 26, 6, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11);

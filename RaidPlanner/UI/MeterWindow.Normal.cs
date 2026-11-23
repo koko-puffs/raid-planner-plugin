@@ -356,7 +356,7 @@ public sealed partial class MeterWindow
     }
 
     /// <summary>
-    /// The space between the tabs (or pace) and the rows (6 tall). Since 0.8.1: until then the columns' heads stood there
+    /// The space between the tabs (or pace) and the rows (6 tall). Since 0.8.2: until then the columns' heads stood there
     /// (ENCDPS and %, HPS and Over, Taken and %, 20 tall).
     /// </summary>
     private void UnderTabs(ref MeterStack stack) => stack.Near(S(Z.UnderTabs));

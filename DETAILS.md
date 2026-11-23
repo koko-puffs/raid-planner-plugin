@@ -1491,7 +1491,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   window is as tall as what it shows (ImGui fits it, its width kept). In a fight it's as tall as what it
   draws: the head, the tabs, pace's row only once pace shows, 6px under them, a row each, the limit
   break's row only once it was used, and the foot (122 for one player with neither, 350 for eight with
-  both); waiting, the head, the tabs, 6px under them, the party with dashes and the foot (since 0.8.1 there are
+  both); waiting, the head, the tabs, 6px under them, the party with dashes and the foot (since 0.8.2 there are
   no column heads, ENCDPS and % and the like, 20 tall, between the tabs and the rows); Deaths, a row
   each (as tall as its faces), then the alive line live or the foot (and "Nobody died" with none); Events,
   a 23px row each (the newest 64) and the foot (and its line with none); a list never taller than the
@@ -2202,10 +2202,12 @@ entry).
 
 ## Release notes
 
-### 0.8.1 (not released yet)
+### 0.8.2 (not released yet)
 
 - **The meter's column heads are gone** (ENCDPS and %, HPS and Over, Taken and %): the rows start under the tabs,
   and the meter is 14px shorter.
+
+### 0.8.1
 
 - **Diagnostics look further for DoT and HoT ticks** (`actor-control`, `fly-text`): a 0.8.0 log showed a White
   Mage's Dia and Regen ticks never come as the message the plugin reads them from, so the plugin now writes the

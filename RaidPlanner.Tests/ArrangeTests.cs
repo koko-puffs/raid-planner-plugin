@@ -121,7 +121,7 @@ public class ArrangeTests
         // Pace's row and the limit break's only when they show.
         Assert.Equal(122 + 26, MeterFit.Fight(z, 1, true, false));
         Assert.Equal(122 + 27, MeterFit.Fight(z, 1, false, true));
-        // Eight with both: 350 (the mock-up's 364 less the columns' heads, gone in 0.8.1).
+        // Eight with both: 350 (the mock-up's 364 less the columns' heads, gone in 0.8.2).
         Assert.Equal(350, MeterFit.Fight(z, 8, true, true));
         // Waiting: the party with dashes, no pace or limit break.
         Assert.Equal(36 + 27 + 6 + 8 * 25 + 28, MeterFit.Waiting(z, 8));
