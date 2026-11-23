@@ -75,7 +75,8 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin(IDalamudPluginInterface pluginInterface)
     {
         pluginInterface.Create<Services>();
-        config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        // A fresh install's settings start with the setup guide due (0.8.0); saved ones are an existing player's.
+        config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration { Setup = UI.Model.SetupState.Pending };
         // Settings saved by 0.5.x (version 1): Upload my logs on, from now (0.6.0); a new one starts from now too. Before 0.7.0: the meter compact.
         if (config.Migrate(DateTimeOffset.Now)) config.Save();
         try
@@ -135,6 +136,8 @@ public sealed class Plugin : IDalamudPlugin
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
             planWindow.OpenSettings = window.ShowAccount;
+            // A fresh install: the setup guide opens once (0.8.0); it's Done when finished or skipped.
+            if (UI.Model.SetupState.Due(config.Setup)) window.ShowSetup();
             // The meter's windows read the meter's numbers only (CombatMeter's session), or a made-up fight when previewed.
             var meterSource = () => meterWindow.Preview ?? meter.Source;
             meterWindow.Source = () => meter.Source;

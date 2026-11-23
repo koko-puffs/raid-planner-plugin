@@ -27,6 +27,12 @@ public sealed partial class MainWindow : Window, IDisposable
         Home,
         Pull,
         Settings,
+
+        /// <summary>Every kept pull (0.8.0: the Pulls tab).</summary>
+        Pulls,
+
+        /// <summary>The first-time setup guide (0.8.0): five steps, no tabs.</summary>
+        Setup,
     }
 
     private readonly Configuration config;
@@ -97,6 +103,23 @@ public sealed partial class MainWindow : Window, IDisposable
         IsOpen = true;
     }
 
+    /// <summary>Opens the first-time setup guide on its first step (a fresh install, Settings → Features' Run the setup guide).</summary>
+    public void ShowSetup()
+    {
+        Dismiss();
+        setupStep = 0;
+        screen = Screen.Setup;
+        IsOpen = true;
+    }
+
+    /// <summary>Opens the Pulls tab.</summary>
+    public void ShowPulls()
+    {
+        Dismiss();
+        screen = Screen.Pulls;
+        IsOpen = true;
+    }
+
     /// <summary>Opens a pull's own screen.</summary>
     public void ShowPull(RecordingInfo info)
     {
@@ -117,6 +140,15 @@ public sealed partial class MainWindow : Window, IDisposable
     {
         Dismiss();
     }
+
+    /// <summary>
+    /// Arrange windows (0.8.0, set by the plugin): every overlay shown at once on the game's screen to drag into place,
+    /// with Done, Cancel and Reset places (the setup guide's fourth step, Settings → Windows).
+    /// </summary>
+    public Action? StartArrange { get; set; }
+
+    /// <summary>Arrange windows is on (set by the plugin).</summary>
+    public Func<bool>? Arranging { get; set; }
 
     /// <summary>Shows or hides the plan window (set by the plugin).</summary>
     public Action? TogglePlanWindow { get; set; }
@@ -194,6 +226,12 @@ public sealed partial class MainWindow : Window, IDisposable
                         case Screen.Pull when openFile != null && store.Find(openFile) is { } info:
                             DrawPull(info);
                             break;
+                        case Screen.Pulls:
+                            DrawPulls();
+                            break;
+                        case Screen.Setup:
+                            DrawSetup();
+                            break;
                         default:
                             screen = Screen.Home;
                             DrawHome();
@@ -248,6 +286,38 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>A toast: it worked, it didn't, or news (with its icon), and at most one action.</summary>
     private static void Notify(string text, ToastKind kind = ToastKind.News, Icon? icon = null, string? action = null, Action? onAction = null) =>
         Frame.Toast(text, kind, icon, action, onAction);
+
+    // ---------------------------------------------------------------------------------------------
+    // The tabs along the top (0.8.0): Home · Pulls · Settings, on every screen but the setup guide.
+
+    private static readonly TabSpec[] NavTabSpecs = { new("Home", Icon.House), new("Pulls", Icon.List), new("Settings", Icon.Sliders) };
+
+    /// <summary>
+    /// The window's tabs (Home, Pulls, Settings), drawn first in a screen's header with the rule under them across
+    /// the window; a pull is the Pulls tab's. Picking one opens it.
+    /// </summary>
+    private void NavTabs()
+    {
+        var at = Kit.At;
+        var current = screen switch
+        {
+            Screen.Pulls or Screen.Pull => 1,
+            Screen.Settings => 2,
+            _ => 0,
+        };
+        var size = Kit.TabsWidth(NavTabSpecs, TabSize.Md) <= Kit.Width ? TabSize.Md : TabSize.Sm;
+        var picked = Kit.Tabs("##nav", at, NavTabSpecs, current, size, true, Kit.Width);
+        Kit.Reserve(at, Kit.Width, S(size == TabSize.Md ? H : HSm));
+        if (picked == current) return;
+        Dismiss();
+        if (picked == 0) screen = Screen.Home;
+        else if (picked == 1) screen = Screen.Pulls;
+        else
+        {
+            settingsFrom = screen;
+            screen = Screen.Settings;
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // The header every screen below Home has.

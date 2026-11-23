@@ -20,6 +20,15 @@ public enum SettingsTab
     /// <summary>The party cooldown tracker (0.4.0).</summary>
     Cooldowns,
     Account,
+
+    /// <summary>0.8.0: the main parts' switches.</summary>
+    Features,
+
+    /// <summary>0.8.0: where the overlays sit, and Arrange windows.</summary>
+    Windows,
+
+    /// <summary>0.8.0: diagnostics, the recordings folder and the rest rarely changed.</summary>
+    Advanced,
 }
 
 /// <summary>

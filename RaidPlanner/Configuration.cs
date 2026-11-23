@@ -124,11 +124,12 @@ public sealed class Configuration : IPluginConfiguration
     public float MeterHeight { get; set; }
 
     /// <summary>
-    /// Compact (since 0.7.0 the default, and round four's "Plate"): the top eight on near-solid plates, the bar in the role's
-    /// colour, three-figure numbers, the tabs and the picker in one menu in a 24px head, in the theme picked
-    /// (<see cref="MeterTheme"/>). Off, the normal meter (the tabs, pace and column heads), as before.
+    /// Compact (round four's "Plate"): the top eight on near-solid plates, the bar in the role's colour, three-figure
+    /// numbers, the tabs and the picker in one menu in a 24px head, in the theme picked (<see cref="MeterTheme"/>). Off,
+    /// Detailed: the normal meter (the tabs, pace and column heads). Detailed is a fresh install's since 0.8.0 (the user:
+    /// "the size of the meter should be detailed by default"; compact from 0.7.0); saved settings keep theirs.
     /// </summary>
-    public bool MeterCompact { get; set; } = true;
+    public bool MeterCompact { get; set; }
 
     /// <summary>
     /// The height given the old compact meter by hand (0.4.0 to 0.6.0). Ignored since 0.7.0: the
@@ -158,8 +159,11 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The themes' decorations (sparkles, scanlines, the horizon, the glitch, the ribbon…). On at first. Since 0.7.0.</summary>
     public bool MeterDecorations { get; set; } = true;
 
-    /// <summary>The meter's look's version (<see cref="UI.Model.MeterLook"/>): 0 before 0.7.0, whose configuration is moved to compact once.</summary>
-    public int MeterLook { get; set; }
+    /// <summary>
+    /// The meter's look's version (<see cref="UI.Model.MeterLook"/>): 0 before 0.7.0, whose configuration is moved to compact
+    /// once. A fresh install's is the current one (0.8.0), so it keeps <see cref="MeterCompact"/>'s default, Detailed.
+    /// </summary>
+    public int MeterLook { get; set; } = UI.Model.MeterLook.Current;
 
     /// <summary>
     /// Which way the meter grows when its height changes by itself (folding, opening, a bigger party,
@@ -245,6 +249,29 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>The token from the site (Settings → Raid Codex → In-game plugin) that sends pulls to your account. Never logged.</summary>
     public string SiteToken { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The first-time setup guide (0.8.0, <see cref="UI.Model.SetupState"/>): 0 in settings saved before it (an existing
+    /// player's: <see cref="Migrate"/> makes it Done), Pending for a fresh install (set by the plugin as it makes the
+    /// settings), Done once the guide is finished or skipped.
+    /// </summary>
+    public int Setup { get; set; }
+
+    /// <summary>Which of the main parts are on (Settings → Features, the setup guide), read from their own settings.</summary>
+    public UI.Model.FeatureSet FeaturesNow() =>
+        new(AutoRecord, UploadLogs, ShowMeter, ShowPlanInDuties && CalloutOverlay.Show, Cooldowns.Show, TrackProgress);
+
+    /// <summary>Turns each main part on or off: Plan and callouts is the plan window and the on-screen callouts together.</summary>
+    public void SetFeatures(UI.Model.FeatureSet f)
+    {
+        AutoRecord = f.Record;
+        UploadLogs = f.Upload;
+        ShowMeter = f.Meter;
+        ShowPlanInDuties = f.Plan;
+        CalloutOverlay.Show = f.Plan;
+        Cooldowns.Show = f.Cooldowns;
+        TrackProgress = f.Progress;
+    }
+
     /// <summary>What's uploaded, as <see cref="UploadPrefs"/> has it (a method, so it isn't saved with the settings).</summary>
     public UploadPrefs UploadPrefsNow() => new(Version, UploadLogs, UploadSince);
 
@@ -273,6 +300,13 @@ public sealed class Configuration : IPluginConfiguration
         if (arrange != (MeterArrangeVersion, MeterHead, MeterOrder))
         {
             (MeterArrangeVersion, MeterHead, MeterOrder) = arrange;
+            changed = true;
+        }
+        // 0.8.0: settings saved before the setup guide are an existing player's: it's never shown them.
+        var setup = UI.Model.SetupState.Migrate(Setup);
+        if (setup != Setup)
+        {
+            Setup = setup;
             changed = true;
         }
         // 0.7.6: Smoother replays on by default, once (turned off after this, it stays off).

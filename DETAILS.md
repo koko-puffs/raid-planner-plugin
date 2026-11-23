@@ -1977,7 +1977,13 @@ entry).
 
 ## Release notes
 
-### 0.7.11 (not released yet)
+### 0.8.0 (not released yet)
+
+- **A setup guide on a fresh install**, **tabs along the top of the window**, **Settings by what you want to do**, and
+  **Arrange windows**: the mock-ups (kokos-tools' canvas "Raid Codex plugin: setup guide, windows and settings").
+- **The meter is Detailed on a fresh install** (it was compact since 0.7.0); saved settings keep theirs.
+
+### 0.7.11
 
 - **A cast is written once.** One whose start read a third of a second off was written again as a new cast (Ihuykatumu's
   Wing of Lightning: every helper's twice); while an enemy's cast of an action goes, it's that one.
