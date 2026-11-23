@@ -13,12 +13,12 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The plugin's main window, in Ready Check (the mock-ups' "The plugin"). Three screens: Home (the
-/// state as a tag, the pull being recorded in the ember box with its clock as a cast bar, the
-/// latest pull with Send to Raid Codex as the telegraph, the night's earlier pulls), a pull (its
-/// facts, the pull to its own scale, what's in it as a row a mechanic, deaths too) and Settings
-/// (Recording, Plan window, Meter, Account). Below Home every screen has the square back button at
-/// its top left. Dalamud's title bar is kept.
+/// The plugin's main window, in Ready Check (the mock-ups' "The plugin"; 0.8.0's plug-main and plug-setup). Its tabs
+/// along the top (Home · Pulls · Settings, Open the Raid Codex quiet at their right): Home (what the plugin's doing
+/// and a chip per main part, the latest pull in a sentence, the night's earlier pulls; while a pull is recorded, the
+/// ember card with its clock and the plan's step), Pulls (every kept pull by night) and a pull (its sentence, its
+/// strip, its upload, what happened), and Settings. A fresh install opens the setup guide instead, five steps with no
+/// tabs. Dalamud's title bar is kept.
 /// </summary>
 public sealed partial class MainWindow : Window, IDisposable
 {
@@ -129,8 +129,17 @@ public sealed partial class MainWindow : Window, IDisposable
         IsOpen = true;
     }
 
+    /// <summary>The setup guide waits for the game: on the title screen the window isn't drawn while it's open on the guide.</summary>
+    public override bool DrawConditions() => screen != Screen.Setup || Services.ClientState.IsLoggedIn;
+
     public override void OnClose()
     {
+        // Closing the guide is skipping it, with what's been picked so far (it can be run again from Settings).
+        if (screen == Screen.Setup && Model.SetupState.Due(config.Setup))
+        {
+            config.Setup = Model.SetupState.Done;
+            config.Save();
+        }
         settingsTab = SettingsTab.Recording;
         Dismiss();
     }
@@ -307,7 +316,19 @@ public sealed partial class MainWindow : Window, IDisposable
         };
         var size = Kit.TabsWidth(NavTabSpecs, TabSize.Md) <= Kit.Width ? TabSize.Md : TabSize.Sm;
         var picked = Kit.Tabs("##nav", at, NavTabSpecs, current, size, true, Kit.Width);
-        Kit.Reserve(at, Kit.Width, S(size == TabSize.Md ? H : HSm));
+        var rowH = S(size == TabSize.Md ? H : HSm);
+        // Open the Raid Codex, quiet, at the row's right: in words where they fit, else its icon, else not at all.
+        const string site = "Open the Raid Codex";
+        var room = Kit.Width - Kit.TabsWidth(NavTabSpecs, size) - S(12);
+        var siteW = Kit.ButtonWidth(site, BtnSize.Sm, Icon.ExternalLink, Btn.Quiet);
+        var siteAt = new Vector2(at.X + Kit.Width, at.Y + (rowH - S(HSm)) / 2 - S(1));
+        if (siteW <= room)
+        {
+            if (Kit.Button("##nav-site", siteAt - new Vector2(siteW, 0), site, Btn.Quiet, BtnSize.Sm, Icon.ExternalLink)) Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
+        }
+        else if (S(HSm) <= room && Kit.IconButton("##nav-site", siteAt - new Vector2(S(HSm), 0), Icon.ExternalLink, site, Btn.Quiet, BtnSize.Sm))
+            Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
+        Kit.Reserve(at, Kit.Width, rowH);
         if (picked == current) return;
         Dismiss();
         if (picked == 0) screen = Screen.Home;

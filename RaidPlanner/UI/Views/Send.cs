@@ -218,9 +218,9 @@ public sealed partial class MainWindow
     /// (link, send, sending, sent, failed) and the line or box under them. <paramref name="readyLine"/>
     /// is what's said when it's ready to go.
     /// </summary>
-    private void DrawSend(string id, RecordingInfo info, string readyLine, bool grow = false)
+    private void DrawSend(string id, RecordingInfo info, string readyLine, bool grow = false, bool withSave = true)
     {
-        const string save = "Save as file";
+        var save = withSave ? "Save as file" : null;
         const string saveTip = "A file to import in the Raid Codex yourself (Import on its front page), or to share.";
         sends.TryGetValue(info.File, out var s);
         var sentId = store.Find(info.File)?.SentId ?? info.SentId;
@@ -242,37 +242,7 @@ public sealed partial class MainWindow
         {
             Kit.NoteBox(f.Text);
             Kit.Gap(10);
-            switch (f.Fix)
-            {
-                case SendFix.LinkAgain:
-                {
-                    var (a, b) = ButtonPair(id, "Link again", Btn.Tele, Icon.Link, save, Btn.Outline, Icon.Download, secondTip: saveTip);
-                    if (a) OpenSettings(SettingsTab.Account);
-                    if (b) SaveAs(info);
-                    break;
-                }
-                case SendFix.Look:
-                {
-                    var (a, b) = ButtonPair(id, "Open the Raid Codex", Btn.Tele, Icon.ExternalLink, save, Btn.Outline, Icon.Download, secondTip: saveTip);
-                    if (a) Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
-                    if (b) SaveAs(info);
-                    break;
-                }
-                case SendFix.SaveFile:
-                case SendFix.Update:
-                {
-                    var (a, _) = ButtonPair(id, save, Btn.Tele, Icon.Download, null, Btn.Outline, null, firstTip: saveTip);
-                    if (a) SaveAs(info);
-                    break;
-                }
-                default:
-                {
-                    var (a, b) = ButtonPair(id, "Try again", Btn.Tele, Icon.RefreshCw, save, Btn.Outline, Icon.Download, secondTip: saveTip);
-                    if (a) Send(info);
-                    if (b) SaveAs(info);
-                    break;
-                }
-            }
+            SendFixButtons(id, info, f, withSave);
             return;
         }
 
@@ -282,7 +252,7 @@ public sealed partial class MainWindow
             var at = Kit.At;
             Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, sent.Thinned ? "Sent, with fewer of the party's places: it was too big whole." : "Sent. It's waiting in your Raid Codex."));
             Kit.Gap(10);
-            var (a, b) = ButtonPair(id, "Open in Review", Btn.Outline, Icon.ExternalLink, sent.Thinned ? save : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
+            var (a, b) = ButtonPair(id, "Open in Review", Btn.Outline, Icon.ExternalLink, sent.Thinned ? "Save as file" : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
                 secondTip: sent.Thinned ? saveTip : "It's in your Raid Codex already: this sends another copy.");
             if (a) Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sid));
             if (b)
@@ -326,46 +296,130 @@ public sealed partial class MainWindow
         Txt.Note(readyLine);
     }
 
+    /// <summary>A failed send's one thing to do (link again, look on the site, save as file, try again), and Save as file beside it when asked.</summary>
+    private void SendFixButtons(string id, RecordingInfo info, SendFailure f, bool withSave)
+    {
+        const string save = "Save as file";
+        const string saveTip = "A file to import in the Raid Codex yourself (Import on its front page), or to share.";
+        var second = withSave ? save : null;
+        switch (f.Fix)
+        {
+            case SendFix.LinkAgain:
+            {
+                var (a, b) = ButtonPair(id, "Link again", Btn.Tele, Icon.Link, second, Btn.Outline, Icon.Download, secondTip: saveTip);
+                if (a) OpenSettings(SettingsTab.Account);
+                if (b) SaveAs(info);
+                break;
+            }
+            case SendFix.Look:
+            {
+                var (a, b) = ButtonPair(id, "Open the Raid Codex", Btn.Tele, Icon.ExternalLink, second, Btn.Outline, Icon.Download, secondTip: saveTip);
+                if (a) Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
+                if (b) SaveAs(info);
+                break;
+            }
+            case SendFix.SaveFile:
+            case SendFix.Update:
+            {
+                var (a, _) = ButtonPair(id, save, Btn.Tele, Icon.Download, null, Btn.Outline, null, firstTip: saveTip);
+                if (a) SaveAs(info);
+                break;
+            }
+            default:
+            {
+                var (a, b) = ButtonPair(id, "Try again", Btn.Tele, Icon.RefreshCw, second, Btn.Outline, Icon.Download, secondTip: saveTip);
+                if (a) Send(info);
+                if (b) SaveAs(info);
+                break;
+            }
+        }
+    }
+
     /// <summary>
-    /// The latest pull's send while a pull is recorded: no telegraph (nothing on Home is the one thing
-    /// to do then). A sent line with Open in Review, or how the send went; What's in it and Save as file, dense.
+    /// Where a pull not on your Raid Codex stands with Upload my logs, in a few words: refused (why), stopped (why),
+    /// waiting to go, or nothing (it isn't uploaded by itself: off, not linked, from before it was on).
     /// </summary>
-    private void DrawSendCompact(RecordingInfo info)
+    private string? UploadWaitLine(RecordingInfo info)
+    {
+        var now = store.Find(info.File) ?? info;
+        if (now.UploadRefused is { } refused) return $"Not uploaded: {refused}";
+        if (!Linked || !config.UploadPrefsNow().Wants(now)) return null;
+        if (logs.Stopped is { } stopped) return $"Uploads stopped: {stopped}";
+        if (logs.Held is { } held) return $"Waiting to upload: {held}";
+        return logs.Uploading ? "Uploading soon: one is on its way" : "Waiting to upload";
+    }
+
+    /// <summary>
+    /// A pull's upload in one row (Home's latest pull): on your Raid Codex (a tick, when, Open in Review); being sent
+    /// (the cast bar, Stop); a send that failed (the red box and its one thing to do); waiting to upload; or not
+    /// uploaded, with Send (linked) or Link your account.
+    /// </summary>
+    private void DrawUploadLine(string id, RecordingInfo info)
     {
         sends.TryGetValue(info.File, out var s);
         var sentId = store.Find(info.File)?.SentId ?? info.SentId;
+        var at = Kit.At;
         var w = Kit.Width;
+        var dl = Kit.Dl;
+        var h = S(HSm);
         if (s is { Result: null })
         {
-            var at = Kit.At;
-            var h = Kit.Cast(Kit.Dl, at, w, $"Sending pull {Math.Max(1, info.Pull)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
+            const string stop = "Stop";
+            var sw = Kit.ButtonWidth(stop, BtnSize.Sm, null, Btn.Quiet);
+            Kit.Cast(dl, new Vector2(at.X, at.Y + (h - S(13 * 1.2f + 4.8f + 6)) / 2), w - sw - S(12), $"Sending pull {Math.Max(1, info.Pull)}",
+                s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
+            if (Kit.Button(id + "stop", new Vector2(at.X + w - sw, at.Y), stop, Btn.Quiet, BtnSize.Sm)) StopSend(s);
             Kit.Reserve(at, w, h);
-            Kit.Gap(12);
+            return;
         }
-        else if (s?.Result is { Sent: false } failed && SendFailure.Of(failed) is { Fix: not SendFix.Stopped } f)
+        if (s?.Result is { Sent: false } failed && SendFailure.Of(failed) is { Fix: not SendFix.Stopped } f)
         {
             Kit.NoteBox(f.Text);
-            Kit.Gap(12);
+            Kit.Gap(10);
+            SendFixButtons(id, info, f, false);
+            return;
         }
-        else if (sentId != null)
+
+        string text;
+        Vector4 ink;
+        Icon icon;
+        string? button = null;
+        Icon? buttonIcon = null;
+        Action? press = null;
+        if (sentId != null)
         {
-            var at = Kit.At;
-            var text = s?.Result is { Sent: true } ? "Sent. It's waiting in your Raid Codex." : Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
-            Kit.Reserve(at, w, SentLine(at, w, text, "##latest-review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
-            Kit.Gap(12);
+            var when = store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt;
+            text = s?.Result is { Thinned: true } ? "Uploaded, with fewer of the party's places" : $"Uploaded {Format.Ago(when, DateTimeOffset.Now)}";
+            ink = Palette.Muted;
+            icon = Icon.Check;
+            button = "Open in Review";
+            buttonIcon = Icon.ExternalLink;
+            press = () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
         }
-        var row = Kit.At;
-        var x = row.X;
-        const string what = "What's in it";
-        if (Kit.Button("##latest-what", row, what, Btn.Outline, BtnSize.Sm, Icon.List, 0, false, "Its mechanics, in order")) Later(() => ShowPull(info));
-        x += Kit.ButtonWidth(what, BtnSize.Sm, Icon.List) + S(6.4f);
-        const string save = "Save as file";
-        if (Kit.Button("##latest-save", new Vector2(x, row.Y), save, Btn.Quiet, BtnSize.Sm, Icon.Download)) SaveAs(info);
-        x += Kit.ButtonWidth(save, BtnSize.Sm, Icon.Download, Btn.Quiet) + S(6.4f);
-        if (Linked && sentId == null && s is not { Result: null } && Kit.Button("##latest-send", new Vector2(x, row.Y), "Send", Btn.Quiet, BtnSize.Sm, Icon.Send, 0, false,
-                "It waits in the Raid Codex under From the game."))
-            Send(info);
-        Kit.Reserve(row, w, S(HSm));
+        else
+        {
+            text = UploadWaitLine(info) ?? (Linked ? "Not uploaded: kept on this PC" : "Kept on this PC");
+            ink = Palette.Faint;
+            icon = Icon.Clock;
+            if (Linked)
+            {
+                button = "Send now";
+                buttonIcon = Icon.Send;
+                press = () => Send(info);
+            }
+            else
+            {
+                button = "Link your account";
+                buttonIcon = Icon.Link;
+                press = () => OpenSettings(SettingsTab.Account);
+            }
+        }
+        var bw = button != null ? Kit.ButtonWidth(button, BtnSize.Sm, buttonIcon) : 0;
+        Icons.Draw(dl, icon, new Vector2(at.X, at.Y + (h - S(15)) / 2), S(15), sentId != null ? Palette.Ready : Palette.Faint, sentId != null ? 2.2f : 1.75f);
+        var tx = at.X + S(15) + S(8);
+        Txt.Line(dl, new Vector2(tx, at.Y), Txt.Fit(text, Face.Sans, 13, at.X + w - tx - (bw > 0 ? bw + S(12) : 0)), Face.Sans, 13, ink, HSm);
+        if (button != null && Kit.Button(id + "act", new Vector2(at.X + w - bw, at.Y), button, Btn.Outline, BtnSize.Sm, buttonIcon)) press?.Invoke();
+        Kit.Reserve(at, w, h);
     }
 
     // ---------------------------------------------------------------------------------------------
