@@ -10,61 +10,22 @@ using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
-/// <summary>Settings' tabs: how pulls are recorded, the plan window, the meter, and the site.</summary>
-public enum SettingsTab
-{
-    Recording,
-    Plans,
-    Meter,
-
-    /// <summary>The party cooldown tracker (0.4.0).</summary>
-    Cooldowns,
-    Account,
-
-    /// <summary>0.8.0: the main parts' switches.</summary>
-    Features,
-
-    /// <summary>0.8.0: where the overlays sit, and Arrange windows.</summary>
-    Windows,
-
-    /// <summary>0.8.0: diagnostics, the recordings folder and the rest rarely changed.</summary>
-    Advanced,
-}
-
 /// <summary>
-/// Settings (the mock-ups' "Settings" and the meter's "Settings"): the square back button, the
-/// title as a small callout, the site's tabs with the ember cast bar under the one you're on, and a
-/// slab of rows, each a setting's name over one muted line with its control at the right (switches
-/// on in ember, steppers and segments 40 or 32 tall, dense buttons). A row that can't be used dims
-/// its words too, and says why ("Link your account first: Account"). The version and What's new at
-/// the foot.
+/// Settings (0.8.0, under the window's tabs): a sidebar with Find a setting at its top, the pages with their icons,
+/// and the version and What's new at its foot; a narrow window has a page picker and the search above the page
+/// instead. Each page: its title as a small callout, one line saying what it's for, Reset this page (it asks first),
+/// then its sections (an eyebrow over a slab of rows: a setting's name over one muted line, its control at the
+/// right) and its rarely changed settings folded under one "N more: …" row. What's on each page, and the search,
+/// are <see cref="SettingsIndex"/>'s; a row is drawn by what it is (<see cref="DrawRow"/>), so a search's answer works in place.
 /// </summary>
 public sealed partial class MainWindow
 {
     private const string ReleasesUrl = "https://github.com/koko-puffs/raid-planner-plugin/releases";
 
-    private static readonly TabSpec[] SettingsTabs = { new("Recording"), new("Plan window"), new("Meter"), new("Cooldowns"), new("Account") };
+    /// <summary>The window's width (CSS px) from which the pages sit in a sidebar beside the page; narrower, a picker above it.</summary>
+    private const float SidebarFrom = 700;
 
-    private static readonly string[] GrowsItems = { "Down", "Up" };
-
-    private static readonly string[] HeadItems = { "Top", "Bottom" };
-
-    private static readonly string[] OrderItems = { "Highest first", "Lowest first" };
-
-    private static readonly string[] GaugeItems = { "Head", "Foot", "Off" };
-
-    private static readonly string[] WhereItems = { "In duties", "Everywhere" };
-
-    private static readonly string[] RoleItems = { "The theme's", "The game's" };
-
-    private static readonly string[] ThemeIds = { "##theme0", "##theme1", "##theme2", "##theme3", "##theme4", "##theme5" };
-
-    /// <summary>Settings' live preview of the compact meter: the sample fight playing, drawn as the meter draws it (not interactive).</summary>
-    private readonly PlateMeter themePreview = new() { Interactive = false };
-
-    private MeterPreview? themeSample;
-
-    private (LimitBreakGauge? Of, float[] Bars) previewPips = (null, Array.Empty<float>());
+    private const float SidebarWidth = 220;
 
     /// <summary>The cooldown tracker's sample: on now, and starting or stopping it (set by the plugin).</summary>
     public Func<bool>? CooldownsSampleOn { get; set; }
@@ -79,244 +40,359 @@ public sealed partial class MainWindow
     /// <summary>Plays one of the game's sound effects (&lt;se.N&gt;), to hear the callouts' (set by the plugin).</summary>
     public Action<int>? PlaySound { get; set; }
 
-    /// <summary>How Send my party to my roster went, and when (shown for a while under the slab).</summary>
+    /// <summary>How Send my party to my roster went, and when (shown for a while under its section).</summary>
     private (string Text, bool Ok, DateTime At)? rosterNote;
 
     private SettingsTab settingsTab;
 
-    /// <summary>The meter's background was dragged and not saved yet.</summary>
+    /// <summary>A background was dragged and not saved yet (saved once the knob is let go).</summary>
     private bool backgroundDirty;
 
-    /// <summary>Where Settings was opened from: its back button goes there.</summary>
+    /// <summary>Where Settings was opened from (the window's tabs keep it; nothing goes back to it since 0.8.0).</summary>
     private Screen settingsFrom = Screen.Home;
+
+    /// <summary>What's typed in Find a setting.</summary>
+    private string settingsQuery = string.Empty;
+
+    /// <summary>The pages whose more row is open (closed at first, for the session).</summary>
+    private readonly HashSet<SettingsTab> moreOpen = new();
 
     private void OpenSettings(SettingsTab tab)
     {
         settingsTab = tab;
+        settingsQuery = string.Empty;
         if (screen != Screen.Settings) settingsFrom = screen;
         screen = Screen.Settings;
     }
 
-    /// <summary>Opens Settings on the meter's tab (the meter's Settings, /raidcodex meter settings).</summary>
+    /// <summary>Opens Settings on the meter's page (the meter's Settings, /raidcodex meter settings).</summary>
     public void ShowMeterSettings() => ShowSettingsOn(SettingsTab.Meter);
 
-    /// <summary>Opens Settings on a tab (/raidcodex cooldowns settings, /raidcodex callouts settings).</summary>
+    /// <summary>Opens Settings on a page (/raidcodex cooldowns settings, /raidcodex callouts settings).</summary>
     public void ShowSettingsOn(SettingsTab tab)
     {
         Dismiss();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
         settingsTab = tab;
+        settingsQuery = string.Empty;
         IsOpen = true;
     }
 
-    private void DrawSettings()
+    /// <summary>Goes to a page (a sidebar item, a card's Settings, a search's Go): the search is cleared.</summary>
+    private void GoToPage(SettingsTab tab, bool openMore = false)
     {
-        Frame.BeginHeader();
-        if (ScreenHeader(settingsFrom == Screen.Pull ? "Back to the pull" : "Back", null, "Settings"))
-            screen = settingsFrom == Screen.Pull && openFile != null && store.Find(openFile) != null ? Screen.Pull : Screen.Home;
-        Kit.Gap(10);
-        var at = Kit.At;
-        // The five tabs at their size where they fit, else dense (a narrow window).
-        var tabSize = Kit.TabsWidth(SettingsTabs, TabSize.Md) <= Kit.Width ? TabSize.Md : TabSize.Sm;
-        settingsTab = (SettingsTab)Kit.Tabs("##settings-tab", at, SettingsTabs, (int)settingsTab, tabSize, true, Kit.Width);
-        Kit.Reserve(at, Kit.Width, S(tabSize == TabSize.Md ? H : HSm));
-        Frame.EndHeader();
-
-        Frame.BeginBody(settingsTab switch
-        {
-            SettingsTab.Account => "##settings-account",
-            SettingsTab.Plans => "##settings-plans",
-            SettingsTab.Meter => "##settings-meter",
-            SettingsTab.Cooldowns => "##settings-cooldowns",
-            _ => "##settings-recording",
-        }, null);
-        switch (settingsTab)
-        {
-            case SettingsTab.Account:
-                DrawAccountTab();
-                break;
-            case SettingsTab.Cooldowns:
-                DrawCooldownsTab();
-                break;
-            case SettingsTab.Plans:
-                DrawPlansTab();
-                break;
-            case SettingsTab.Meter:
-                DrawMeterTab();
-                break;
-            default:
-                DrawRecordingTab();
-                break;
-        }
-
-        Frame.BeginBottom("settings-bottom");
-        // "0.3.0 · What's new": the version in mono, the link underlined.
-        var p = Kit.At;
-        var w = Kit.Width;
-        var dl = Kit.Dl;
-        var version = VersionText;
-        var vw = Txt.Width(version, Face.Mono, 13);
-        var dot = " · ";
-        var dw = Txt.Width(dot, Face.Sans, 13);
-        var lw = Kit.LinkWidth("What's new");
-        var x = p.X + (w - vw - dw - lw) / 2;
-        var lineH = S(19.5f);
-        Txt.Line(dl, new Vector2(x, p.Y), version, Face.Mono, 13, Palette.Muted, 19.5f);
-        Txt.Line(dl, new Vector2(x + vw, p.Y), dot, Face.Sans, 13, Palette.Muted, 19.5f);
-        if (Kit.Link("##news", new Vector2(x + vw + dw, p.Y + (lineH - Txt.Natural(Face.SansMedium, 13)) / 2), "What's new")) Dalamud.Utility.Util.OpenLink(ReleasesUrl);
-        Kit.Reserve(p, w, lineH);
-        Frame.EndBottom();
-        Frame.EndBody();
+        settingsTab = tab;
+        settingsQuery = string.Empty;
+        if (openMore) moreOpen.Add(tab);
     }
 
     /// <summary>"0.3.0", read once (it's a reflection call).</summary>
     private static readonly string VersionText = typeof(MainWindow).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "0.0.0";
 
-    private void DrawRecordingTab()
-    {
-        Kit.BeginPanel("##set-recording", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##auto", "Record fights by themselves", "Trials, raids and ultimates, from the pull until the fight ends", config.AutoRecord,
-                "Each pull is recorded on its own: the bosses' casts and where they land, stacks, spreads, tankbusters, tethers, head markers and waymarks. Off: nothing is recorded."))
-        {
-            config.AutoRecord = !config.AutoRecord;
-            config.Save();
-        }
-        if (config.AutoRecord && SwitchRow(i++, "##everywhere", "In every duty", "Dungeons and field operations too", config.RecordAllDuties,
-                "Off, only fights are recorded (trials, raids, ultimates, criterion dungeons), so a run of trash packs never pushes out the pulls you want. On, every duty's pulls are, but never the Occult Crescent's.",
-                sub: true))
-        {
-            config.RecordAllDuties = !config.RecordAllDuties;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##party", "Record where the party stands", "Their places come along into the plan", config.RecordParty,
-                "On, the plan shows where everyone stood at each mechanic (you can still swap to standard spots on the site). Off, only the enemies and their attacks are kept, for when you'd rather work out your own strats. Each pull keeps the party's jobs, and (since 0.6.0, for your logs) their names, home worlds and levels."))
-        {
-            config.RecordParty = !config.RecordParty;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##smooth", "Smoother replays", "Places four times a second, not two: bigger files", config.SmoothReplays,
-                "Where everyone stands is kept four times a second instead of two, so the site's replay of the pull moves more smoothly. Files grow by about 30 KB a minute of an eight-player pull; a pull too big to send is thinned back to two first.",
-                sub: true, off: !config.RecordParty))
-        {
-            config.SmoothReplays = !config.SmoothReplays;
-            config.Save();
-        }
-        var delta = StepperRow(i++, "##keep", "Keep the last", "Past that, the oldest sent ones go first", config.Keep.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            config.Keep > 5, config.Keep < 100,
-            "Pulls are kept in the plugin's folder until there are more than this; then, as each new one is kept, the oldest already on the site goes first, and only then the oldest that isn't. Pulls still waiting to be uploaded are held (up to 200) until they've gone. Lowering it deletes nothing now.");
-        if (delta != 0)
-        {
-            config.Keep = Math.Clamp(config.Keep + delta * 5, 5, 100);
-            config.Save();
-            // Nothing is deleted on a click: the next pull kept lets the extra ones go.
-            store.Keep = config.Keep;
-        }
-        if (SwitchRow(i++, "##upload", "Upload my logs", "Every pull goes to your logs on the Raid Codex as it ends", config.UploadLogs,
-                "Each pull worth keeping goes whole to your logs on the site as soon as it's kept, in the background, one at a time. Pulls kept while you're offline go when you're back. Your logs are public on the site, with your party's names and home worlds, as on FFLogs; you can make yours private there. Off, nothing is uploaded (you can still send a pull yourself).",
-                off: !Linked, linkFirst: !Linked))
-            logs.SetOn(!config.UploadLogs);
-        if (config.UploadLogs && Linked)
-        {
-            var older = logs.OlderCount;
-            if (ButtonRow(i++, "##upload-older", "Upload my older pulls", UploadStatus(older), "Upload", Btn.Outline, older == 0,
-                    older == 0 ? "Every pull kept here is on the site or on its way." : null,
-                    "The pulls kept here from before Upload my logs was on go too, the oldest first (the site takes 60 an hour).", sub: true))
-                logs.UploadOlder();
-            if (ButtonRow(i++, "##logs-private", "Who sees your logs", "Public on the site, with names. Make yours private there.", "Open", Btn.Outline, false, null,
-                    "Your logs are public on the Raid Codex, as on FFLogs: each pull with your party's names and home worlds. In the site's Settings → Your logs you can make yours private (then they're unranked too) or hide your character.",
-                    icon: Icon.ExternalLink, sub: true))
-                Dalamud.Utility.Util.OpenLink(SiteLink.LogsSettingsUrl);
-        }
-        if (SwitchRow(i++, "##progress", "Track my progress", "How far each pull got, for Progress on the site", config.TrackProgress,
-                "After each kept pull, a few numbers go to your account: the duty, how long it lasted, the furthest phase, the boss's HP left, who died to what and what hit the party (by spot and job, never names). The site charts your progress from them.",
-                off: !Linked, linkFirst: !Linked))
-        {
-            config.TrackProgress = !config.TrackProgress;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##bar", "Show it in the server info bar", "“Rec 2:31” while a pull is recorded", config.ShowInBar,
-                "The bar at the top right of the screen shows that a pull is being recorded, and for how long. Click it to open the plugin."))
-        {
-            config.ShowInBar = !config.ShowInBar;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##diagnostics", "Diagnostics", "Writes what it reads from the game to a file, for checking", recorder.Diagnostics.On,
-                "While on, the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit break gauge, head signs, your recasts) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
-        {
-            recorder.Diagnostics.On = !recorder.Diagnostics.On;
-            config.Diagnostics = recorder.Diagnostics.On;
-            config.Save();
-        }
-        if (ButtonRow(i, "##folder", "Recordings folder", "Where the pulls are kept", "Open", Btn.Outline, false, null, store.Folder))
-            Dalamud.Utility.Util.OpenLink(store.Folder);
-        Kit.EndPanel();
+    private static readonly string SideVersion = "v" + VersionText;
 
-        // When the game hides something: a warning box in amber, saying what and why.
-        if (recorder.HookProblem is { } problem)
+    private void DrawSettings()
+    {
+        Frame.BeginHeader();
+        NavTabs();
+        Frame.EndHeader();
+
+        var win = ImGui.GetWindowPos();
+        var winW = ImGui.GetWindowWidth();
+        var bottom = win.Y + ImGui.GetWindowHeight();
+        var top = ImGui.GetCursorScreenPos().Y;
+        if (winW >= S(SidebarFrom)) DrawSettingsWide(win, winW, top, bottom);
+        else DrawSettingsNarrow(win, winW, top, bottom);
+
+        // A background slider's value is saved once the knob is let go, not on every frame it's dragged.
+        if (backgroundDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
         {
-            Kit.Gap(12);
-            Kit.NoteBox(problem, warn: true);
+            backgroundDirty = false;
+            config.Save();
         }
     }
 
-    /// <summary>Upload my older pulls' line: what's waiting, why it's held up, or why it stopped.</summary>
-    private string UploadStatus(int older)
+    // ---------------------------------------------------------------------------------------------
+    // The frame: a sidebar beside the page, or a picker above it.
+
+    private void DrawSettingsWide(Vector2 win, float winW, float top, float bottom)
     {
-        if (logs.Stopped is { } stopped) return "Stopped: " + stopped;
-        var waiting = logs.WaitingCount;
-        if (logs.Held is { } held && waiting > 0)
-        {
-            var until = logs.HeldUntil;
-            var left = until > DateTime.UtcNow ? until - DateTime.UtcNow : TimeSpan.Zero;
-            return $"{Words.Count(waiting, "pull")} waiting. {held.TrimEnd('.')}{(left >= TimeSpan.FromMinutes(1) ? $": again in {(int)Math.Ceiling(left.TotalMinutes)} min" : "")}.";
-        }
-        if (waiting > 0) return logs.Uploading ? $"Uploading: {Words.Count(waiting, "pull")} to go" : $"{Words.Count(waiting, "pull")} waiting";
-        return older > 0 ? $"{Words.Count(older, "pull")} kept from before" : "Every pull is on the site";
+        var sideW = S(SidebarWidth);
+        var dl = Kit.Dl;
+        var h = MathF.Max(S(40), bottom - top);
+        // The sidebar's slab, to the window's foot (its bottom-left corner the window's), a hairline at its right.
+        dl.AddRectFilled(new Vector2(win.X + 1, top), new Vector2(win.X + sideW, bottom - 1), Palette.U32(Palette.Slab),
+            MathF.Max(0, ImGui.GetStyle().WindowRounding - 1), ImDrawFlags.RoundCornersBottomLeft);
+        dl.AddLine(new Vector2(win.X + sideW - 0.5f, top), new Vector2(win.X + sideW - 0.5f, bottom - 1), Palette.U32(Palette.Line), 1f);
+
+        SettingsParts.BeginPane("##set-side", new Vector2(win.X, top), new Vector2(sideW, h), 12, 16, ImGuiWindowFlags.NoScrollbar);
+        DrawSidebar();
+        SettingsParts.EndPane(16);
+
+        SettingsParts.BeginPane(PaneId(), new Vector2(win.X + sideW, top), new Vector2(winW - sideW, h), 24, 20);
+        DrawSettingsContent();
+        SettingsParts.EndPane(24);
     }
 
-    private void DrawPlansTab()
+    private void DrawSettingsNarrow(Vector2 win, float winW, float top, float bottom)
     {
-        Kit.BeginPanel("##set-plans", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##plan-show", "Show my plan in duties", "Its window opens in a duty you have a plan for", config.ShowPlanInDuties,
-                "In a duty you've made a plan for on the site, its window opens: the step, its board and its notes, moving along with the pull. /raidcodex plan shows it anywhere."))
+        // The page picker and the search on a row above the page, as the window's header is laid.
+        var at = new Vector2(win.X + S(SidePad), top + S(12));
+        var w = winW - S(SidePad) * 2;
+        Kit.PushBox(at.X, w);
+        ImGui.SetCursorScreenPos(at);
+        var pickW = MathF.Floor((w - S(8)) * 0.5f);
+        DrawPagePicker(at, pickW);
+        DrawFindField(new Vector2(at.X + pickW + S(8), at.Y), w - pickW - S(8));
+        Kit.Reserve(at, w, S(H));
+        Kit.PopBox();
+
+        var y = at.Y + S(H) + S(12);
+        Kit.Dl.AddLine(new Vector2(win.X + 1, y - 0.5f), new Vector2(win.X + winW - 1, y - 0.5f), Palette.U32(Palette.Line), 1f);
+        SettingsParts.BeginPane(PaneId(), new Vector2(win.X, y), new Vector2(winW, MathF.Max(S(40), bottom - y)), SidePad, 16);
+        DrawSettingsContent();
+        // The version and What's new at the foot (the sidebar's, when there's one).
+        Kit.Gap(24);
+        var p = Kit.At;
+        var lw = Kit.LinkWidth("What's new");
+        var vw = Txt.Width(VersionText, Face.Mono, 13);
+        var dot = " · ";
+        var dw = Txt.Width(dot, Face.Sans, 13);
+        var x = p.X + (Kit.Width - vw - dw - lw) / 2;
+        var lineH = S(19.5f);
+        Txt.Line(Kit.Dl, new Vector2(x, p.Y), VersionText, Face.Mono, 13, Palette.Muted, 19.5f);
+        Txt.Line(Kit.Dl, new Vector2(x + vw, p.Y), dot, Face.Sans, 13, Palette.Muted, 19.5f);
+        if (Kit.Link("##news", new Vector2(x + vw + dw, p.Y + (lineH - Txt.Natural(Face.SansMedium, 13)) / 2), "What's new")) Dalamud.Utility.Util.OpenLink(ReleasesUrl);
+        Kit.Reserve(p, Kit.Width, lineH);
+        SettingsParts.EndPane(18);
+    }
+
+    private static readonly Dictionary<SettingsTab, string> PaneIds = SettingsIndex.Pages.ToDictionary(p => p, p => "##set-page-" + p);
+
+    /// <summary>The page's own scrolling part (each page keeps where it was scrolled to); the search's its own.</summary>
+    private string PaneId() => settingsQuery.Length > 0 ? "##set-find-pane" : PaneIds[settingsTab];
+
+    /// <summary>The search field, with a quiet × beside it to clear it while something's typed.</summary>
+    private void DrawFindField(Vector2 pos, float width)
+    {
+        var clearW = settingsQuery.Length > 0 ? S(HSm) + S(4) : 0;
+        Kit.Field("##set-find", pos, width - clearW, ref settingsQuery, "Find a setting", Icon.Search, 64);
+        if (clearW > 0 && Kit.IconButton("##set-find-clear", new Vector2(pos.X + width - S(HSm), pos.Y + (S(H) - S(HSm)) / 2), Icon.X, "Clear the search", Btn.Quiet, BtnSize.Sm))
+            settingsQuery = string.Empty;
+    }
+
+    /// <summary>The sidebar: Find a setting, the pages (the one you're on lit, its icon ember), the version and What's new at the foot.</summary>
+    private void DrawSidebar()
+    {
+        var w = Kit.Width;
+        var at = Kit.At;
+        DrawFindField(at, w);
+        Kit.Reserve(at, w, S(H));
+        Kit.Gap(10);
+        var dl = Kit.Dl;
+        foreach (var page in SettingsIndex.Pages)
         {
-            config.ShowPlanInDuties = !config.ShowPlanInDuties;
-            config.Save();
+            var p = Kit.At;
+            var h = S(38);
+            var on = page == settingsTab && settingsQuery.Length == 0;
+            var (clicked, hovered, _) = Kit.Hit("##side-" + PaneIds[page], p, new Vector2(w, h));
+            if (on || hovered) dl.AddRectFilled(p, p + new Vector2(w, h), Palette.U32(on ? Palette.HoverQuiet : Palette.Hover), S(9));
+            var icon = S(16);
+            SettingsParts.PageIcon(dl, page, new Vector2(p.X + S(10), p.Y + (h - icon) / 2), icon, on ? Palette.Ember : hovered ? Palette.Muted : Palette.Faint);
+            var tx = p.X + S(10) + icon + S(10);
+            var face = on ? Face.SansSemibold : Face.SansMedium;
+            Txt.Line(dl, new Vector2(tx, p.Y), Txt.Fit(SettingsIndex.Title(page), face, 13, p.X + w - S(8) - tx), face, 13, on || hovered ? Palette.White : Palette.Muted, h / S(1));
+            Kit.FocusRing(p, p + new Vector2(w, h), S(9));
+            if (clicked) GoToPage(page);
+            Kit.Reserve(p, w, h);
+            Kit.Gap(2);
         }
-        if (SwitchRow(i++, "##plan-lock", "Lock it where it is", "No moving or resizing it by accident", config.PlanWindowLocked,
-                "Locked, the plan window can't be moved or resized (Dalamud's own moving and resizing are off too), and clicking it doesn't bring it to the front."))
+
+        // The foot, at the sidebar's bottom when there's room.
+        var footH = S(18);
+        var paneBottom = ImGui.GetWindowPos().Y + ImGui.GetWindowHeight() - S(16);
+        var y = MathF.Max(Kit.At.Y + S(12), paneBottom - footH);
+        var f = new Vector2(Kit.Left, y);
+        Txt.Line(dl, new Vector2(f.X + S(6), f.Y), SideVersion, Face.Mono, 11, Palette.Faint, 18);
+        var lw = Kit.LinkWidth("What's new", null, 12);
+        if (Kit.Link("##news", new Vector2(f.X + w - S(6) - lw, f.Y + (footH - Txt.Natural(Face.SansMedium, 12)) / 2), "What's new", null, 12))
+            Dalamud.Utility.Util.OpenLink(ReleasesUrl);
+        Kit.Reserve(f, w, footH);
+    }
+
+    private const string PagesMenu = "##set-pages";
+
+    /// <summary>A narrow window's page picker: the page's icon and title and a chevron, opening a menu of the pages.</summary>
+    private void DrawPagePicker(Vector2 pos, float width)
+    {
+        var h = S(H);
+        var dl = Kit.Dl;
+        var open = ImGui.IsPopupOpen(PagesMenu);
+        var (clicked, hovered, _) = Kit.Hit("##set-pick", pos, new Vector2(width, h));
+        var r = S(Palette.RadiusMd);
+        dl.AddRectFilled(pos, pos + new Vector2(width, h), Palette.U32(hovered || open ? Palette.Over(Palette.HoverButton, Palette.Well) : Palette.Well), r);
+        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(width, h) - new Vector2(0.5f), Palette.U32(open ? Palette.Line3 : Palette.Line2), r, ImDrawFlags.None, 1f);
+        var searching = settingsQuery.Length > 0;
+        var icon = S(16);
+        if (searching) Icons.Draw(dl, Icon.Search, new Vector2(pos.X + S(12), pos.Y + (h - icon) / 2), icon, Palette.Muted);
+        else SettingsParts.PageIcon(dl, settingsTab, new Vector2(pos.X + S(12), pos.Y + (h - icon) / 2), icon, Palette.Ember);
+        var tx = pos.X + S(12) + icon + S(10);
+        var chevron = S(14);
+        var title = searching ? "Found" : SettingsIndex.Title(settingsTab);
+        Txt.Line(dl, new Vector2(tx, pos.Y), Txt.Fit(title, Face.SansMedium, 13, pos.X + width - S(12) - chevron - S(8) - tx), Face.SansMedium, 13, Palette.White, H);
+        Icons.Draw(dl, Icon.ChevronDown, new Vector2(pos.X + width - S(12) - chevron, pos.Y + (h - chevron) / 2), chevron, Palette.Muted);
+        Kit.FocusRing(pos, pos + new Vector2(width, h), r);
+        if (clicked)
         {
-            config.PlanWindowLocked = !config.PlanWindowLocked;
-            config.Save();
+            ImGui.SetNextWindowPos(new Vector2(pos.X, pos.Y + h + S(4)));
+            ImGui.OpenPopup(PagesMenu);
         }
-        if (SwitchRow(i++, "##plan-callouts", "Say each step in chat", "Its callout, five seconds before, with a soft sound", config.Callouts,
-                "Five seconds before each step's mechanic, its name and its callout (what a raid lead would say) are said in chat, with a soft sound. Once a step, each pull."))
+        ImGui.SetNextWindowSizeConstraints(new Vector2(MathF.Max(S(220), width), 0), new Vector2(S(320), S(520)));
+        if (!Kit.BeginMenu(PagesMenu)) return;
+        try
         {
-            config.Callouts = !config.Callouts;
-            config.Save();
+            var mw = MathF.Max(S(220), width) - S(11.2f);
+            var mdl = ImGui.GetWindowDrawList();
+            foreach (var page in SettingsIndex.Pages)
+            {
+                var (picked, rowHovered, min, max) = Kit.MenuRow("##set-pick-" + PaneIds[page], mw, SettingsIndex.Title(page));
+                var (slot, _) = Kit.MenuRowParts(min, max);
+                var on = page == settingsTab && !searching;
+                SettingsParts.PageIcon(mdl, page, slot + new Vector2((S(20) - S(16)) / 2), S(16), on ? Palette.Ember : rowHovered ? Palette.White : Palette.Muted);
+                if (picked)
+                {
+                    settingsTab = page;
+                    settingsQuery = string.Empty;
+                    ImGui.CloseCurrentPopup();
+                }
+            }
         }
-        if (SwitchRow(i++, "##plan-share", "Share my step with the site", "Present on the site can follow along", config.ShareStep,
-                "Each time the plan window's step changes, the site hears which plan and step, so Present on kokos-tools.com (on your stream, or a second screen) can follow the fight. Only the plan and the step are sent.",
-                off: !Linked, linkFirst: !Linked))
+        finally
         {
-            config.ShareStep = !config.ShareStep;
-            config.Save();
+            Kit.EndMenu();
         }
-        if (ButtonRow(i++, "##plan-window", "Plan window", plans.Plan is { } p ? p.Name : "Your plan, anywhere on screen",
-                PlanWindowOpen?.Invoke() == true ? "Hide" : "Show", Btn.Outline))
-            TogglePlanWindow?.Invoke();
-        if (ButtonRow(i, "##roster", "Send my party to my roster", "Their names, by spot, to your Raid Codex",
-                uploads.RosterSending ? "Sending…" : "Send", Btn.Outline, !Linked || uploads.RosterSending, null,
-                "Your party's names go to your roster on the site, each in their spot (MT, OT, H1…), so your plans show who stands where. It replaces the roster there. Only when you press this.",
-                off: !Linked, linkFirst: !Linked))
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // A page.
+
+    private void DrawSettingsContent()
+    {
+        if (settingsQuery.Trim().Length > 0)
         {
-            uploads.SendRoster((text, ok) => rosterNote = (text, ok, DateTime.UtcNow));
+            DrawFound();
+            return;
         }
-        Kit.EndPanel();
-        Kit.Gap(12);
+        var tab = settingsTab;
+        DrawPageHead(tab);
+        Kit.Gap(18);
+
+        // When the meter has stopped itself, or the game hides something: said first, in amber.
+        if (tab == SettingsTab.Meter && MeterProblem?.Invoke() is { } meterProblem)
+        {
+            Kit.NoteBox(meterProblem, warn: true);
+            Kit.Gap(18);
+        }
+        if (tab is SettingsTab.Recording or SettingsTab.Advanced && recorder.HookProblem is { } hookProblem)
+        {
+            Kit.NoteBox(hookProblem, warn: true);
+            Kit.Gap(18);
+        }
+
+        if (tab == SettingsTab.Features)
+        {
+            DrawFeatures();
+            return;
+        }
+
+        foreach (var section in SettingsIndex.Sections(tab))
+        {
+            switch (tab, section.Title)
+            {
+                case (SettingsTab.Meter, "How it looks"):
+                    SettingsParts.SectionHead("##sh-look", section.Title);
+                    DrawLookPanel();
+                    break;
+                case (SettingsTab.Plans, "On-screen callouts"):
+                    SettingsParts.SectionHead("##sh-callouts", section.Title);
+                    DrawCalloutsPanel(section);
+                    break;
+                case (SettingsTab.Cooldowns, "Cooldowns"):
+                    DrawCooldownKinds();
+                    continue;
+                case (SettingsTab.Windows, "Arrange"):
+                    DrawArrangeBox();
+                    break;
+                default:
+                    SettingsParts.SectionHead("##sh-" + section.Title, section.Title, SectionHint(tab, section.Title));
+                    Kit.BeginPanel("##set-" + tab + section.Title, 0, 0, 0);
+                    for (var i = 0; i < section.Rows.Count; i++) DrawRow(section.Rows[i], i);
+                    Kit.EndPanel();
+                    break;
+            }
+            Kit.Gap(18);
+            AfterSection(tab, section.Title);
+        }
+
+        var more = SettingsIndex.More(tab);
+        if (more.Count > 0)
+        {
+            var open = moreOpen.Contains(tab);
+            if (SettingsParts.MoreRow("##more-" + PaneIds[tab], SettingsIndex.MoreWords(tab), open))
+            {
+                if (open) moreOpen.Remove(tab);
+                else moreOpen.Add(tab);
+                open = !open;
+            }
+            if (open)
+            {
+                Kit.Gap(10);
+                Kit.BeginPanel("##set-more-" + tab, 0, 0, 0);
+                for (var i = 0; i < more.Count; i++) DrawRow(more[i], i);
+                Kit.EndPanel();
+            }
+            Kit.Gap(18);
+        }
+        PageNotes(tab);
+    }
+
+    private static readonly Dictionary<SettingsTab, Run[]> LeadRuns = SettingsIndex.Pages.ToDictionary(p => p, p => SettingsIndex.LeadLink(p) is { } to
+        ? new[] { new Run(SettingsIndex.Lead(p) + " ", Face.Sans, 13, Palette.Muted), Run.LinkRun(SettingsIndex.Title(to), "go") }
+        : new[] { new Run(SettingsIndex.Lead(p), Face.Sans, 13, Palette.Muted) });
+
+    /// <summary>A page's head: its title as a small callout, its line under it (a link to Windows where it says so), Reset this page at the right.</summary>
+    private void DrawPageHead(SettingsTab tab)
+    {
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
+        const string reset = "Reset this page";
+        var resetW = SettingsIndex.CanReset(tab) ? Kit.ButtonWidth(reset, BtnSize.Sm, Icon.Refresh, Btn.Quiet) : 0;
+        var textW = w - (resetW > 0 ? resetW + S(12) : 0);
+        var title = SettingsIndex.Title(tab);
+        var th = Kit.Callout(dl, at, title, 17, textW, 2, 1.1f);
+        var y = at.Y + th + S(6);
+        var lh = Txt.Flow(new Vector2(at.X, y), textW, LeadRuns[tab], 19.5f, out var clicked);
+        if (clicked != null && SettingsIndex.LeadLink(tab) is { } to) GoToPage(to);
+        if (resetW > 0 && Kit.Button("##set-reset", new Vector2(at.X + w - resetW, at.Y - S(4)), reset, Btn.Quiet, BtnSize.Sm, Icon.Refresh, 0, false,
+                "Puts this page's settings back as they were at first. It asks first."))
+            Ask($"Reset {title}?", $"Every setting on {title} goes back to how it was when the plugin was new. Where the windows sit stays as it is.",
+                "Reset this page", "Keep them", () => ResetPage(tab));
+        Kit.Reserve(at, w, MathF.Max(y + lh - at.Y, S(HSm)));
+    }
+
+    /// <summary>The words at the right of a section's eyebrow, where it has any.</summary>
+    private string? SectionHint(SettingsTab tab, string section) => (tab, section) switch
+    {
+        (SettingsTab.Recording, "Uploads") => Linked ? "Linked to your Raid Codex" : "Not linked yet",
+        _ => null,
+    };
+
+    /// <summary>What a page says under one of its sections (the roster's result under With your static).</summary>
+    private void AfterSection(SettingsTab tab, string section)
+    {
+        if (tab != SettingsTab.Plans || section != "With your static") return;
         if (rosterNote is { } note && DateTime.UtcNow - note.At < TimeSpan.FromMinutes(1))
         {
             if (note.Ok)
@@ -325,437 +401,380 @@ public sealed partial class MainWindow
                 Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, note.Text));
             }
             else Kit.NoteBox(note.Text);
-            Kit.Gap(12);
-        }
-        Txt.Note("Send my party sends names to your own account only, and only when you press it. Your logs (Upload my logs, under Recording) carry your party's names too.");
-        Kit.Gap(18);
-        DrawCalloutSettings();
-    }
-
-    /// <summary>
-    /// Plan window → On-screen callouts (0.4.0): show them, how far ahead and how many, the sound (on,
-    /// which of the game's, how early, and a button to hear it), the window's lock, click-through, Grows,
-    /// compact and background, and a sample to place it.
-    /// </summary>
-    private void DrawCalloutSettings()
-    {
-        var o = config.CalloutOverlay;
-        Kit.Section("##sec-callouts", "On-screen callouts", "Your plan's next steps, over the fight");
-        Kit.Gap(10);
-        Kit.BeginPanel("##set-callouts", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##co-show", "Show the callouts", "While your plan follows a pull. /raidcodex callouts too", o.Show,
-                "While your plan follows a pull, its next steps' callouts sit over the fight, the next one big, each counting down to when it goes off (the plan's own times, kept to the fight by its cues).",
-                pad: 10))
-        {
-            o.Show = !o.Show;
-            config.Save();
-        }
-        var ahead = StepperRow(i++, "##co-ahead", "How far ahead", "Steps going off within this", $"{config.CalloutAhead} s", config.CalloutAhead > 5, config.CalloutAhead < 60, pad: 10);
-        if (ahead != 0)
-        {
-            config.CalloutAhead = Math.Clamp(config.CalloutAhead + ahead * 5, 5, 60);
-            config.Save();
-        }
-        var count = StepperRow(i++, "##co-count", "How many", "Steps shown at once", config.CalloutCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            config.CalloutCount > 1, config.CalloutCount < 5, pad: 10);
-        if (count != 0)
-        {
-            config.CalloutCount = Math.Clamp(config.CalloutCount + count, 1, 5);
-            config.Save();
-        }
-        if (SwitchRow(i++, "##co-sound", "A sound before each step", "One of the game's own, as <se.N> in a macro", config.CalloutSound,
-                "A few seconds before each step goes off, the game plays one of its own sound effects (the ones a macro's <se.1> to <se.16> play), once a step, each pull. It follows your game's sound settings.",
-                pad: 10))
-        {
-            config.CalloutSound = !config.CalloutSound;
-            config.Save();
-        }
-        var which = StepperRow(i++, "##co-which", "Which sound", "The game's numbering", $"<se.{config.CalloutSoundId}>", config.CalloutSoundId > 1, config.CalloutSoundId < 16, pad: 10);
-        if (which != 0)
-        {
-            config.CalloutSoundId = Math.Clamp(config.CalloutSoundId + which, 1, 16);
-            config.Save();
-            PlaySound?.Invoke(config.CalloutSoundId);
-        }
-        var lead = StepperRow(i++, "##co-lead", "How early", "Before the step goes off", $"{config.CalloutSoundLead} s", config.CalloutSoundLead > 1, config.CalloutSoundLead < 10, pad: 10);
-        if (lead != 0)
-        {
-            config.CalloutSoundLead = Math.Clamp(config.CalloutSoundLead + lead, 1, 10);
-            config.Save();
-        }
-        if (ButtonRow(i++, "##co-hear", "Hear it", "Plays it now", "Play", Btn.Outline, PlaySound == null, null, null, icon: Icon.Volume, pad: 10))
-            PlaySound?.Invoke(config.CalloutSoundId);
-        OverlayRows(o, "co", ref i, "Locked, the callouts have no title bar and can't be moved or sized.");
-        var sampleOn = CalloutsSampleOn?.Invoke() == true;
-        if (ButtonRow(i, "##co-sample", "See them", sampleOn ? "Made-up steps under a Preview tag" : "Made-up steps counting down, to place them",
-                sampleOn ? "Stop the sample" : "Show a sample", Btn.Outline, ToggleCalloutsSample == null, null,
-                "A few made-up steps counting down and starting again, as the callouts show your plan's: to place and size them without a pull.", pad: 10))
-            ToggleCalloutsSample?.Invoke();
-        Kit.EndPanel();
-        Kit.Gap(12);
-        Txt.Note("The callouts follow the plan window's own clock: a plan made from a pull on the site carries when each step's mechanic went off.");
-    }
-
-    /// <summary>An overlay's own rows: Lock it where it is, Click-through when locked, Grows, Compact, Background.</summary>
-    private void OverlayRows(OverlaySettings o, string id, ref int i, string lockTip)
-    {
-        if (SwitchRow(i++, $"##{id}-lock", "Lock it where it is", null, o.Locked, lockTip, pad: 10))
-        {
-            o.Locked = !o.Locked;
-            config.Save();
-        }
-        if (SwitchRow(i++, $"##{id}-through", "Click-through when locked", "The mouse goes through to the game", o.ClickThrough,
-                "It doesn't take the mouse at all while it's locked: its command with unlock, or this, gives it back.", sub: true, pad: 10, off: !o.Locked))
-        {
-            o.ClickThrough = !o.ClickThrough;
-            config.Save();
-        }
-        var grows = SegmentRow(i++, $"##{id}-grows", "Grows", "Which edge stays put as it grows", GrowsItems, (int)o.Grows,
-            tip: "Down: its top edge stays where you put it and it grows downwards. Up: its foot stays, and it grows upwards.");
-        if (grows != (int)o.Grows)
-        {
-            o.Grows = (MeterGrows)grows;
-            config.Save();
-        }
-        if (SwitchRow(i++, $"##{id}-compact", "Compact", "Smaller rows and words", o.Compact, null, pad: 10))
-        {
-            o.Compact = !o.Compact;
-            config.Save();
-        }
-        var bg = Math.Clamp(SliderRow(i++, $"##{id}-bg", "Background", "Its words stay solid", Math.Clamp(o.Background, 0, 1)), 0, 1);
-        if (MathF.Abs(bg - o.Background) > 0.001f)
-        {
-            o.Background = bg;
-            backgroundDirty = true;
-        }
-        if (backgroundDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
-        {
-            backgroundDirty = false;
-            config.Save();
-        }
-    }
-
-    /// <summary>Each kind's section and panel ids (by the kind's number), made once.</summary>
-    private static readonly (string Section, string Panel)[] KindIds =
-        Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => ($"##cd-kind{k}", $"##set-cd{k}")).ToArray();
-
-    /// <summary>Each cooldown's switch id and its jobs ("PLD, WAR, DRK, GNB"), as the catalogue lists them, made once.</summary>
-    private static readonly (string Id, string Jobs)[] SpecWords = CooldownCatalog.All.Select(s => ("##cd-" + s.Key, string.Join(", ", s.Jobs))).ToArray();
-
-    private static readonly Dictionary<(int, int), string> OnOfWords = new();
-
-    /// <summary>"3 of 12", made once each.</summary>
-    private static string OnOf(int on, int of)
-    {
-        if (!OnOfWords.TryGetValue((on, of), out var text)) OnOfWords[(on, of)] = text = $"{on} of {of}";
-        return text;
-    }
-
-    /// <summary>
-    /// Cooldowns (0.4.0): the tracker (show it, where, yours too, those ready, the limit break gauge,
-    /// its window), a sample, then each kind's cooldowns with a switch each (the kind's head turns them
-    /// all on or off).
-    /// </summary>
-    private void DrawCooldownsTab()
-    {
-        var o = config.Cooldowns;
-        Kit.BeginPanel("##set-cooldowns", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##cd-show", "Show the tracker", "The party's cooldowns over the fight. /raidcodex cooldowns too", o.Show,
-                "Small rows of your party's raid buffs, mitigation and the rest you pick below, each with the time until it's ready: yours from the game's own timers, the others' worked out from when they used them.",
-                pad: 10))
-        {
-            o.Show = !o.Show;
-            config.Save();
-        }
-        var where = SegmentRow(i++, "##cd-where", "Where", null, WhereItems, o.Everywhere ? 1 : 0, sub: true, off: !o.Show);
-        if (where != (o.Everywhere ? 1 : 0))
-        {
-            o.Everywhere = where == 1;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##cd-mine", "Yours too", "From the game's own timers, exactly", config.CooldownsMine,
-                "Your own cooldowns are read from the game's timers (as your hotbars show them). Off, only the rest of the party's are listed.", pad: 10))
-        {
-            config.CooldownsMine = !config.CooldownsMine;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##cd-hide", "Hide those ready", "Only what's recharging is listed", config.CooldownsHideReady,
-                "Off, every tracked cooldown has its row (\"Ready\" in green when it is). On, a row comes when it's used and goes when it's back.", pad: 10))
-        {
-            config.CooldownsHideReady = !config.CooldownsHideReady;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##cd-gauge", "Limit break gauge", "Its bars as the last row", config.CooldownsGauge,
-                "The party's limit break bars as the tracker's last row, when the party has a gauge (it's read with the meter's numbers).", pad: 10))
-        {
-            config.CooldownsGauge = !config.CooldownsGauge;
-            config.Save();
-        }
-        OverlayRows(o, "cd", ref i, "Locked, the tracker has no title bar and can't be moved or sized.");
-        var sampleOn = CooldownsSampleOn?.Invoke() == true;
-        if (ButtonRow(i, "##cd-sample", "See it", sampleOn ? "A made-up party under a Preview tag" : "A made-up party's cooldowns, to place it",
-                sampleOn ? "Stop the sample" : "Show a sample", Btn.Outline, ToggleCooldownsSample == null, null,
-                "A made-up party's cooldowns recharging and coming back, with the ones you've picked: to place and size the tracker without a party.", pad: 10))
-            ToggleCooldownsSample?.Invoke();
-        Kit.EndPanel();
-
-        foreach (var kind in CooldownCatalog.Kinds)
-        {
             Kit.Gap(18);
-            var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
-            var all = on == of;
-            if (Kit.Section(KindIds[(int)kind].Section, CooldownCatalog.KindWord(kind), OnOf(on, of), all ? "Turn all off" : "Turn all on"))
-            {
-                foreach (var spec in CooldownCatalog.All)
-                    if (spec.Kind == kind)
-                        config.CooldownPicks[spec.Key] = !all;
-                config.Save();
-            }
-            Kit.Gap(10);
-            Kit.BeginPanel(KindIds[(int)kind].Panel, 0, 0, 0);
-            var j = 0;
-            for (var k = 0; k < CooldownCatalog.All.Count; k++)
-            {
-                var spec = CooldownCatalog.All[k];
-                if (spec.Kind != kind) continue;
-                var picked = CooldownCatalog.IsOn(spec, config.CooldownPicks);
-                if (SwitchRow(j++, SpecWords[k].Id, spec.Key, SpecWords[k].Jobs, picked, null, pad: 8))
-                {
-                    config.CooldownPicks[spec.Key] = !picked;
-                    config.Save();
-                }
-            }
-            Kit.EndPanel();
         }
-        Kit.Gap(12);
-        Txt.Note("The others' times are worked out from when they used each one, by its recast (learned from their own uses when two come closer than the game's base). Yours are the game's own. A new zone, or the duty starting again after a wipe, sets them all back to ready.");
     }
 
-    private void DrawMeterTab()
+    /// <summary>The notes at a page's foot (13px muted: they're read).</summary>
+    private void PageNotes(SettingsTab tab)
     {
-        var meter = Meter?.Invoke();
-        Kit.BeginPanel("##set-meter", 0, 0, 0);
-        var i = 0;
-        if (SwitchRow(i++, "##meter-show", "Show the meter", "Its own window, over the game. /raidcodex meter too", config.ShowMeter,
-                "Damage, healing, damage taken and deaths for your party, worked out in the game from what it already tells the plugin. Its numbers and names stay in the plugin.", pad: 10))
+        switch (tab)
         {
-            config.ShowMeter = !config.ShowMeter;
-            config.Save();
+            case SettingsTab.Plans:
+                Txt.Note("The callouts follow the plan window's own clock: a plan made from a pull on the site carries when each step's mechanic went off. "
+                    + "Send my party sends names to your own account only, and only when you press it.");
+                break;
+            case SettingsTab.Meter:
+                Txt.Note("The meter's numbers and names stay in the plugin. Your logs on the site carry the party's numbers with their names (unless you turn Upload my logs off).");
+                break;
+            case SettingsTab.Cooldowns:
+                Txt.Note("The others' times are worked out from when they used each one, by its recast (learned from their own uses when two come closer than the game's base). "
+                    + "Yours are the game's own. A new zone, or the duty starting again after a wipe, sets them all back to ready.");
+                break;
+            case SettingsTab.Account:
+                Txt.Note("Anyone with the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");
+                Kit.Gap(10);
+                Txt.Note("What goes to the site: your logs (Upload my logs) carry each pull with your party's names and home worlds, as on FFLogs. Track my progress sends a few "
+                    + "numbers (by spot and job, never names). Send my party sends names to your own roster, only when you press it. Share my step sends only the plan and "
+                    + "the step. The meter's numbers and names stay in the plugin.");
+                break;
         }
-        var where = SegmentRow(i++, "##meter-where", "Where", null, new[] { "In duties", "Everywhere" }, config.MeterEverywhere ? 1 : 0, sub: true, off: !config.ShowMeter);
-        if (where != (config.MeterEverywhere ? 1 : 0))
-        {
-            config.MeterEverywhere = where == 1;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-hide", "Hide out of combat", "Folded to one line otherwise", config.MeterHideOutOfCombat, null, sub: true, pad: 10, off: !config.ShowMeter))
-        {
-            config.MeterHideOutOfCombat = !config.MeterHideOutOfCombat;
-            config.Save();
-        }
-        var rank = SegmentRow(i++, "##meter-rank", "The number", "ENCDPS: over the fight's time. DPS: over each player's own.", new[] { "ENCDPS", "DPS" }, (int)config.MeterRank);
-        if (rank != (int)config.MeterRank)
-        {
-            config.MeterRank = (MeterRank)rank;
-            config.Save();
-        }
-        // The meter always keeps pets in their owners' rows and the limit break in its own, as ACT and FF Logs do.
-        SwitchRow(i++, "##meter-pets", "Pets in their owners' rows", "Fairies, demi-summons, the automaton, Living Shadow", true,
-            "A pet's or summon's hits and heals count for whoever it belongs to.", pad: 10, off: true, why: "Always, as ACT counts them.");
-        SwitchRow(i++, "##meter-lb", "Limit break on its own row", null, true,
-            "The limit break isn't anyone's damage: it has its own row, and counts in the party's number.", pad: 10, off: true, why: "Always, as ACT and FF Logs keep it.");
-        var names = SegmentRow(i++, "##meter-names", "Names", "Kept in the plugin, never sent", new[] { "Names", "Jobs only" }, config.MeterJobsOnly ? 1 : 0);
-        if (names != (config.MeterJobsOnly ? 1 : 0))
-        {
-            config.MeterJobsOnly = names == 1;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-lock", "Lock it where it is", null, config.MeterLocked,
-                "Locked, the meter has no title bar and can't be moved (nor the normal meter sized by its edges); its menu, tabs and picker still answer the mouse. Compact is never sized by hand: its width is its theme's and its height its rows'.", pad: 10))
-        {
-            config.MeterLocked = !config.MeterLocked;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-through", "Click-through when locked", "The mouse goes through to the game", config.MeterClickThrough,
-                "The meter doesn't take the mouse at all while it's locked: /raidcodex meter unlock, or this, gives it back.", sub: true, pad: 10, off: !config.MeterLocked))
-        {
-            config.MeterClickThrough = !config.MeterClickThrough;
-            config.Save();
-        }
-        // Since 0.7.4 three settings apart (until then Grows flipped all three): the edge that stays put, where the
-        // head sits, the rows' order. Both meters; an older configuration growing up was moved to Up, Bottom, Lowest first.
-        var grows = SegmentRow(i++, "##meter-grows", "Grows", "The edge that stays put as it grows", GrowsItems, (int)config.MeterGrows,
-            tip: "Down: its top edge stays where you put it and it grows downwards. Up: its bottom edge stays and it grows upwards (for a meter sitting on your hotbars). Where its head sits and the rows' order are the two settings under this.");
-        if (grows != (int)config.MeterGrows)
-        {
-            config.MeterGrows = (MeterGrows)grows;
-            config.Save();
-        }
-        var head = SegmentRow(i++, "##meter-head", "Head", "The clock, tabs, pulls and lock", HeadItems, (int)config.MeterHead,
-            tip: "Top or Bottom of the meter, whichever way it grows: the normal meter's clock, tabs, pull menu and lock (pace and the column heads beside them), compact's head. The party's line sits at the other edge.");
-        if (head != (int)config.MeterHead)
-        {
-            config.MeterHead = (MeterHead)head;
-            config.Save();
-        }
-        var order = SegmentRow(i++, "##meter-order", "Order", "Reading down the list", OrderItems, (int)config.MeterOrder,
-            tip: "Highest first: the top player at the top of the list. Lowest first: at its bottom. The first death and the newest event go where the top player does; compact's pinned you stays at the end away from them.");
-        if (order != (int)config.MeterOrder)
-        {
-            config.MeterOrder = (MeterOrder)order;
-            config.Save();
-        }
-        var gauge = SegmentRow(i++, "##meter-gauge", "Limit break gauge", "Its bars, while a fight is on", GaugeItems, (int)config.MeterGauge,
-            tip: "The party's limit break bars, in the meter's head (after the clock, as room allows) or its foot (before what it says on the right), while a fight is on. Off, nowhere.");
-        if (gauge != (int)config.MeterGauge)
-        {
-            config.MeterGauge = (GaugePlace)gauge;
-            config.Save();
-        }
-        // The theme: the compact meter's, the normal meter's and the opened-up window's (since 0.7.3), with its role colours and decorations under it.
-        ThemeBlock(i++, false);
-        var roles = SegmentRow(i++, "##meter-roles", "Role colours", "The bars' and icons' colours", RoleItems, (int)config.MeterRoleColours, sub: true,
-            tip: "The theme's: a blue, a green and a red-orange told apart with any colour blindness (each theme has its own set). The game's: its own blue, green and red, as the party list has them.");
-        if (roles != (int)config.MeterRoleColours)
-        {
-            config.MeterRoleColours = (MeterRoleColours)roles;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-decor", "Decorations", "Sparkles, scanlines, the horizon, the glitch, the ribbon", config.MeterDecorations,
-                "Each theme's flourishes, in both meters and the opened-up window. Off, the theme keeps its colours, fonts and frame without them.", sub: true, pad: 10))
-        {
-            config.MeterDecorations = !config.MeterDecorations;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-compact", "Compact", "The top eight on plates; the tabs and pulls in one menu", config.MeterCompact,
-                "The default since 0.7.0: one head with the clock, the phase, the limit break and a menu (the tabs, the pulls, pace), the top eight on near-solid plates with the bar in the role's colour and the job's icon, three-figure numbers in fixed columns, you pinned at the foot when you're below them; its size is its theme's and its rows', not set by hand. Off, the normal meter, in the same theme, with its tabs, pace bar and column heads, sized by its edge. The meter's own menu has this switch too.",
-                pad: 10))
-        {
-            config.MeterCompact = !config.MeterCompact;
-            config.Save();
-        }
-        if (SwitchRow(i++, "##meter-whole", "Whole numbers", "27,840 instead of 27.8k", config.MeterWholeNumbers,
-                "Three figures (27.8k, 9.05k, 165k) keep still at every snapshot and read at a glance; whole numbers widen the column a little. The normal meter always writes them whole.", sub: true, pad: 10,
-                off: !config.MeterCompact))
-        {
-            config.MeterWholeNumbers = !config.MeterWholeNumbers;
-            config.Save();
-        }
-        // 20% at the least, as the meter draws it (below that its edge and words would float on nothing).
-        var floor = MeterThemes.Of(config.MeterTheme).Win.Floor;
-        var bg = Math.Clamp(SliderRow(i++, "##meter-bg", "Background", floor > 0 ? $"Rows stay solid; {MeterThemes.Of(config.MeterTheme).Name} keeps {Format.PercentWhole(floor)} at least" : "Rows stay solid",
-            Math.Clamp(config.MeterBackground, 0.2f, 1f)), 0.2f, 1f);
-        if (MathF.Abs(bg - config.MeterBackground) > 0.001f)
-        {
-            config.MeterBackground = bg;
-            backgroundDirty = true;
-        }
-        // Saved once the knob is let go, not on every frame it's dragged.
-        if (backgroundDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
-        {
-            backgroundDirty = false;
-            config.Save();
-        }
-        // The meter mid-fight with made-up numbers, to place it (and see compact and Grows) without a pull.
-        var sampleOn = SampleOn?.Invoke() == true;
-        var waits = !sampleOn && SampleWaits?.Invoke() == true;
-        if (ButtonRow(i++, "##meter-sample", "See it in a fight",
-                waits ? "After this fight: a real one ends a sample" : sampleOn ? "Made-up numbers under a Preview tag, until a fight starts" : "A made-up pull, its clock running, under a Preview tag",
-                sampleOn ? "Stop the sample" : "Show a sample fight", Btn.Outline, waits || ToggleSample == null, null,
-                "Eight players mid-pull, with a limit break, a death, pace and the clock running: the meter as it looks in a fight, to place it (and size the normal meter). Nothing in it is real, it's never mixed with real numbers, and a real fight ends it at once.",
-                pad: 10))
-            ToggleSample?.Invoke();
-        var end = StepperRow(i++, "##meter-end", "A fight ends after", "Nobody in combat for this long", $"{config.MeterEndAfter} s", config.MeterEndAfter > 2, config.MeterEndAfter < 15, pad: 10);
-        if (end != 0)
-        {
-            config.MeterEndAfter = Math.Clamp(config.MeterEndAfter + end, 2, 15);
-            config.Save();
-        }
-        var keep = StepperRow(i++, "##meter-keep", "Keep the last", "Pulls to pick from and pace against", config.MeterKeep.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            config.MeterKeep > 5, config.MeterKeep < 50, pad: 10);
-        if (keep != 0)
-        {
-            config.MeterKeep = Math.Clamp(config.MeterKeep + keep * 5, 5, 50);
-            config.Save();
-        }
-        var pace = SegmentRow(i++, "##meter-pace", "Pace against", "Damage tab only, from 10 s into a phase", new[] { "Best", "Last", "Off" }, (int)config.MeterPace);
-        if (pace != (int)config.MeterPace)
-        {
-            config.MeterPace = (PaceAgainst)pace;
-            config.Save();
-        }
-        // ACT's numbers (IINACT over OverlayPlugin's local connection) aren't read by this version.
-        SwitchRow(i++, "##meter-act", "Use ACT's numbers", "When IINACT is running, show its numbers instead", false, null, pad: 10, off: true, why: "Not in this version yet.");
-        if (ButtonRow(i, "##meter-clear", "Kept fights", meter is { } m ? Words.Count(m.Kept.Count, "fight") + " kept for the picker" : "None yet", "Clear", Btn.Danger, meter == null || meter.Kept.Count == 0,
-                null, "Forget every fight the meter kept this session (the picker's pulls and pace's best).", pad: 10))
-            meter?.Clear();
-        Kit.EndPanel();
-
-        // After a patch: it turns itself off rather than lie.
-        if (MeterProblem?.Invoke() is { } problem)
-        {
-            Kit.Gap(12);
-            Kit.NoteBox(problem, warn: true);
-        }
-        Kit.Gap(12);
-        Txt.Note("The meter's numbers and names stay in the plugin. Your logs on the site carry the party's numbers with their names (unless you turn Upload my logs off).");
     }
 
-    /// <summary>
-    /// The compact meter's theme (a sub-row of Compact): its six as tiles (the name and where it sits
-    /// in the range), the one picked edged in ember, its idea under them; beside them the live preview,
-    /// the sample fight playing in the theme, at its real size, as the meter draws it.
-    /// </summary>
-    private void ThemeBlock(int index, bool off)
+    // ---------------------------------------------------------------------------------------------
+    // Reset this page.
+
+    /// <summary>Puts a page's settings back to a new configuration's (where the windows sit stays).</summary>
+    private void ResetPage(SettingsTab tab)
     {
+        var d = new Configuration();
+        foreach (var id in SettingsIndex.Resets(tab)) Reset(id, d);
+        config.Save();
+        Notify($"{SettingsIndex.Title(tab)} is as it was at first", ToastKind.Ok, Icon.Refresh);
+    }
+
+    private void Reset(SettingId id, Configuration d)
+    {
+        var c = config;
+        switch (id)
+        {
+            case SettingId.AutoRecord: c.AutoRecord = d.AutoRecord; break;
+            case SettingId.RecordAllDuties: c.RecordAllDuties = d.RecordAllDuties; break;
+            case SettingId.RecordParty: c.RecordParty = d.RecordParty; break;
+            case SettingId.Keep:
+                c.Keep = d.Keep;
+                store.Keep = c.Keep;
+                break;
+            case SettingId.UploadLogs:
+                if (c.UploadLogs != d.UploadLogs) logs.SetOn(d.UploadLogs);
+                break;
+            case SettingId.TrackProgress: c.TrackProgress = d.TrackProgress; break;
+            case SettingId.SmoothReplays: c.SmoothReplays = d.SmoothReplays; break;
+            case SettingId.ShowInBar: c.ShowInBar = d.ShowInBar; break;
+
+            case SettingId.ShowMeter: c.ShowMeter = d.ShowMeter; break;
+            case SettingId.MeterWhere: c.MeterEverywhere = d.MeterEverywhere; break;
+            case SettingId.MeterHide: c.MeterHideOutOfCombat = d.MeterHideOutOfCombat; break;
+            case SettingId.MeterSize: c.MeterCompact = d.MeterCompact; break;
+            case SettingId.MeterTheme: c.MeterTheme = d.MeterTheme; break;
+            case SettingId.MeterRoles: c.MeterRoleColours = d.MeterRoleColours; break;
+            case SettingId.MeterRank: c.MeterRank = d.MeterRank; break;
+            case SettingId.MeterNames: c.MeterJobsOnly = d.MeterJobsOnly; break;
+            case SettingId.MeterGrows: c.MeterGrows = d.MeterGrows; break;
+            case SettingId.MeterHead: c.MeterHead = d.MeterHead; break;
+            case SettingId.MeterOrder: c.MeterOrder = d.MeterOrder; break;
+            case SettingId.MeterGauge: c.MeterGauge = d.MeterGauge; break;
+            case SettingId.MeterBackground: c.MeterBackground = d.MeterBackground; break;
+            case SettingId.MeterEndAfter: c.MeterEndAfter = d.MeterEndAfter; break;
+            case SettingId.MeterKeep: c.MeterKeep = d.MeterKeep; break;
+            case SettingId.MeterPace: c.MeterPace = d.MeterPace; break;
+            case SettingId.MeterDecorations: c.MeterDecorations = d.MeterDecorations; break;
+            case SettingId.MeterWhole: c.MeterWholeNumbers = d.MeterWholeNumbers; break;
+            case SettingId.MeterLock: c.MeterLocked = d.MeterLocked; break;
+            case SettingId.MeterClickThrough: c.MeterClickThrough = d.MeterClickThrough; break;
+
+            case SettingId.ShowPlan: c.ShowPlanInDuties = d.ShowPlanInDuties; break;
+            case SettingId.SayInChat: c.Callouts = d.Callouts; break;
+            case SettingId.ShareStep: c.ShareStep = d.ShareStep; break;
+            case SettingId.PlanLock: c.PlanWindowLocked = d.PlanWindowLocked; break;
+
+            case SettingId.CalloutShow: c.CalloutOverlay.Show = d.CalloutOverlay.Show; break;
+            case SettingId.CalloutAhead: c.CalloutAhead = d.CalloutAhead; break;
+            case SettingId.CalloutCount: c.CalloutCount = d.CalloutCount; break;
+            case SettingId.CalloutSound: c.CalloutSound = d.CalloutSound; break;
+            case SettingId.CalloutWhich: c.CalloutSoundId = d.CalloutSoundId; break;
+            case SettingId.CalloutLead: c.CalloutSoundLead = d.CalloutSoundLead; break;
+            case SettingId.CalloutLock: c.CalloutOverlay.Locked = d.CalloutOverlay.Locked; break;
+            case SettingId.CalloutClickThrough: c.CalloutOverlay.ClickThrough = d.CalloutOverlay.ClickThrough; break;
+            case SettingId.CalloutGrows: c.CalloutOverlay.Grows = d.CalloutOverlay.Grows; break;
+            case SettingId.CalloutCompact: c.CalloutOverlay.Compact = d.CalloutOverlay.Compact; break;
+            case SettingId.CalloutBackground: c.CalloutOverlay.Background = d.CalloutOverlay.Background; break;
+
+            case SettingId.CdShow: c.Cooldowns.Show = d.Cooldowns.Show; break;
+            case SettingId.CdWhere: c.Cooldowns.Everywhere = d.Cooldowns.Everywhere; break;
+            case SettingId.CdMine: c.CooldownsMine = d.CooldownsMine; break;
+            case SettingId.CdHideReady: c.CooldownsHideReady = d.CooldownsHideReady; break;
+            case SettingId.CdGauge: c.CooldownsGauge = d.CooldownsGauge; break;
+            case SettingId.CdLock: c.Cooldowns.Locked = d.Cooldowns.Locked; break;
+            case SettingId.CdClickThrough: c.Cooldowns.ClickThrough = d.Cooldowns.ClickThrough; break;
+            case SettingId.CdGrows: c.Cooldowns.Grows = d.Cooldowns.Grows; break;
+            case SettingId.CdCompact: c.Cooldowns.Compact = d.Cooldowns.Compact; break;
+            case SettingId.CdBackground: c.Cooldowns.Background = d.Cooldowns.Background; break;
+            case SettingId.CdPicks: c.CooldownPicks.Clear(); break;
+
+            case SettingId.Diagnostics:
+                c.Diagnostics = d.Diagnostics;
+                recorder.Diagnostics.On = c.Diagnostics;
+                break;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Find a setting.
+
+    /// <summary>A search's answer for one page's section: its rows, and the cooldowns found (by their place in the catalogue).</summary>
+    private sealed record FoundGroup(SettingsTab Page, string Section, string Head, List<SettingEntry> Rows, List<int> Cooldowns);
+
+    private string? foundFor;
+    private List<FoundGroup> found = new();
+    private int foundCount;
+
+    private List<FoundGroup> Found(string query)
+    {
+        if (query == foundFor) return found;
+        foundFor = query;
+        found = new List<FoundGroup>();
+        foundCount = 0;
+        var words = SettingsIndex.QueryWords(query);
+        foreach (var e in SettingsIndex.Find(query))
+        {
+            var g = found.FirstOrDefault(f => f.Page == e.Page && f.Section == e.Section);
+            if (g == null)
+            {
+                var section = e.More ? "More settings" : e.Section;
+                found.Add(g = new FoundGroup(e.Page, e.Section, $"{SettingsIndex.Title(e.Page)} · {section}", new List<SettingEntry>(), new List<int>()));
+            }
+            g.Rows.Add(e);
+            foundCount++;
+        }
+        // Each cooldown is a setting too: found by its name, its jobs or its kind.
+        for (var k = 0; k < CooldownCatalog.All.Count; k++)
+        {
+            var spec = CooldownCatalog.All[k];
+            var kind = CooldownCatalog.KindWord(spec.Kind);
+            if (!SettingsIndex.Matches(words, spec.Key, SpecWords[k].Jobs, kind, string.Join(" ", spec.Names))) continue;
+            var g = found.FirstOrDefault(f => f.Page == SettingsTab.Cooldowns && f.Section == kind);
+            if (g == null) found.Add(g = new FoundGroup(SettingsTab.Cooldowns, kind, $"{SettingsIndex.Title(SettingsTab.Cooldowns)} · {kind}", new List<SettingEntry>(), new List<int>()));
+            g.Cooldowns.Add(k);
+            foundCount++;
+        }
+        return found;
+    }
+
+    /// <summary>The search's answer: the rows found, by page and section, each working in place; Go › opens its page.</summary>
+    private void DrawFound()
+    {
+        var query = settingsQuery.Trim();
+        var groups = Found(query);
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
-        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
+        const string clear = "Clear";
+        var cw = Kit.ButtonWidth(clear, BtnSize.Sm, Icon.X, Btn.Quiet);
+        var th = Kit.Callout(dl, at, "Find a setting", 17, w - cw - S(12), 1, 1.1f);
+        var line = foundCount == 0
+            ? $"Nothing matches “{query}”. Try fewer words, or another way of saying it."
+            : $"{Words.Count(foundCount, "setting")} for “{query}”. Each works here; Go opens its page.";
+        OneRun[0] = Run.Note(line);
+        var lh = Txt.Flow(new Vector2(at.X, at.Y + th + S(6)), w - cw - S(12), OneRunList, 19.5f, out _);
+        if (Kit.Button("##set-found-clear", new Vector2(at.X + w - cw, at.Y - S(4)), clear, Btn.Quiet, BtnSize.Sm, Icon.X)) settingsQuery = string.Empty;
+        Kit.Reserve(at, w, th + S(6) + lh);
+        Kit.Gap(18);
+
+        for (var gi = 0; gi < groups.Count; gi++)
+        {
+            var g = groups[gi];
+            if (SettingsParts.SectionHead("##found-go" + gi, g.Head, null, "Go"))
+            {
+                GoToPage(g.Page, g.Rows.Any(r => r.More));
+                return;
+            }
+            Kit.BeginPanel("##found" + gi, 0, 0, 0);
+            var i = 0;
+            foreach (var e in g.Rows) DrawRow(e, i++, true);
+            foreach (var k in g.Cooldowns) CooldownRow(k, i++);
+            Kit.EndPanel();
+            Kit.Gap(18);
+        }
+    }
+
+    private static readonly Run[] OneRun = new Run[1];
+
+    private static IReadOnlyList<Run> OneRunList => OneRun;
+
+    // ---------------------------------------------------------------------------------------------
+    // Features: the main parts as cards.
+
+    private static readonly Dictionary<Feature, string> FeatureIds = Features.All.ToDictionary(f => f, f => "##feat-" + f);
+
+    private static readonly Run[] CardRun = new Run[1];
+
+    private void DrawFeatures()
+    {
+        var set = config.FeaturesNow();
+        var facts = new FeatureFacts(Linked, recorder.Current != null, config.UploadLogs && Linked ? logs.WaitingCount : 0, logs.Stopped != null,
+            MeterProblem?.Invoke() != null, config.MeterEverywhere, plans.ForThisDuty ? plans.Plan?.Name : null, config.Cooldowns.Everywhere);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var gap = S(10);
+        var cols = w >= S(440) ? 2 : 1;
+        var cardW = (w - gap * (cols - 1)) / cols;
+        var y = at.Y;
+        for (var i = 0; i < Features.All.Count; i += cols)
+        {
+            var rowH = 0f;
+            for (var c = 0; c < cols && i + c < Features.All.Count; c++) rowH = MathF.Max(rowH, CardHeight(Features.All[i + c], cardW));
+            for (var c = 0; c < cols && i + c < Features.All.Count; c++)
+            {
+                var f = Features.All[i + c];
+                FeatureCard(f, new Vector2(at.X + c * (cardW + gap), y), cardW, rowH, set, facts);
+            }
+            y += rowH + gap;
+        }
+        Kit.Reserve(at, w, y - gap - at.Y);
+        Kit.Gap(16);
+        if (SettingsParts.Box("##set-setup", Icon.Play, "Not sure what you need? The setup guide walks through it again.", "Run the setup guide"))
+            Later(ShowSetup);
+    }
+
+    private static float CardHeight(Feature f, float w)
+    {
+        CardRun[0] = new Run(Features.Line(f), Face.Sans, 13, Palette.Muted);
+        var lh = Txt.Flow(Vector2.Zero, w - S(28), CardRun, 18.5f, out _, draw: false);
+        return S(14) + S(34) + S(10) + lh + S(10) + S(20) + S(14);
+    }
+
+    /// <summary>
+    /// A main part's card: an ember slab edge while it's on, a well with its icon, its name and its switch, its one
+    /// line, its status tag and Settings › (or Link › while it needs an account).
+    /// </summary>
+    private void FeatureCard(Feature f, Vector2 pos, float w, float h, FeatureSet set, FeatureFacts facts)
+    {
+        var dl = Kit.Dl;
+        var on = set[f];
+        var needsLink = Features.NeedsAccount(f) && !Linked;
+        var r = S(12);
+        dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(Palette.Slab), r);
+        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(on && !needsLink ? Palette.EmberLine : Palette.Line), r, ImDrawFlags.None, 1f);
+        var x = pos.X + S(14);
+        var y = pos.Y + S(14);
+        var well = S(34);
+        var lit = on && !needsLink;
+        dl.AddRectFilled(new Vector2(x, y), new Vector2(x + well, y + well), Palette.U32(lit ? Palette.EmberWash : Palette.Well), S(9));
+        dl.AddRect(new Vector2(x, y) + new Vector2(0.5f), new Vector2(x + well, y + well) - new Vector2(0.5f), Palette.U32(Palette.Line), S(9), ImDrawFlags.None, 1f);
+        var icon = S(16);
+        SettingsParts.FeatureIcon(dl, f, new Vector2(x + (well - icon) / 2, y + (well - icon) / 2), icon, lit ? Palette.Ember : Palette.Disabled);
+        var sw = Kit.SwitchSize;
+        var sx = pos.X + w - S(14) - sw.X;
+        var nx = x + well + S(10);
+        Txt.Line(dl, new Vector2(nx, y), Txt.Fit(Features.Name(f), Face.SansSemibold, 14, sx - S(10) - nx), Face.SansSemibold, 14, lit ? Palette.White : Palette.Muted, 34);
+        if (Kit.Switch(FeatureIds[f], new Vector2(sx, y + (well - sw.Y) / 2), on, needsLink) && !needsLink)
+        {
+            if (f == Feature.Upload) logs.SetOn(!on);
+            else
+            {
+                config.SetFeatures(set.With(f, !on));
+                config.Save();
+            }
+        }
+        y += well + S(10);
+        CardRun[0] = new Run(Features.Line(f), Face.Sans, 13, Palette.Muted);
+        Txt.Flow(new Vector2(x, y), w - S(28), CardRun, 18.5f, out _);
+        // The foot: the tag at the left, the link at the right, at the card's bottom.
+        var footY = pos.Y + h - S(14) - S(20);
+        var link = needsLink ? "Link" : "Settings";
+        var lw = Kit.LinkWidth(link, Icon.ChevronRight);
+        var (text, kind) = FeatureStatus.Of(f, on, facts);
+        SettingsParts.StatusTag(dl, new Vector2(x, footY), text, kind, w - S(28) - lw - S(10));
+        if (Kit.Link(FeatureIds[f] + "-go", new Vector2(pos.X + w - S(14) - lw, footY + (S(20) - Txt.Natural(Face.SansMedium, 13)) / 2), link, Icon.ChevronRight))
+            GoToPage(needsLink ? SettingsTab.Account : SettingsIndex.PageOf(f));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Windows: Arrange windows.
+
+    private void DrawArrangeBox()
+    {
+        var arranging = Arranging?.Invoke() == true;
+        if (SettingsParts.Box("##set-arrange", Icon.Move,
+                "Arrange windows shows every window at once (the meter, the plan, the callouts and the cooldowns, with made-up content) to drag each into place.",
+                arranging ? "Arranging…" : "Arrange windows", Icon.Move, StartArrange == null || arranging))
+            StartArrange?.Invoke();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The meter: how it looks, with its live preview.
+
+    private static readonly string[] ThemeIds = { "##theme0", "##theme1", "##theme2", "##theme3", "##theme4", "##theme5" };
+
+    /// <summary>Settings' live preview of the compact meter: the sample fight playing, drawn as the meter draws it (not interactive).</summary>
+    private readonly PlateMeter themePreview = new() { Interactive = false };
+
+    private MeterPreview? themeSample;
+
+    private (LimitBreakGauge? Of, float[] Bars) previewPips = (null, Array.Empty<float>());
+
+    /// <summary>
+    /// How it looks: Size, the six themes as tiles (the one picked edged in ember, its idea under them) and Role colours on
+    /// the left; on the right (under them in a narrow window) the live preview, the sample fight playing in the theme at its
+    /// real size as the meter draws it, and Play a sample fight under it.
+    /// </summary>
+    private void DrawLookPanel()
+    {
+        Kit.BeginPanel("##set-look", 14, 14, 14);
+        var at = Kit.At;
+        var w = Kit.Width;
+        var dl = Kit.Dl;
         var theme = MeterThemes.Of(config.MeterTheme);
         MeterWindow.WantFonts(fonts, theme.Id);
-        // A top-level row (it is for all three windows, not under Compact).
-        var x = at.X + S(16);
-        var y = at.Y + S(12);
-        var old = Palette.Opacity;
-        if (off) Palette.Opacity = old * 0.45f;
+        var previewW = MathF.Min(S(theme.Win.Width), w);
+        var side = w - previewW - S(16) >= S(240);
+        var leftW = side ? w - previewW - S(16) : w;
+        var x = at.X;
+        var y = at.Y;
+
+        // Size.
+        var size = LookChoice("##meter-size", "Size", SizeItems, config.MeterCompact ? 0 : 1, x, ref y, leftW, CompactTip);
+        if (size != (config.MeterCompact ? 0 : 1))
+        {
+            config.MeterCompact = size == 0;
+            config.Save();
+        }
+        y += S(14);
+
+        // The themes.
         Txt.Line(dl, new Vector2(x, y), "Theme", Face.SansMedium, 14, Palette.White, 14 * 1.3f);
-        Txt.Line(dl, new Vector2(x, y + S(14 * 1.3f) + S(2)), "Both meters' and the opened-up window's look; pointed at, its idea", Face.Sans, 12, Palette.Muted, 17.4f);
-        y += S(14 * 1.3f) + S(2) + S(17.4f) + S(10);
-        // The preview on the right, at its real size; the tiles in what's left.
-        var previewW = S(theme.Win.Width);
-        var previewX = at.X + w - S(16) - S(10) - previewW;
-        var tilesW = previewX - S(18) - x;
-        var cols = tilesW >= S(300) ? 2 : 1;
-        var tileW = (tilesW - (cols - 1) * S(8)) / cols;
-        var tileH = S(44);
+        y += S(14 * 1.3f) + S(2);
+        Txt.Line(dl, new Vector2(x, y), Txt.Fit("Both meters' and the opened-up window's look", Face.Sans, 12, leftW), Face.Sans, 12, Palette.Muted, 17.4f);
+        y += S(17.4f) + S(8);
+        var cols = leftW >= S(300) ? 3 : 2;
+        var tileGap = S(6);
+        var tileW = (leftW - (cols - 1) * tileGap) / cols;
+        var tileH = S(62);
         var picked = config.MeterTheme;
         string? tip = null;
         for (var k = 0; k < MeterThemes.All.Count; k++)
         {
             var t = MeterThemes.All[k];
-            var tmin = new Vector2(x + (k % cols) * (tileW + S(8)), y + (k / cols) * (tileH + S(8)));
+            var tmin = new Vector2(x + (k % cols) * (tileW + tileGap), y + (k / cols) * (tileH + tileGap));
             var tmax = tmin + new Vector2(tileW, tileH);
             var on = t.Id == picked;
-            var (clicked, hovered, _) = Kit.Hit(ThemeIds[k], tmin, tmax - tmin, off);
-            dl.AddRectFilled(tmin, tmax, Palette.U32(on ? Palette.EmberWash : hovered ? Palette.HoverButton : Palette.Tint), S(Palette.RadiusSm));
-            dl.AddRect(tmin + new Vector2(0.5f), tmax - new Vector2(0.5f), Palette.U32(on ? Palette.Ember : Palette.Line2), S(Palette.RadiusSm), ImDrawFlags.None, 1f);
-            // A swatch of the theme: its ground with its three roles.
-            var sw = new Vector2(tmin.X + S(10), tmin.Y + (tileH - S(24)) / 2);
-            dl.AddRectFilled(sw, sw + new Vector2(S(24)), Palette.U32(t.Win.GradTop ?? t.Win.Bg), S(5));
-            dl.AddRect(sw, sw + new Vector2(S(24)), Palette.U32(t.Win.Edge with { W = MathF.Max(0.4f, t.Win.Edge.W) }), S(5), ImDrawFlags.None, 1f);
-            for (var r = 0; r < 3; r++)
-            {
-                var c = r == 0 ? t.Roles.Tank : r == 1 ? t.Roles.Healer : t.Roles.Dps;
-                dl.AddRectFilled(sw + new Vector2(S(5), S(5) + r * S(5)), sw + new Vector2(S(19), S(8) + r * S(5)), Palette.U32(c), S(1));
-            }
-            var tx = sw.X + S(24) + S(10);
-            var room = tmax.X - S(8) - tx;
-            Txt.Line(dl, new Vector2(tx, tmin.Y + S(5)), Txt.Fit(t.Name, Face.SansMedium, 13, room), Face.SansMedium, 13, Palette.White, 17);
-            Txt.Line(dl, new Vector2(tx, tmin.Y + S(22)), Txt.Fit(t.Kind, Face.Sans, 11, room), Face.Sans, 11, Palette.Muted, 16);
-            if (hovered) tip = t.Blurb;
+            var (clicked, hovered, _) = Kit.Hit(ThemeIds[k], tmin, tmax - tmin);
+            var tr = S(9);
+            dl.AddRectFilled(tmin, tmax, Palette.U32(hovered && !on ? Palette.Over(Palette.HoverButton, Palette.Well) : Palette.Well), tr);
+            dl.AddRect(tmin + new Vector2(0.5f), tmax - new Vector2(0.5f), Palette.U32(on ? Palette.Ember : hovered ? Palette.Line3 : Palette.Line2), tr, ImDrawFlags.None, 1f);
+            // A swatch of the theme: its ground, an edge, and two bars in its roles' colours.
+            var sw0 = tmin + new Vector2(S(8), S(8));
+            var sw1 = new Vector2(tmax.X - S(8), sw0.Y + S(26));
+            dl.AddRectFilled(sw0, sw1, Palette.U32(t.Win.GradTop ?? t.Win.Bg), S(5));
+            dl.AddRect(sw0, sw1, Palette.U32(t.Win.Edge with { W = MathF.Max(0.4f, t.Win.Edge.W) }), S(5), ImDrawFlags.None, 1f);
+            var bw = sw1.X - sw0.X - S(12);
+            dl.AddRectFilled(sw0 + new Vector2(S(6), S(7)), sw0 + new Vector2(S(6) + bw * 0.9f, S(11)), Palette.U32(t.Roles.Dps), S(2));
+            dl.AddRectFilled(sw0 + new Vector2(S(6), S(15)), sw0 + new Vector2(S(6) + bw * 0.6f, S(19)), Palette.U32(t.Roles.Tank with { W = t.Roles.Tank.W * 0.8f }), S(2));
+            var face = on ? Face.SansSemibold : Face.SansMedium;
+            Txt.Line(dl, new Vector2(tmin.X + S(8), sw1.Y + S(4)), Txt.Fit(t.Name, face, 12, tileW - S(16)), face, 12, on ? Palette.White : Palette.Muted, 18);
+            Kit.FocusRing(tmin, tmax, tr);
+            if (hovered) tip = t.Kind + ". " + t.Blurb;
             if (clicked && !on)
             {
                 config.MeterTheme = t.Id;
@@ -763,16 +782,29 @@ public sealed partial class MainWindow
             }
         }
         var rows = (MeterThemes.All.Count + cols - 1) / cols;
-        var tilesH = rows * tileH + (rows - 1) * S(8);
-        var bw = tilesW;
+        y += rows * tileH + (rows - 1) * tileGap + S(8);
         OneRun[0] = Run.Note(theme.Blurb);
-        var blurbH = Txt.Flow(new Vector2(x, y + tilesH + S(10)), bw, OneRunList, 18, out _);
-        Palette.Opacity = old;
+        OneRun[0] = OneRun[0] with { Px = 12 };
+        y += Txt.Flow(new Vector2(x, y), leftW, OneRunList, 17.4f, out _);
         if (tip != null) Kit.Tooltip(tip);
-        // The live preview: the sample fight in the theme picked, as the meter draws it.
+        y += S(14);
+
+        // Role colours.
+        var roles = LookChoice("##meter-roles", "Role colours", RoleShortItems, (int)config.MeterRoleColours, x, ref y, leftW, RolesTip);
+        if (roles != (int)config.MeterRoleColours)
+        {
+            config.MeterRoleColours = (MeterRoleColours)roles;
+            config.Save();
+        }
+        var leftH = y - at.Y;
+
+        // The preview: the sample fight in the theme picked, as the meter draws it.
+        var px = side ? at.X + leftW + S(16) : at.X;
+        var py = side ? at.Y : y + S(18);
+        Kit.Eyebrow(dl, new Vector2(px, py), "Preview", null, previewW, Palette.Muted);
+        py += Kit.EyebrowH + S(10);
         themeSample ??= new MeterPreview();
         var e = themeSample.Current;
-        var previewH = 0f;
         if (e != null)
         {
             MeterWindow.Configure(themePreview, config);
@@ -790,140 +822,185 @@ public sealed partial class MainWindow
             foreach (var r in e.Rows)
                 if (!r.IsLimitBreak)
                     party++;
-            previewH = S(themePreview.Needed(party));
-            if (off) Palette.Opacity = old * 0.45f;
-            themePreview.DrawFight(dl, new Vector2(previewX, y - S(4)), previewW, previewH, false);
-            Palette.Opacity = old;
+            var previewH = S(themePreview.Needed(party));
+            themePreview.DrawFight(dl, new Vector2(px, py), previewW, previewH, false);
+            py += previewH;
         }
-        var h = MathF.Max(y - at.Y + tilesH + S(10) + blurbH, y - S(4) - at.Y + previewH) + S(16);
-        Kit.Reserve(at, w, h);
+        py += S(12);
+        // The meter mid-fight with made-up numbers, to place it (and see Size and Grows) without a pull.
+        var sampleOn = SampleOn?.Invoke() == true;
+        var waits = !sampleOn && SampleWaits?.Invoke() == true;
+        if (Kit.Button("##meter-sample", new Vector2(px, py), sampleOn ? "Stop the sample" : "Play a sample fight", Btn.Outline, BtnSize.Sm, sampleOn ? Icon.Square : Icon.Play,
+                previewW, waits || ToggleSample == null, SampleTip))
+            ToggleSample?.Invoke();
+        py += S(HSm);
+        if (waits || sampleOn)
+        {
+            py += S(6);
+            OneRun[0] = new Run(waits ? "After this fight: a real one ends a sample." : "Made-up numbers under a Preview tag, until a fight starts.", Face.Sans, 12, Palette.Muted);
+            py += Txt.Flow(new Vector2(px, py), previewW, OneRunList, 17.4f, out _);
+        }
+        var rightH = side ? py - at.Y : py - at.Y;
+        Kit.Reserve(at, w, MathF.Max(leftH, rightH));
+        Kit.EndPanel();
     }
 
-    private static readonly Run[] OneRun = new Run[1];
-
-    private static IReadOnlyList<Run> OneRunList => OneRun;
-
-    private void DrawAccountTab()
+    /// <summary>A name with a dense segmented control at the right (under it when there isn't room); returns the item picked.</summary>
+    private static int LookChoice(string id, string name, string[] items, int selected, float x, ref float y, float width, string tip)
     {
-        Kit.BeginPanel("##set-account", 0, 0, 0);
-        DrawAccountRow(0);
-        if (ButtonRow(1, "##codex", "The Raid Codex", "Make plans from your pulls, draw your strats, present them", "Open", Btn.Outline, false, null,
-                "kokos-tools.com/raid-codex", icon: Icon.ExternalLink))
-            Dalamud.Utility.Util.OpenLink(SiteLink.CodexUrl);
-        Kit.EndPanel();
-        Kit.Gap(12);
-        Txt.Note("Anyone with the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");
+        var dl = Kit.Dl;
+        var segW = Kit.SegmentedWidth(items);
+        var nameW = Txt.Width(name, Face.SansMedium, 14);
+        var nameH = S(14 * 1.3f);
+        var beside = nameW + S(12) + segW <= width;
+        var rowH = beside ? S(HSm) : nameH + S(6) + S(HSm);
+        var ny = beside ? y + (S(HSm) - nameH) / 2 : y;
+        Txt.Line(dl, new Vector2(x, ny), name, Face.SansMedium, 14, Palette.White, 14 * 1.3f);
+        if (Kit.Pointed(new Vector2(x, ny), new Vector2(x + nameW, ny + nameH))) Kit.Tooltip(tip);
+        var segPos = beside ? new Vector2(x + width - segW, y) : new Vector2(x, y + nameH + S(6));
+        var picked = Kit.Segmented(id, segPos, items, selected);
+        y += rowH;
+        return picked;
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Rows.
+    // The callouts: their rows with a small preview beside them.
 
-    private static readonly Run[] SetNote = new Run[1];
+    private static readonly (string Name, string Time)[] PreviewSteps = { ("Pantokrator", "18"), ("Wave Cannon", "41"), ("Akh Morn", "57") };
 
     /// <summary>
-    /// A setting's row (`.set`: 11px 16px inside, a hairline between, 34 at the left for a sub-row): its
-    /// name (550 14px white) and one muted line under it (12px), the control at the right, 14px from
-    /// the words. A row that's off dims its words and control to 45%, and with <paramref name="linkFirst"/>
-    /// says "Link your account first: Account" (the link goes there), or <paramref name="why"/>. The
-    /// longer words are the tooltip over the words.
+    /// On-screen callouts: the rows on the left; on the right (under them in a narrow window) a small preview of the
+    /// callouts as they'll look (as many as How many at once, their background), and Show sample callouts under it.
     /// </summary>
-    private void SetRow(int index, string name, string? note, float controlW, float controlH, Action<Vector2> control, string? tip = null, bool off = false,
-        bool sub = false, bool linkFirst = false, string? why = null, float pad = 11)
+    private void DrawCalloutsPanel(SettingSection section)
     {
+        Kit.BeginPanel("##set-callouts", 0, 0, 0);
         var at = Kit.At;
         var w = Kit.Width;
+        var colW = S(210);
+        var side = w - colW - S(14) >= S(320);
+        if (side) Kit.PushBox(at.X, w - colW - S(14));
+        var i = 0;
+        foreach (var e in section.Rows)
+            if (e.Id != SettingId.CalloutSample)
+                DrawRow(e, i++);
+        if (side) Kit.PopBox();
+        var rowsBottom = ImGui.GetCursorScreenPos().Y;
+        if (side)
+        {
+            var h = CalloutPreview(new Vector2(at.X + w - S(14) - colW, at.Y + S(14)), colW);
+            Kit.Reserve(at, w, MathF.Max(rowsBottom - at.Y, h + S(28)));
+        }
+        else
+        {
+            Kit.Rule(Kit.Dl, at.X, at.X + w, rowsBottom - 0.5f);
+            var h = CalloutPreview(new Vector2(at.X + S(16), rowsBottom + S(14)), w - S(32));
+            Kit.Reserve(new Vector2(at.X, rowsBottom), w, h + S(28));
+        }
+        Kit.EndPanel();
+    }
+
+    private float CalloutPreview(Vector2 pos, float width)
+    {
         var dl = Kit.Dl;
-        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
-        var x = at.X + S(sub ? 34 : 16);
-        var wordsW = at.X + w - S(16) - (controlW > 0 ? controlW + S(14) : 0) - x;
-        var nameH = S(14 * 1.3f);
-        var noteH = 0f;
-        if (note != null)
-        {
-            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
-            noteH = S(2) + Txt.Flow(Vector2.Zero, wordsW, SetNote, 17.4f, out _, draw: false);
-        }
-        var whyText = linkFirst ? "Link your account first: " : why;
-        var whyH = whyText != null ? S(2) + S(17.4f) : 0;
-        var wordsH = nameH + noteH + whyH;
-        var h = S(pad) * 2 + MathF.Max(wordsH, controlH);
-        var top = at.Y + (h - wordsH) / 2;
+        var y = pos.Y;
+        Kit.Eyebrow(dl, new Vector2(pos.X, y), "Preview", null, width, Palette.Muted);
+        y += Kit.EyebrowH + S(8);
+        var o = config.CalloutOverlay;
+        var padX = S(14);
+        var padY = S(12);
+        var inner = width - padX * 2;
+        var shown = Math.Clamp(config.CalloutCount, 1, PreviewSteps.Length);
+        var firstPx = o.Compact ? 13 : 16;
+        var nextPx = o.Compact ? 13 : 13;
+        var firstH = S(firstPx * 1.15f);
+        var nextH = S(nextPx * 1.25f);
+        var youH = S(18);
+        var boxH = padY * 2 + firstH + (shown - 1) * (S(6) + nextH) + S(6) + youH;
+        var r = S(Palette.RadiusMd);
+        var box = new Vector2(pos.X, y);
+        dl.AddRectFilled(box, box + new Vector2(width, boxH), Palette.U32(Palette.Rgba(13, 13, 16, Math.Clamp(o.Background, 0, 1))), r);
+        dl.AddRect(box + new Vector2(0.5f), box + new Vector2(width, boxH) - new Vector2(0.5f), Palette.U32(Palette.Line2), r, ImDrawFlags.None, 1f);
+        var ty = y + padY;
+        var timeW = Txt.Width("00", Face.MonoSemibold, 16) + S(8);
+        Kit.Callout(dl, new Vector2(box.X + padX, ty), PreviewSteps[0].Name, firstPx, inner - timeW, 1, 1.15f);
+        Txt.LineRight(dl, box.X + width - padX, ty, PreviewSteps[0].Time, Face.MonoSemibold, 16, Palette.EmberHi, firstPx * 1.15f);
+        ty += firstH;
         var old = Palette.Opacity;
-        if (off) Palette.Opacity = old * 0.45f;
-        Txt.Line(dl, new Vector2(x, top), Txt.Fit(name, Face.SansMedium, 14, wordsW), Face.SansMedium, 14, Palette.White, 14 * 1.3f);
-        if (note != null)
+        for (var k = 1; k < shown; k++)
         {
-            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
-            Txt.Flow(new Vector2(x, top + nameH + S(2)), wordsW, SetNote, 17.4f, out _);
-        }
-        Palette.Opacity = old;
-        if (whyText != null)
-        {
-            // The reason stays bright (`.set .why`), its link underlined.
-            var wy = top + nameH + noteH + S(2);
-            var ww = Txt.Line(dl, new Vector2(x, wy), whyText, Face.Sans, 12, Palette.Text, 17.4f);
-            if (linkFirst && Kit.Link($"##why{name}", new Vector2(x + ww, wy + (S(17.4f) - Txt.Natural(Face.SansMedium, 12)) / 2), "Account", null, 12))
-                settingsTab = SettingsTab.Account;
-        }
-        if (tip != null && Kit.Pointed(new Vector2(x, top), new Vector2(x + wordsW, top + nameH + noteH))) Kit.Tooltip(tip);
-        if (controlW > 0)
-        {
-            if (off) Palette.Opacity = old * 0.45f;
-            control(new Vector2(at.X + w - S(16) - controlW, at.Y + (h - controlH) / 2));
+            ty += S(6);
+            Palette.Opacity = old * 0.7f;
+            Kit.Callout(dl, new Vector2(box.X + padX, ty), PreviewSteps[k].Name, nextPx, inner - timeW, 1, 1.25f);
+            Txt.LineRight(dl, box.X + width - padX, ty, PreviewSteps[k].Time, Face.MonoSemibold, 13, Palette.Muted, nextPx * 1.25f);
             Palette.Opacity = old;
+            ty += nextH;
         }
-        Kit.Reserve(at, w, h);
+        ty += S(6);
+        var yw = Txt.Line(dl, new Vector2(box.X + padX, ty), "You:", Face.SansSemibold, 13, Palette.Ember, 18);
+        Txt.Line(dl, new Vector2(box.X + padX + yw + S(4), ty), Txt.Fit("Rampart, Reprisal", Face.SansMedium, 13, inner - yw - S(4)), Face.SansMedium, 13, Palette.Muted, 18);
+        y += boxH + S(10);
+        var sampleOn = CalloutsSampleOn?.Invoke() == true;
+        if (Kit.Button("##co-sample", new Vector2(pos.X, y), sampleOn ? "Stop the sample" : "Show sample callouts", Btn.Outline, BtnSize.Sm, sampleOn ? Icon.Square : Icon.Play,
+                width, ToggleCalloutsSample == null, CalloutSampleTip))
+            ToggleCalloutsSample?.Invoke();
+        y += S(HSm);
+        return y - pos.Y;
     }
 
-    /// <summary>A setting with a switch; true when it's flipped (never while it's off).</summary>
-    private bool SwitchRow(int index, string id, string name, string? note, bool on, string? tip = null, bool off = false, bool sub = false, bool linkFirst = false,
-        string? why = null, float pad = 11)
+    // ---------------------------------------------------------------------------------------------
+    // The cooldowns: each kind's, with a switch each.
+
+    /// <summary>Each kind's panel id (by the kind's number), made once.</summary>
+    private static readonly string[] KindPanelIds = Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => $"##set-cd{k}").ToArray();
+
+    private static readonly string[] KindHeadIds = Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => $"##cd-kind{k}").ToArray();
+
+    /// <summary>Each cooldown's switch id and its jobs ("PLD, WAR, DRK, GNB"), as the catalogue lists them, made once.</summary>
+    private static readonly (string Id, string Jobs)[] SpecWords = CooldownCatalog.All.Select(s => ("##cd-" + s.Key, string.Join(", ", s.Jobs))).ToArray();
+
+    private static readonly Dictionary<(int, int), string> OnOfWords = new();
+
+    /// <summary>"3 of 12", made once each.</summary>
+    private static string OnOf(int on, int of)
     {
-        var flipped = false;
-        var size = Kit.SwitchSize;
-        SetRow(index, name, note, size.X, size.Y, p => flipped = Kit.Switch(id, p, on, off), tip, off, sub, linkFirst, why, pad);
-        return flipped && !off;
+        if (!OnOfWords.TryGetValue((on, of), out var text)) OnOfWords[(on, of)] = text = $"{on} of {of}";
+        return text;
     }
 
-    /// <summary>A setting with a − value + stepper (40 tall, the value in mono); returns −1, 0 or +1.</summary>
-    private int StepperRow(int index, string id, string name, string? note, string value, bool canDown, bool canUp, string? tip = null, float pad = 11)
+    /// <summary>Each kind's section: its eyebrow, how many are on, Turn all on (or off) at the right, and a switch for each of its cooldowns.</summary>
+    private void DrawCooldownKinds()
     {
-        var delta = 0;
-        SetRow(index, name, note, Kit.StepperWidth(value), S(H), p => delta = Kit.Stepper(id, p, value, canDown, canUp), tip, pad: pad);
-        return delta;
-    }
-
-    /// <summary>A setting with a dense segmented control; returns the item picked.</summary>
-    private int SegmentRow(int index, string id, string name, string? note, string[] items, int selected, bool sub = false, bool off = false, string? tip = null)
-    {
-        var picked = selected;
-        SetRow(index, name, note, Kit.SegmentedWidth(items), S(HSm), p => picked = Kit.Segmented(id, p, items, selected, true, off), tip, off, sub, pad: 10);
-        return off ? selected : picked;
-    }
-
-    /// <summary>A setting with a slider and its value in mono (150 wide together); returns the value.</summary>
-    private float SliderRow(int index, string id, string name, string? note, float value)
-    {
-        var result = value;
-        var text = Format.PercentWhole(value);
-        var vw = Txt.Width("100%", Face.Mono, 13);
-        SetRow(index, name, note, S(150), S(20), p =>
+        foreach (var kind in CooldownCatalog.Kinds)
         {
-            var sw = S(150) - vw - S(12);
-            result = Kit.Slider(id, p, sw, value);
-            Txt.LineRight(Kit.Dl, p.X + S(150), p.Y, Format.PercentWhole(result), Face.Mono, 13, Palette.White, 20);
-        }, pad: 10);
-        _ = text;
-        return result;
+            var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
+            var all = on == of;
+            if (SettingsParts.SectionHead(KindHeadIds[(int)kind], CooldownCatalog.KindWord(kind), OnOf(on, of), all ? "Turn all off" : "Turn all on"))
+            {
+                foreach (var spec in CooldownCatalog.All)
+                    if (spec.Kind == kind)
+                        config.CooldownPicks[spec.Key] = !all;
+                config.Save();
+            }
+            Kit.BeginPanel(KindPanelIds[(int)kind], 0, 0, 0);
+            var j = 0;
+            for (var k = 0; k < CooldownCatalog.All.Count; k++)
+                if (CooldownCatalog.All[k].Kind == kind)
+                    CooldownRow(k, j++);
+            Kit.EndPanel();
+            Kit.Gap(18);
+        }
     }
 
-    /// <summary>A setting with a dense button on the right; true when it's pressed.</summary>
-    private bool ButtonRow(int index, string id, string name, string? note, string label, Btn style = Btn.Outline, bool disabled = false,
-        string? buttonTip = null, string? tip = null, bool off = false, bool linkFirst = false, Icon? icon = null, float pad = 11, bool sub = false)
+    /// <summary>One cooldown's switch: its name over its jobs.</summary>
+    private void CooldownRow(int k, int index)
     {
-        var pressed = false;
-        SetRow(index, name, note, Kit.ButtonWidth(label, BtnSize.Sm, icon, style), S(HSm),
-            p => pressed = Kit.Button(id, p, label, style, BtnSize.Sm, icon, 0, disabled, buttonTip), tip, off, sub, linkFirst, null, pad);
-        return pressed;
+        var spec = CooldownCatalog.All[k];
+        var picked = CooldownCatalog.IsOn(spec, config.CooldownPicks);
+        if (SwitchRow(index, SpecWords[k].Id, spec.Key, SpecWords[k].Jobs, picked, null, pad: 8))
+        {
+            config.CooldownPicks[spec.Key] = !picked;
+            config.Save();
+        }
     }
 }

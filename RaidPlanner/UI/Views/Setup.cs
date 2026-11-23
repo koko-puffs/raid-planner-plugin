@@ -27,8 +27,6 @@ public sealed partial class MainWindow
 
     private static readonly FeaturePreset[] PresetOrder = { FeaturePreset.Recommended, FeaturePreset.Everything, FeaturePreset.RecordingOnly };
 
-    private static readonly string[] SizeItems = { "Compact", "Detailed" };
-
     /// <summary>The three themes the guide offers (the rest are in Settings).</summary>
     private static readonly MeterThemeId[] GuideThemes = { MeterThemeId.ReadyCheck, MeterThemeId.Readout, MeterThemeId.Grimoire };
 
