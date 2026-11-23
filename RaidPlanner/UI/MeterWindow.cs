@@ -374,6 +374,8 @@ public sealed partial class MeterWindow : Window
             : !live && !m.Waiting && !unfolded && picked == null && Preview == null ? View.Folded
             : m.Waiting && picked == null ? View.Waiting
             : View.Fight;
+        // Its theme's faces, compact or Detailed (the normal meter draws in the theme's faces too: DetailFonts.ForNormal).
+        WantFonts(fonts, config.MeterTheme);
         if (config.MeterCompact) PlateDecide(m);
     }
 

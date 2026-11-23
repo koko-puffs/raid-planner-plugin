@@ -72,6 +72,7 @@ public sealed partial class MainWindow
     public void ShowSettingsOn(SettingsTab tab)
     {
         Dismiss();
+        LeaveSetup();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
         settingsTab = tab;

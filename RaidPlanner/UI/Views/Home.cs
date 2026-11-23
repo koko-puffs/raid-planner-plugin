@@ -258,7 +258,7 @@ public sealed partial class MainWindow
         var wrap = new Wrap(8);
         Kit.Chip("##rec-counts", wrap.Next(Kit.ChipWidth(counts, Icon.CircleDot), Kit.ChipH), counts, Palette.Ember, true, Icon.CircleDot, "What's recorded so far: the boss's casts, the markers and the tethers");
         Kit.Chip("##rec-places", wrap.Next(Kit.ChipWidth(places, Icon.Users), Kit.ChipH), places, config.RecordParty ? Palette.Ready : Palette.Faint, config.RecordParty, Icon.Users,
-            config.RecordParty ? "Where everyone stands, twice a second" : "Where the party stands isn't recorded (Settings › Recording)");
+            config.RecordParty ? $"Where everyone stands, {(config.SmoothReplays ? "four times" : "twice")} a second" : "Where the party stands isn't recorded (Settings › Recording and uploads)");
         Kit.Chip("##rec-upload", wrap.Next(Kit.ChipWidth(uploads, Icon.Upload), Kit.ChipH), uploads, Palette.Ready, true, Icon.Upload);
         wrap.End();
     }

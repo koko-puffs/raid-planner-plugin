@@ -1,3 +1,4 @@
+using RaidPlanner.UI;
 using RaidPlanner.UI.Model;
 using Xunit;
 
@@ -42,5 +43,25 @@ public class SetupTests
         Assert.Equal(SetupState.Pending, SetupState.Migrate(SetupState.Pending));
         Assert.True(SetupState.Due(SetupState.Pending));
         Assert.False(SetupState.Due(SetupState.Done));
+    }
+}
+
+/// <summary>0.8.0's review: what Reset this page leaves, and the guide's words.</summary>
+public class SetupReviewTests
+{
+    [Fact]
+    public void ResettingRecordingLeavesUploadsAsTheyAre()
+    {
+        // On would upload pulls, which are public on the site: a reset never turns it back on.
+        Assert.DoesNotContain(SettingId.UploadLogs, SettingsIndex.Resets(SettingsTab.Recording));
+        Assert.Contains(SettingId.Keep, SettingsIndex.Resets(SettingsTab.Recording));
+    }
+
+    [Fact]
+    public void TheCooldownsNoteSaysWhereItShows()
+    {
+        var facts = new SetupFacts(true, false, 20, false, "Ready Check", false, CooldownsEverywhere: true);
+        Assert.EndsWith("everywhere", SetupGuide.DoneNote(Feature.Cooldowns, true, facts));
+        Assert.EndsWith("in duties", SetupGuide.DoneNote(Feature.Cooldowns, true, facts with { CooldownsEverywhere = false }));
     }
 }

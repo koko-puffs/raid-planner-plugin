@@ -5,7 +5,7 @@ using System.Linq;
 namespace RaidPlanner.UI.Model;
 
 /// <summary>What the setup guide's last step says of a feature: its settings that matter, in a few words.</summary>
-public readonly record struct SetupFacts(bool Linked, bool AllDuties, int Keep, bool Compact, string Theme, bool MeterEverywhere);
+public readonly record struct SetupFacts(bool Linked, bool AllDuties, int Keep, bool Compact, string Theme, bool MeterEverywhere, bool CooldownsEverywhere = false);
 
 /// <summary>
 /// The first-time setup guide's rules (0.8.0, the main window's Setup): its five steps, when Next can go on (the
@@ -65,7 +65,7 @@ public static class SetupGuide
             Feature.Upload => s.Linked ? "Linked · public, as on FF Logs" : "Waits for your account: Settings › Account",
             Feature.Meter => $"{(s.Compact ? "Compact" : "Detailed")} · {s.Theme} · {(s.MeterEverywhere ? "everywhere" : "in duties")}",
             Feature.Plan => "Shows your plan for the duty you’re in",
-            Feature.Cooldowns => "Your party’s raid buffs and mitigation, in duties",
+            Feature.Cooldowns => $"Your party’s raid buffs and mitigation, {(s.CooldownsEverywhere ? "everywhere" : "in duties")}",
             _ => s.Linked ? "How far each pull got, on the site" : "Waits for your account: Settings › Account",
         };
     }

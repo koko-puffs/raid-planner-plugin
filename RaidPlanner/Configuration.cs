@@ -256,18 +256,28 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public int Setup { get; set; }
 
-    /// <summary>Which of the main parts are on (Settings → Features, the setup guide), read from their own settings.</summary>
+    /// <summary>
+    /// Which of the main parts are on (Settings → Features, the setup guide), read from their own settings. Plan and
+    /// callouts is on while either the plan window or the on-screen callouts is.
+    /// </summary>
     public UI.Model.FeatureSet FeaturesNow() =>
-        new(AutoRecord, UploadLogs, ShowMeter, ShowPlanInDuties && CalloutOverlay.Show, Cooldowns.Show, TrackProgress);
+        new(AutoRecord, UploadLogs, ShowMeter, ShowPlanInDuties || CalloutOverlay.Show, Cooldowns.Show, TrackProgress);
 
-    /// <summary>Turns each main part on or off: Plan and callouts is the plan window and the on-screen callouts together.</summary>
+    /// <summary>
+    /// Turns each main part on or off. Plan and callouts, the plan window and the on-screen callouts together, is
+    /// written only when it changes: turning another part on or off never touches one of the two left as you set it.
+    /// </summary>
     public void SetFeatures(UI.Model.FeatureSet f)
     {
+        var plan = FeaturesNow().Plan;
         AutoRecord = f.Record;
         UploadLogs = f.Upload;
         ShowMeter = f.Meter;
-        ShowPlanInDuties = f.Plan;
-        CalloutOverlay.Show = f.Plan;
+        if (f.Plan != plan)
+        {
+            ShowPlanInDuties = f.Plan;
+            CalloutOverlay.Show = f.Plan;
+        }
         Cooldowns.Show = f.Cooldowns;
         TrackProgress = f.Progress;
     }

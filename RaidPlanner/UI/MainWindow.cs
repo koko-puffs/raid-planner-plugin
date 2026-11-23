@@ -80,6 +80,7 @@ public sealed partial class MainWindow : Window, IDisposable
     public void ShowMain()
     {
         Dismiss();
+        LeaveSetup();
         screen = Screen.Home;
         IsOpen = true;
     }
@@ -88,8 +89,10 @@ public sealed partial class MainWindow : Window, IDisposable
     public void ShowSettings()
     {
         Dismiss();
+        LeaveSetup();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
+        settingsQuery = string.Empty;
         IsOpen = true;
     }
 
@@ -97,9 +100,11 @@ public sealed partial class MainWindow : Window, IDisposable
     public void ShowAccount()
     {
         Dismiss();
+        LeaveSetup();
         settingsFrom = Screen.Home;
         screen = Screen.Settings;
         settingsTab = SettingsTab.Account;
+        settingsQuery = string.Empty;
         IsOpen = true;
     }
 
@@ -116,6 +121,7 @@ public sealed partial class MainWindow : Window, IDisposable
     public void ShowPulls()
     {
         Dismiss();
+        LeaveSetup();
         screen = Screen.Pulls;
         IsOpen = true;
     }
@@ -124,6 +130,7 @@ public sealed partial class MainWindow : Window, IDisposable
     public void ShowPull(RecordingInfo info)
     {
         Dismiss();
+        LeaveSetup();
         openFile = info.File;
         screen = Screen.Pull;
         IsOpen = true;
@@ -134,14 +141,39 @@ public sealed partial class MainWindow : Window, IDisposable
 
     public override void OnClose()
     {
-        // Closing the guide is skipping it, with what's been picked so far (it can be run again from Settings).
-        if (screen == Screen.Setup && Model.SetupState.Due(config.Setup))
+        // Stepping aside for Arrange windows isn't closing: the guide stays where it was (not yet Done), and Settings
+        // on its page, to come back to after Done or Cancel.
+        if (steppingAside)
         {
-            config.Setup = Model.SetupState.Done;
-            config.Save();
+            steppingAside = false;
+            Dismiss();
+            return;
         }
+        // Closing the guide is skipping it, with what's been picked so far (it can be run again from Settings).
+        LeaveSetup();
+        settingsWidened = false;
         settingsTab = SettingsTab.Features;
+        settingsQuery = string.Empty;
         Dismiss();
+    }
+
+    /// <summary>Closes the window for Arrange windows (it would cover the windows), to come back as it was after.</summary>
+    public void StepAside()
+    {
+        if (!IsOpen) return;
+        steppingAside = true;
+        IsOpen = false;
+    }
+
+    private bool steppingAside;
+
+    /// <summary>
+    /// Leaving the guide for another screen (a command, Dalamud's buttons, the server info bar) or closing it: it's
+    /// Done, so it doesn't open again at every load (it can be run again from Settings).
+    /// </summary>
+    private void LeaveSetup()
+    {
+        if (screen == Screen.Setup) MarkSetupDone();
     }
 
     /// <summary>The plugin unloads: a send under way is stopped by the site session (it won't mark or say anything after).</summary>
@@ -191,8 +223,14 @@ public sealed partial class MainWindow : Window, IDisposable
             if (screenH > 0 && scale > 0 && Size is { } size && size.Y * scale > screenH * 0.9f)
                 Size = new Vector2(size.X, MathF.Max(520, screenH * 0.9f / scale));
         }
-        // Settings' sidebar needs about 700px beside its pages: opening Settings on a narrower window widens it once
-        // (to 820, as far as the screen allows); leaving and coming back doesn't, so a width you chose stays.
+        // Settings' sidebar needs about 700px beside its pages: the first time Settings is shown after the window opens,
+        // a narrower window is widened (to 820, as far as the screen allows). Dalamud sizes the window from Size after
+        // this, so it's given there for one frame (as the plan window's PutAt does).
+        if (sizedOnce)
+        {
+            sizedOnce = false;
+            SizeCondition = ImGuiCond.FirstUseEver;
+        }
         if (screen == Screen.Settings && !settingsWidened)
         {
             settingsWidened = true;
@@ -201,10 +239,14 @@ public sealed partial class MainWindow : Window, IDisposable
             if (scale > 0 && lastSize.X > 0 && lastSize.X < SettingsWide * scale && screenW > 0)
             {
                 var w = MathF.Min(SettingsWide * scale, screenW * 0.9f);
-                if (w > lastSize.X) ImGui.SetNextWindowSize(new Vector2(w, lastSize.Y), ImGuiCond.Always);
+                if (w > lastSize.X)
+                {
+                    Size = new Vector2(w, lastSize.Y) / scale;
+                    SizeCondition = ImGuiCond.Always;
+                    sizedOnce = true;
+                }
             }
         }
-        else if (screen != Screen.Settings) settingsWidened = false;
         Theme.PushFrame();
     }
 
@@ -213,8 +255,11 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>The window's width for Settings with its sidebar (CSS px).</summary>
     private const float SettingsWide = 820;
 
-    /// <summary>Settings has been widened since it was opened.</summary>
+    /// <summary>Settings has been widened since the window opened.</summary>
     private bool settingsWidened;
+
+    /// <summary>Size was set for one frame (Settings widened): back to FirstUseEver on the next.</summary>
+    private bool sizedOnce;
 
     /// <summary>The window's size as last drawn (screen px).</summary>
     private Vector2 lastSize;

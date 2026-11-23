@@ -199,7 +199,8 @@ namespace RaidPlanner.UI.Model
             new(SettingId.RecordAllDuties, Rec, "Recording", "Which duties", "Raids and trials, or every duty's pulls (dungeons too).", Sub: true),
             new(SettingId.RecordParty, Rec, "Recording", "Record where the party stands", "Their places come along into the plan and the replay.", Sub: true),
             new(SettingId.Keep, Rec, "Recording", "Keep the last", "Past that, the oldest already on the site go first.", Sub: true),
-            new(SettingId.UploadLogs, Rec, "Uploads", "Upload my logs", "Each pull goes to your Raid Codex as it ends."),
+            // Kept by Reset this page: on would upload pulls, and uploads are public on the site (as on FF Logs).
+            new(SettingId.UploadLogs, Rec, "Uploads", "Upload my logs", "Each pull goes to your Raid Codex as it ends.", Keep: true),
             new(SettingId.UploadOlder, Rec, "Uploads", "Upload my older pulls", "The pulls kept here from before, the oldest first.", Sub: true, Action: true),
             new(SettingId.WhoSees, Rec, "Uploads", "Who sees my logs", "Public on the site, with names. Make yours private there.", Sub: true, Action: true),
             new(SettingId.TrackProgress, Rec, "Uploads", "Track my progress", "How far each pull got, for Progress on the site."),

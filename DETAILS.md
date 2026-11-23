@@ -1106,7 +1106,8 @@ above, 18 below), a footer on the basalt band where a screen has one.
   Reading it, the party in a row over a running cast bar; a file that won't read, the Boss awake
   ("This pull won't open"); nothing in it, asleep ("Nothing went off").
 - **Settings** (`Views/Settings.cs`, its rows in `Views/SettingsRows.cs`; 0.8.0): under the window's tabs (Home,
-  Pulls, Settings). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
+  Pulls, Settings). The first time Settings shows after the window opens, a narrower window is widened to 820 (as
+  far as the screen allows; through `Size` for one frame, as Dalamud sizes it after PreDraw). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
   setting_ (the 40px well field with the search icon; a quiet × beside it clears it), then the eight pages with
   their icons (the one you're on lit, its icon ember, its words 600): _Features_, _Recording and uploads_,
   _Damage meter_, _Plan and callouts_, _Party cooldowns_, _Windows_, _Account and privacy_, _Advanced_; at its
@@ -1117,7 +1118,8 @@ above, 18 below), a footer on the basalt band where a screen has one.
   - **A page**: its title as a small callout, one muted line saying what it's for (the meter's, the plan's and
     the cooldowns' end "Where it sits: Windows", a link), and _Reset this page_ (quiet, top right; it asks first,
     then puts the page's settings back to a new configuration's: not its buttons, not the windows' Show rows
-    on Windows, never where a window sits; Features and Account have none). Then its sections: an eyebrow (mono
+    on Windows, never where a window sits, never _Upload my logs_, which on would upload pulls that are public on
+    the site; Features and Account have none). Then its sections: an eyebrow (mono
     capitals, muted; a faint hint at its right, as Uploads' "Linked to your Raid Codex") over a slab of rows,
     each the setting's name (550 14px) over one muted line, its control at the right (switch, 40px stepper,
     dense segments, slider or button); a sub-row 34 in; a row that can't be used dims its words and control and
@@ -1132,7 +1134,8 @@ above, 18 below), a footer on the basalt band where a screen has one.
     pages (the meter's _Grows_ and _Background_ on Damage meter and Windows) is found once, at its home.
   - **Features**: the six main parts as cards in two columns (one when narrow): a well with its icon (ember
     while on), its name, its switch (Upload my logs through `LogUploader.SetOn`, the rest `SetFeatures`; Plan
-    and callouts is the plan window and the callouts together), its line (`Features.Line`), a status tag
+    and callouts is the plan window and the callouts together: on while either is, and written only when its own
+    switch changes, so turning another part on or off never touches one left as you set it), its line (`Features.Line`), a status tag
     (`FeatureStatus`: "Ready" green, "Recording" or "3 waiting to upload" ember, "In duties", "Everywhere" or
     "Plan: TOP v3" plain, "Off" faint, "Needs an account" or "Stopped" amber) and _Settings ›_ to its page
     (_Link ›_ to Account while it needs an account, its switch dimmed). Under them a box: "Not sure what you
@@ -1169,8 +1172,10 @@ above, 18 below), a footer on the basalt band where a screen has one.
 A fresh install (no settings saved: `Configuration.Setup` Pending) opens it once in the main window;
 settings saved before 0.8.0 are an existing player's and never see it (`SetupState.Migrate`). It waits
 for the game: on the title screen the window isn't drawn while it's on the guide
-(`MainWindow.DrawConditions`). Finishing it, skipping it or closing the window on it makes it Done;
-Settings → Features can run it again (`ShowSetup`). Five steps, no tabs: at the top a segment a step
+(`MainWindow.DrawConditions`). Finishing it, skipping it, closing the window on it, or leaving it for another
+screen (a command, Dalamud's buttons, the server info bar) makes it Done; stepping aside for Arrange windows
+doesn't. Settings → Features can run it again (`ShowSetup`); run again, _Skip_ leaves your switches as they are
+(on a fresh install they're already the recommended ones). _Finish_ stops the samples its last step showed. Five steps, no tabs: at the top a segment a step
 (4px, ember up to the one you're on) with the steps' names under them (Welcome, Features, Account,
 Look, Done, the one you're on in white); at the foot, under a hairline, _Back_ (quiet) and the step's
 one button (the telegraph). Nothing in it reads a key: typing the token is the only keyboard use.
@@ -2182,7 +2187,7 @@ and settings").
   Each page shows what most people change; the rest fold under one "N more" row. The meter and the callouts have a
   live preview beside their settings, and each page can be reset. Every setting is still there, some under plainer
   names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). Opening Settings on
-  a narrow window widens it once for the sidebar.
+  a narrow window widens it for the sidebar (once each time the window opens).
 - **Arrange windows** (Settings → Windows, the setup guide, `/raidcodex arrange`): every window that's on shown at
   once on your screen, with a sample in it, to drag into place; a window picked has its options beside it (which way
   it grows, click-through, background). _Done_ locks them where they are, _Cancel_ puts everything back, _Reset

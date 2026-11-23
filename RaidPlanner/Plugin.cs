@@ -148,8 +148,8 @@ public sealed class Plugin : IDalamudPlugin
             var mainAside = false;
             window.StartArrange = () =>
             {
-                mainAside = window.IsOpen;
-                window.IsOpen = false;
+                if (!ArrangeMode.On) mainAside = window.IsOpen;
+                window.StepAside();
                 arrangeWindow.Start();
             };
             arrangeWindow.Ended = () =>
@@ -305,8 +305,9 @@ public sealed class Plugin : IDalamudPlugin
                 break;
             case "arrange":
             case "arrange windows":
-                // Every window that's on, shown to drag into place (Done locks them; again while on, nothing new).
-                arrangeWindow.Start();
+                // Every window that's on, shown to drag into place (Done locks them; again while on, nothing new); the
+                // main window steps aside as from Settings.
+                window.StartArrange?.Invoke();
                 break;
             default:
                 window.Toggle();

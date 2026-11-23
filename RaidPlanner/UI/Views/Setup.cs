@@ -76,10 +76,20 @@ public sealed partial class MainWindow
     /// <summary>Done (finished or skipped): the guide won't open again by itself, and Home opens.</summary>
     private void FinishSetup()
     {
-        config.Setup = SetupState.Done;
-        config.Save();
+        MarkSetupDone();
+        // The samples its last step showed stop with it.
+        if (CalloutsSampleOn?.Invoke() == true) ToggleCalloutsSample?.Invoke();
+        if (SampleOn?.Invoke() == true) ToggleSample?.Invoke();
         setupStep = 0;
         screen = Screen.Home;
+    }
+
+    /// <summary>The guide won't open again by itself (finished, skipped, closed, or left for another screen).</summary>
+    private void MarkSetupDone()
+    {
+        if (config.Setup == SetupState.Done) return;
+        config.Setup = SetupState.Done;
+        config.Save();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -101,7 +111,9 @@ public sealed partial class MainWindow
                     "Records, uploads once you link your account, the meter and your plan on screen. All of it can be changed in Settings."))
                 Later(() =>
                 {
-                    ApplyFeatures(Features.Preset(FeaturePreset.Recommended));
+                    // A fresh install's switches are already the recommended ones; run again from Settings, Skip leaves
+                    // yours as they are (it would otherwise turn uploads back on, which are public).
+                    if (SetupState.Due(config.Setup)) ApplyFeatures(Features.Preset(FeaturePreset.Recommended));
                     FinishSetup();
                 });
             const string go = "Set it up";
@@ -563,7 +575,7 @@ public sealed partial class MainWindow
             ? "The next pull in a raid or trial is recorded by itself. Here’s what’s on:"
             : "Recording is off, so no pull is kept until you turn it on. Here’s what’s on:"), 10);
         Kit.Gap(18);
-        var facts = new SetupFacts(Linked, config.RecordAllDuties, config.Keep, config.MeterCompact, MeterThemes.Of(config.MeterTheme).Name, config.MeterEverywhere);
+        var facts = new SetupFacts(Linked, config.RecordAllDuties, config.Keep, config.MeterCompact, MeterThemes.Of(config.MeterTheme).Name, config.MeterEverywhere, config.Cooldowns.Everywhere);
         Kit.BeginPanel("##setup-done", 4, 16, 4, Palette.Slab, Palette.Line);
         for (var i = 0; i < Features.All.Count; i++)
         {
