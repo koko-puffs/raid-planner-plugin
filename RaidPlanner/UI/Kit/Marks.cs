@@ -366,6 +366,44 @@ public static partial class Kit
     /// ember (a square-ended gradient: ImGui can't round one), its hot end a 2px line with a glow;
     /// <paramref name="ready"/> fills it green instead.
     /// </summary>
+    /// <summary>
+    /// A countdown ring (since 0.8.3; the callouts' and the cooldowns'): a dark well, a track, and an arc for the part of
+    /// the time still to go (<paramref name="left"/>, 0–1) emptying clockwise from twelve o'clock. Screen px.
+    /// </summary>
+    public static void CountdownRing(ImDrawListPtr dl, Vector2 center, float outer, float stroke, float left, Vector4 color)
+    {
+        var radius = outer - stroke / 2;
+        dl.AddCircleFilled(center, radius, Palette.U32(Palette.Rgba(9, 9, 11, 0.6f)), 48);
+        dl.AddCircle(center, radius, Palette.U32(Palette.Track), 48, stroke);
+        left = Math.Clamp(left, 0, 1);
+        if (left <= 0.002f) return;
+        const float Top = -MathF.PI / 2;
+        dl.PathArcTo(center, radius, Top, Top + MathF.Tau * left, Math.Max(3, (int)(48 * left)));
+        dl.PathStroke(Palette.U32(color), ImDrawFlags.None, stroke);
+    }
+
+    /// <summary>
+    /// A chip (since 0.8.3; the callouts' "YOU", the cooldowns' "planned"): an ember-washed pill with an ember edge, a
+    /// word in ember mono capitals and what follows it in white (SansSemibold <paramref name="px"/>), cut to
+    /// <paramref name="maxWidth"/>. Returns its width. Screen px; <paramref name="heightCss"/> CSS.
+    /// </summary>
+    public static float Chip(ImDrawListPtr dl, Vector2 at, string lead, string? text, float maxWidth, float heightCss = 22, int px = 13, int leadPx = 10)
+    {
+        var h = S(heightCss);
+        var lw = Txt.SpacedWidth(lead, Face.Mono, leadPx, 0.09f);
+        var padL = S(heightCss >= 20 ? 7 : 5);
+        var padR = S(heightCss >= 20 ? 9 : 6);
+        var inner = padL + lw + (text != null ? S(heightCss >= 20 ? 6 : 4) : 0);
+        var rest = text == null ? null : Txt.Fit(text, Face.SansSemibold, px, MathF.Max(0, maxWidth - inner - padR));
+        var w = MathF.Min(maxWidth, inner + (rest != null ? Txt.Width(rest, Face.SansSemibold, px) : 0) + padR);
+        var max = at + new Vector2(w, h);
+        dl.AddRectFilled(at, max, Palette.U32(Palette.EmberWash), h / 2);
+        dl.AddRect(at, max, Palette.U32(Palette.EmberLine), h / 2, ImDrawFlags.None, 1);
+        Txt.Spaced(dl, new Vector2(at.X + padL, at.Y + (h - Txt.Natural(Face.Mono, leadPx)) / 2), lead, Face.Mono, leadPx, Palette.Ember, 0.09f);
+        if (rest != null) Txt.Line(dl, new Vector2(at.X + inner, at.Y), rest, Face.SansSemibold, px, Palette.White, heightCss);
+        return w;
+    }
+
     public static void CastBar(ImDrawListPtr dl, Vector2 pos, float width, float fraction, float height = 6, bool ready = false)
     {
         var h = S(height);

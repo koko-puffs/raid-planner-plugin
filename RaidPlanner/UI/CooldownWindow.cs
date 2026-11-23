@@ -13,13 +13,13 @@ namespace RaidPlanner.UI;
 /// <summary>
 /// The party cooldown tracker (Settings → Cooldowns, `/raidcodex cooldowns`): small rows over the
 /// fight, one a party member's tracked cooldown, grouped by kind (raid buffs, party mitigation, the
-/// healers', Swiftcast…) with a hairline between, then in spot order. A row: the action's own icon
-/// (dimmed while it recharges), the member's spot, the action's name, and the time to ready in mono on
-/// the right ("Ready" in green; "1/2" before it for charges), the recharge filling the row behind it as
-/// the compact meter's bar does (yours ember). Yours are the game's own timers; the others' are
+/// healers', Swiftcast…), then in spot order. Since 0.8.3 in the callouts' look (<see cref="DrawContent"/>):
+/// a row: the action's own icon (dimmed while it recharges), the member's job, the action's name, and at
+/// the right the time to ready in mono before a ring that empties as it comes back ("Ready" in green
+/// with the ring whole; "1/2" before it for charges; yours ember). Yours are the game's own timers; the others' are
 /// learned from their uses (<see cref="CooldownBook"/>), an estimate the row's tooltip says is one. The
 /// limit break gauge last, when the party has one. A sample shows under a Preview tag. Since 0.5.0, while your plan follows a
-/// pull, a cooldown the plan has its member use in the next 15 seconds is outlined in ember with "planned in 8 s".
+/// pull, a cooldown the plan has its member use in the next 15 seconds is washed ember with a "PLAN 8 s" chip.
 /// </summary>
 public sealed class CooldownWindow : OverlayWindow
 {
@@ -52,7 +52,7 @@ public sealed class CooldownWindow : OverlayWindow
     /// <summary>The plan's cooldowns placed on its clock, read once a plan.</summary>
     private PlannedUses? planned;
 
-    /// <summary>"planned in 8 s" by its second (−1: "planned now"), made once each.</summary>
+    /// <summary>A planned use's chip's words by its second ("8 s"; −1: "now"), made once each.</summary>
     private readonly Dictionary<int, string> plannedWords = new();
 
     /// <summary>The limit break gauge now (the meter's), or null.</summary>
@@ -62,11 +62,25 @@ public sealed class CooldownWindow : OverlayWindow
 
     private bool Compact => Settings.Compact;
 
-    private float RowCss => Compact ? 19 : 24;
+    // Sizes (CSS px; smaller rows' in brackets), since 0.8.3 the callouts' look: 10 in all round; each cooldown a row 28
+    // [22] tall on its own dark ground with 8px corners, 3 apart, 8 between kinds; the icon 20 [16], the job 16 [14], a
+    // countdown ring 18 [14] at the right with the time before it.
 
-    private float PadCss => 4;
+    private float RowCss => Compact ? 22 : 28;
 
-    private float HeadCss => Previewing ? (Compact ? 22 : 26) : 0;
+    private const float PadCss = 10;
+
+    private const float RowGap = 3;
+
+    private const float KindGap = 8;
+
+    private float HeadCss => Previewing ? 24 : 0;
+
+    private float IconCss => Compact ? 16 : 20;
+
+    private float JobCss => Compact ? 14 : 16;
+
+    private float RingCss => Compact ? 14 : 18;
 
     protected override bool Wanted()
     {
@@ -103,109 +117,124 @@ public sealed class CooldownWindow : OverlayWindow
         return (m, spec, a) => uses.Next(m.Slot, c => CooldownView.Matches(c, spec, a, g.KeyOf), clock) is { } u ? (u, u.At - clock) : null;
     }
 
-    /// <summary>The rows, the hairlines between kinds, the gauge's row, a little air at each end; the head while previewing.</summary>
-    protected override float Measure(float widthCss) => HeadCss + PadCss * 2 + RowCss * (lines.Count + (gauge != null ? 1 : 0)) + Dividers();
+    /// <summary>The rows with their gaps (wider between kinds), the gauge's row, the padding; the head while previewing.</summary>
+    protected override float Measure(float widthCss)
+    {
+        var rows = lines.Count + (gauge != null ? 1 : 0);
+        if (rows == 0) return HeadCss + PadCss * 2;
+        return HeadCss + PadCss * 2 + RowCss * rows + RowGap * (rows - 1) + KindBreaks() * (KindGap - RowGap);
+    }
 
-    /// <summary>The space the hairlines between kinds take (2px each).</summary>
-    private float Dividers()
+    /// <summary>How many times the kind changes down the rows (the gauge counts as one more).</summary>
+    private int KindBreaks()
     {
         var n = 0;
         for (var i = 1; i < lines.Count; i++)
             if (lines[i].Spec.Kind != lines[i - 1].Spec.Kind)
                 n++;
-        return n * 2 + (gauge != null && lines.Count > 0 ? 2 : 0);
+        return n + (gauge != null && lines.Count > 0 ? 1 : 0);
     }
 
+    /// <summary>
+    /// Since 0.8.3 in the callouts' look (until then rows on the window's ground with the recharge filling behind them and
+    /// hairlines between kinds): each cooldown on a dark row of its own, its time in a ring at the right that empties as it
+    /// comes back (yours ember, the others' white; ready, the ring whole and green with "Ready"), a little more space
+    /// between kinds, and one the plan has its member use soon washed ember with an ember edge and a "PLAN" chip.
+    /// </summary>
     protected override void DrawContent(ImDrawListPtr dl, Vector2 top, float w, float h)
     {
-        var x0 = top.X;
-        var y = top.Y;
+        var left = top.X + S(PadCss);
+        var right = top.X + w - S(PadCss);
+        var y = top.Y + S(PadCss);
         if (Previewing)
         {
-            // The sample's head: the eyebrow and its Preview tag (pressed, it stops).
-            var hh = S(HeadCss);
-            Kit.Eyebrow(dl, new Vector2(x0 + S(10), y + (hh - Kit.EyebrowH) / 2), "Cooldowns");
-            PreviewTag(dl, new Vector2(x0 + w - S(10) - Kit.TagWidth("Preview", TagKind.Plain), y + (hh - S(18)) / 2), "##cd-preview");
-            y += hh;
-            Kit.Rule(dl, x0, x0 + w, y - 1);
+            Kit.Eyebrow(dl, new Vector2(left, y + (S(18) - Kit.EyebrowH) / 2), "Cooldowns");
+            PreviewTag(dl, new Vector2(right - Kit.TagWidth("Preview", TagKind.Plain), y), "##cd-preview");
+            y += S(HeadCss);
         }
-        y += S(PadCss);
         var rowH = S(RowCss);
+        var ground = Palette.Rgba(13, 13, 16, Math.Clamp(0.3f + 0.4f * Math.Clamp(Settings.Background, 0, 1), 0, 0.9f));
         for (var i = 0; i < lines.Count; i++)
         {
-            if (i > 0 && lines[i].Spec.Kind != lines[i - 1].Spec.Kind)
-            {
-                Kit.Rule(dl, x0 + S(8), x0 + w - S(8), y + S(1) - 0.5f);
-                y += S(2);
-            }
-            Row(dl, lines[i], x0, y, w, rowH, i);
+            if (i > 0) y += S(lines[i].Spec.Kind != lines[i - 1].Spec.Kind ? KindGap : RowGap);
+            Row(dl, lines[i], left, y, right - left, rowH, ground);
             y += rowH;
         }
         if (gauge != null)
         {
-            if (lines.Count > 0)
-            {
-                Kit.Rule(dl, x0 + S(8), x0 + w - S(8), y + S(1) - 0.5f);
-                y += S(2);
-            }
-            GaugeRow(dl, gauge, x0, y, w, rowH);
+            if (lines.Count > 0) y += S(KindGap);
+            GaugeRow(dl, gauge, left, y, right - left, rowH, ground);
         }
     }
 
-    /// <summary>A cooldown's row: the recharge behind it, the icon, the member's job icon (their spot in its tooltip; since 0.7.0), the name, the charges and the time to ready.</summary>
-    private void Row(ImDrawListPtr dl, CooldownLine l, float left, float y, float w, float h, int index)
+    /// <summary>A cooldown's row: its ground, the icon, the member's job (their spot in its tooltip), the name, a planned use's chip, the charges, the time and its ring.</summary>
+    private void Row(ImDrawListPtr dl, CooldownLine l, float left, float y, float w, float h, Vector4 ground)
     {
         var compact = Compact;
         var min = new Vector2(left, y);
         var max = new Vector2(left + w, y + h);
-        // The recharge, as the compact meter's bar: white at 5.5% (yours ember-washed) to how far it has come, its 1px line at its foot.
-        var bx = left + S(6);
-        var bw = w - S(12);
-        if (l.Ready)
-            dl.AddRectFilled(new Vector2(bx, y + 1), new Vector2(bx + bw, y + h - 1), Palette.U32(Palette.WithAlpha(Palette.Ready, 0.06f)), S(4));
-        else
+        var r = S(8);
+        dl.AddRectFilled(min, max, Palette.U32(ground), r);
+        var planned = l.Planned;
+        if (planned != null)
         {
-            var fw = bw * l.Fill;
-            if (fw >= 1)
-            {
-                dl.AddRectFilled(new Vector2(bx, y + 1), new Vector2(bx + fw, y + h - 1), Palette.U32(l.Who.IsYou ? Palette.EmberWash : Palette.Rgba(255, 255, 255, 0.055f)));
-                var la = new Vector2(bx, y + h - 2);
-                var lb = new Vector2(bx + fw, y + h - 1);
-                if (l.Who.IsYou) Kit.CastGradient(dl, la, lb);
-                else dl.AddRectFilled(la, lb, Palette.U32(Palette.Rgba(255, 255, 255, 0.24f)));
-            }
+            dl.AddRectFilled(min, max, Palette.U32(Palette.EmberWash), r);
+            dl.AddRect(min, max, Palette.U32(Palette.EmberLine), r, ImDrawFlags.None, 1);
         }
-        var hovered = Kit.Pointed(min, max);
-        if (hovered) Kit.Tooltip(CooldownView.Tip(l));
-        var x = left + S(10);
-        var icon = compact ? 15f : 18f;
-        DrawIcon(dl, l, new Vector2(x, y + (h - S(icon)) / 2), icon);
-        x += S(icon) + S(7);
-        var spot = compact ? 14 : 16;
-        PlateArt.JobBadge(dl, new Vector2(x + S(spot) / 2, y + h / 2), spot, l.Who.Job, Core.Roles.RoleWord(l.Who.Role), Config.MeterRoleColours, false, l.Who.Slot);
-        x += S(spot) + S(7);
+        else if (l.Ready) dl.AddRectFilled(min, max, Palette.U32(Palette.WithAlpha(Palette.Ready, 0.06f)), r);
+        if (Kit.Pointed(min, max)) Kit.Tooltip(CooldownView.Tip(l));
+        var x = left + S(compact ? 6 : 8);
+        DrawIcon(dl, l, new Vector2(x, y + (h - S(IconCss)) / 2), IconCss);
+        x += S(IconCss) + S(7);
+        PlateArt.JobBadge(dl, new Vector2(x + S(JobCss) / 2, y + h / 2), (int)JobCss, l.Who.Job, Core.Roles.RoleWord(l.Who.Role), Config.MeterRoleColours, false, l.Who.Slot);
+        x += S(JobCss) + S(7);
+
+        // At the right: the ring, the time before it, the charges before that.
+        var ringR = S(RingCss) / 2;
+        var rx = left + w - S(compact ? 7 : 9) - ringR;
+        var ringInk = l.Ready ? Palette.Ready : l.Who.IsYou || planned != null ? Palette.Ember : Palette.WithAlpha(Palette.White, 0.75f);
+        Kit.CountdownRing(dl, new Vector2(rx, y + h / 2), ringR, S(compact ? 2 : 2.5f), l.Ready ? 1 : 1 - l.Fill, ringInk);
+        var edge = rx - ringR - S(6);
         var (time, count) = WordsOf(l);
-        var right = left + w - S(10);
         var tpx = compact ? 12 : 13;
-        var tw = Txt.LineRight(dl, right, y, time, Face.MonoSemibold, tpx, l.Ready ? Palette.Ready : Palette.White, RowCss);
-        right -= tw;
+        if (l.Ready) edge -= Txt.LineRight(dl, edge, y, time, Face.MonoSemibold, tpx, Palette.Ready, RowCss);
+        else edge -= SecondsRight(dl, edge, y, time, tpx, compact ? 9 : 10, l.Who.IsYou ? Palette.EmberHi : Palette.White);
         if (count != null)
         {
-            right -= S(6);
-            right -= Txt.LineRight(dl, right, y, count, Face.Mono, compact ? 9 : 10, Palette.Faint, RowCss);
+            edge -= S(5);
+            edge -= Txt.LineRight(dl, edge, y, count, Face.Mono, compact ? 9 : 10, Palette.Faint, RowCss);
         }
-        // Planned soon (since 0.5.0): an ember outline round the row, "planned in 8 s" before the time in ember mono.
-        if (l.Planned is { } planned)
+        // Planned soon (since 0.5.0; since 0.8.3 a chip): "PLAN 8 s".
+        if (planned is { } p)
         {
-            dl.AddRect(new Vector2(bx, y + 1), new Vector2(bx + bw, y + h - 1), Palette.U32(Palette.Ember), S(4), ImDrawFlags.None, MathF.Max(1, S(1)));
-            right -= S(6);
-            right -= Txt.LineRight(dl, right, y, PlannedWords(planned.In), Face.Mono, compact ? 9 : 10, Palette.Ember, RowCss);
+            var chipH = compact ? 16f : 18f;
+            var words = PlannedWords(p.In);
+            var cw = Txt.SpacedWidth(PlanWord, Face.Mono, 9, 0.09f) + Txt.Width(words, Face.SansSemibold, 13) + S(16);
+            if (edge - S(6) - cw - x >= S(28))
+            {
+                edge -= S(6) + cw;
+                Kit.Chip(dl, new Vector2(edge, y + (h - S(chipH)) / 2), PlanWord, words, cw, chipH, 13, 9);
+            }
         }
-        var npx = compact ? 11 : 12;
-        var room = right - S(8) - x;
+        var npx = compact ? 12 : 13;
+        var room = edge - S(8) - x;
         if (room > S(16))
-            Txt.Line(dl, new Vector2(x, y), Txt.Fit(l.Action.Name, Face.SansMedium, npx, room), Face.SansMedium, npx, l.Ready ? Palette.White : Palette.Muted, RowCss);
-        _ = index;
+            Txt.Line(dl, new Vector2(x, y), Txt.Fit(l.Action.Name, Face.SansMedium, npx, room), Face.SansMedium, npx, l.Ready ? Palette.White : Palette.Text, RowCss);
+    }
+
+    private const string PlanWord = "PLAN";
+
+    /// <summary>A time right-aligned at <paramref name="right"/> in its row: "42" with a small "s" after it, or "1:05" as it is. Returns its width.</summary>
+    private float SecondsRight(ImDrawListPtr dl, float right, float rowTop, string text, int px, int unitPx, Vector4 ink)
+    {
+        var digits = text.Length <= 2;
+        var uw = digits ? Txt.Width("s", Face.Mono, unitPx) + S(1) : 0;
+        var tw = Txt.Width(text, Face.MonoSemibold, px);
+        var top = rowTop + (S(RowCss) - Txt.Natural(Face.MonoSemibold, px)) / 2;
+        Txt.Draw(dl, new Vector2(right - uw - tw, top), text, Face.MonoSemibold, px, ink);
+        if (digits)
+            Txt.Draw(dl, new Vector2(right - uw + S(1), top + Txt.Ascent(Face.MonoSemibold, px) - Txt.Ascent(Face.Mono, unitPx)), "s", Face.Mono, unitPx, Palette.Muted);
+        return tw + uw;
     }
 
     private string PlannedWords(double inSeconds)
@@ -213,7 +242,7 @@ public sealed class CooldownWindow : OverlayWindow
         var key = inSeconds <= 0 ? -1 : (int)Math.Ceiling(inSeconds - 1e-9);
         if (plannedWords.TryGetValue(key, out var text)) return text;
         if (plannedWords.Count > 128) plannedWords.Clear();
-        return plannedWords[key] = PlannedUses.Soon(inSeconds);
+        return plannedWords[key] = key < 0 ? "now" : key.ToString(System.Globalization.CultureInfo.InvariantCulture) + " s";
     }
 
     /// <summary>The row's words ("42", "Ready", "1:05"; "1/2"), made again only when the second or the charges change.</summary>
@@ -266,17 +295,17 @@ public sealed class CooldownWindow : OverlayWindow
         Icons.Draw(dl, mark, at + new Vector2((s - inner) / 2), inner, l.Ready ? Palette.White : Palette.Muted);
     }
 
-    /// <summary>The limit break gauge's row: its mark, "Limit break", its bars (full ones ember, the one filling to its share).</summary>
-    private void GaugeRow(ImDrawListPtr dl, LimitBreakGauge g, float left, float y, float w, float h)
+    /// <summary>The limit break gauge's row, on its own ground: its mark, "Limit break", its bars (full ones ember, the one filling to its share).</summary>
+    private void GaugeRow(ImDrawListPtr dl, LimitBreakGauge g, float left, float y, float w, float h, Vector4 ground)
     {
         var compact = Compact;
-        var x = left + S(10);
-        var icon = compact ? 15f : 18f;
-        Kit.LimitMark(dl, new Vector2(x, y + (h - S(icon)) / 2), icon);
-        x += S(icon) + S(7);
-        var npx = compact ? 11 : 12;
+        dl.AddRectFilled(new Vector2(left, y), new Vector2(left + w, y + h), Palette.U32(ground), S(8));
+        var x = left + S(compact ? 6 : 8);
+        Kit.LimitMark(dl, new Vector2(x, y + (h - S(IconCss)) / 2), IconCss);
+        x += S(IconCss) + S(7);
+        var npx = compact ? 12 : 13;
         x += Txt.Line(dl, new Vector2(x, y), "Limit break", Face.SansMedium, npx, Palette.White, RowCss) + S(10);
-        var right = left + w - S(10);
+        var right = left + w - S(compact ? 7 : 9);
         if (!Equals(gaugeBars.Of, g)) gaugeBars = (g, MeterText.Bars(g));
         MeterWindow.DrawGauge(dl, new Vector2(x, y + h / 2), right - x, gaugeBars.Bars, compact ? 5 : 6);
         if (Kit.Pointed(new Vector2(left, y), new Vector2(left + w, y + h))) Kit.Tooltip(MeterText.GaugeTip(g));

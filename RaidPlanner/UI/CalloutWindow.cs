@@ -221,17 +221,7 @@ public sealed class CalloutWindow : OverlayWindow
             Txt.Draw(dl, new Vector2(c.X - nw / 2, c.Y - Txt.Natural(Face.MonoSemibold, npx) / 2), NowWord, Face.MonoSemibold, npx, Palette.OnEmber);
             return;
         }
-        var stroke = S(RingStroke);
-        var radius = outer - stroke / 2;
-        dl.AddCircleFilled(c, radius, Palette.U32(Palette.Rgba(9, 9, 11, 0.6f)), 48);
-        dl.AddCircle(c, radius, Palette.U32(Palette.Track), 48, stroke);
-        var left = (float)Math.Clamp(l.In / ahead, 0, 1);
-        if (left > 0.002f)
-        {
-            const float Top = -MathF.PI / 2;
-            dl.PathArcTo(c, radius, Top, Top + MathF.Tau * left, Math.Max(3, (int)(48 * left)));
-            dl.PathStroke(Palette.U32(Palette.Ember), ImDrawFlags.None, stroke);
-        }
+        Kit.CountdownRing(dl, c, outer, S(RingStroke), (float)Math.Clamp(l.In / ahead, 0, 1), Palette.Ember);
         var text = Countdown(l);
         var ink = soon ? Palette.Ember : Palette.White;
         var unitInk = soon ? Palette.EmberHi : Palette.Muted;
@@ -285,16 +275,7 @@ public sealed class CalloutWindow : OverlayWindow
             youOf = text;
             youRest = text.StartsWith(Lead, StringComparison.Ordinal) ? text[Lead.Length..].Trim() : text;
         }
-        var h = S(ChipH);
-        var lw = Txt.SpacedWidth(YouWord, Face.Mono, 10, 0.09f);
-        var inner = S(7) + lw + S(6);
-        var rest = Txt.Fit(youRest, Face.SansSemibold, YouPx, MathF.Max(0, width - inner - S(9)));
-        var cw = inner + Txt.Width(rest, Face.SansSemibold, YouPx) + S(9);
-        var max = at + new Vector2(MathF.Min(cw, width), h);
-        dl.AddRectFilled(at, max, Palette.U32(Palette.EmberWash), h / 2);
-        dl.AddRect(at, max, Palette.U32(Palette.EmberLine), h / 2, ImDrawFlags.None, 1);
-        Txt.Spaced(dl, new Vector2(at.X + S(7), at.Y + (h - Txt.Natural(Face.Mono, 10)) / 2), YouWord, Face.Mono, 10, Palette.Ember, 0.09f);
-        Txt.Line(dl, new Vector2(at.X + inner, at.Y), rest, Face.SansSemibold, YouPx, Palette.White, ChipH);
+        Kit.Chip(dl, at, YouWord, youRest, width, ChipH, YouPx);
     }
 
     /// <summary>"You: …" is SansSemibold 13 (the plan's own words: a face built with every language's glyphs).</summary>

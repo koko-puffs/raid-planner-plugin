@@ -1806,14 +1806,18 @@ background, width, anchor), and the plugin keeps each window open while it's sho
 first, in duties or everywhere). Small rows, one a party member's tracked cooldown, by kind (raid
 buffs, party mitigation, the healers' party heals and mitigation, Swiftcast, the tanks' Provoke,
 Shirk and invulnerabilities, interrupts and stuns), then as the catalogue lists them, then in spot
-order, a hairline between kinds. A row (24 tall, 19 compact): the action's own icon from the game
-(`ITextureProvider`, its corners rounded 4px, at 45% while it recharges; its kind's Lucide mark in a
+order. Since 0.8.3 in the callouts' look (until then rows on the window's ground, the recharge filling
+behind them, hairlines between kinds): 10px in all round; each row on a dark ground of its own (8px
+corners, as solid as 0.3 plus 0.4 of the window's background), 3 apart, 8 between kinds. A row (28
+tall, 22 compact): the action's own icon from the game (20, 16 compact;
+`ITextureProvider`, its corners rounded 4px, at 45% while it recharges; its kind's Lucide mark in a
 quiet square while it loads), the member's job icon (16, 14 compact; since 0.7.0, their spot in its tooltip; the role's mark in a socket while it loads), the action's
-name in the client's language (white when ready, muted while recharging), and on the right the time
-to ready in mono ("Ready" in green, "42" in seconds rounded up, "1:05"), "1/2" before it in faint mono
-for an action with charges. Behind it the recharge fills the row as the compact meter's bar does:
-white at 5.5% (yours ember-washed) to how far it has come, its 1px line along the foot (yours the
-ember gradient); a ready row is washed green at 6%. Pointed at, whose it is and how it's known. The
+name in the client's language (SansMedium 13, 12 compact; white when ready, the text colour while
+recharging), and at the right a **countdown ring** (18, 14 compact; `Kit.CountdownRing`, as the
+callouts') emptying as the cooldown comes back, white at 75% (yours ember), whole and green when it's
+ready; before it the time to ready in mono ("Ready" in green, "42" with a small "s", "1:05"; yours
+ember-light), and "1/2" before that in faint mono for an action with charges. A ready row is washed
+green at 6%. Pointed at, whose it is and how it's known. The
 limit break gauge last (_Limit break gauge_, on at first: "Limit break" and its bars, the meter's,
 from `IMeterSource.LimitBreak` while the meter's numbers are read; since 0.7.8, with the meter off or stopped, read for
 the tracker alone, `CombatMeter.GaugeNow`, where before it froze; the meter stays off). Shown when it has a row; with
@@ -1863,8 +1867,9 @@ _Yours too_ (on) lists your own.
   its tooltip says so; a learned or base recast says it's an estimate.
 - **Planned soon** (since 0.5.0): while your plan follows a pull (its clock running), a row whose
   member the plan has use that cooldown in the next 15 seconds (or did in the last 2:
-  `PlannedUses.Next`, the soonest) is outlined in ember (1px, 4px corners) with "planned in 8 s"
-  ("planned now" at its time) in ember mono before its time, and its tooltip adds "Planned: Reprisal at
+  `PlannedUses.Next`, the soonest) is washed ember with an ember edge, its ring ember, and (since 0.8.3,
+  until then "planned in 8 s" in ember mono) a chip before its time, "PLAN 8 s" ("PLAN now" at its time;
+  `Kit.Chip`, as the callouts' "YOU"; left out where the row is too narrow for it and its name), and its tooltip adds "Planned: Reprisal at
   3:02, for Akh Morn." The plan's entry is the row's cooldown when its action is the row's, or one of the
   cooldown's rows on the sheet, or its English name is one of the cooldown's (`CooldownView.Matches`).
   Such a row is listed even when ready with _Hide those ready_ on. Only tracked cooldowns (the catalogue,
@@ -2221,6 +2226,10 @@ entry).
 
 ### 0.8.3 (not released yet)
 
+- **The cooldown tracker in the callouts' look**: each cooldown on a row of its own with a countdown ring that empties
+  as it comes back (yours ember, whole and green when ready), the time with a small "s" beside it, a little space
+  between kinds, and one your plan uses soon washed ember with a "PLAN 8 s" chip.
+
 - **The callouts redesigned**: the next step is on a card of its own with its countdown in a ring that empties as it
   comes, the mechanic's name over what to do, and your cooldowns in a chip; in its last seconds the card turns ember,
   and at its time "NOW" sits in an ember disc. The steps after it are quiet rows under it, their times lined up under
@@ -2516,8 +2525,8 @@ More of 0.7.6's and 0.7.7's work on stalls in long fights, and fixes from a scan
   big heal in a step, and when):
   - the plan window lists the step's, yours washed in ember;
   - the on-screen callouts say yours under the coming step ("You: Reprisal −3 s");
-  - the cooldown tracker outlines a cooldown the plan has its member use in the next 15 seconds in ember,
-    with "planned in 8 s" (shown even with _Hide those ready_ on).
+  - the cooldown tracker washes a cooldown the plan has its member use in the next 15 seconds in ember,
+    with a "PLAN 8 s" chip (shown even with _Hide those ready_ on).
   They're read as the site reads them (an entry with a value that isn't a number keeps it as 0, as the
   site shows it). They need the site's update to `rp_plugin_plan` (it now sends each step's `cooldowns`, and its
   `callout`, which it never sent before, so the plan window's big words and the chat line now use a
