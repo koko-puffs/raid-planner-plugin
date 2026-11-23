@@ -62,7 +62,7 @@ public static class SetupGuide
         return f switch
         {
             Feature.Record => $"{(s.AllDuties ? "Every duty" : "Raids and trials")} · keeps the last {s.Keep}",
-            Feature.Upload => s.Linked ? "Linked · private to you" : "Waits for your account: Settings › Account",
+            Feature.Upload => s.Linked ? "Linked · public, as on FF Logs" : "Waits for your account: Settings › Account",
             Feature.Meter => $"{(s.Compact ? "Compact" : "Detailed")} · {s.Theme} · {(s.MeterEverywhere ? "everywhere" : "in duties")}",
             Feature.Plan => "Shows your plan for the duty you’re in",
             Feature.Cooldowns => "Your party’s raid buffs and mitigation, in duties",

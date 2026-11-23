@@ -1170,7 +1170,7 @@ one button (the telegraph). Nothing in it reads a key: typing the token is the o
    drag into place; "Arranging on your screen…" while it is), "Or later: Settings › Windows".
 5. **Done**: a green tick in a ring, "You're set", and a row per main part with an _On_ (green) or
    _Off_ tag and a short note (`SetupGuide.DoneNote`: "Raids and trials · keeps the last 20",
-   "Linked · private to you", "Detailed · Ready Check · in duties", "Turn it on any time in Settings ›
+   "Linked · public, as on FF Logs", "Detailed · Ready Check · in duties", "Turn it on any time in Settings ›
    Features"…). _Play a sample fight on the meter_ (the meter's sample; _Stop the sample fight_ while
    it plays, waiting while a real fight is on) and _Show sample callouts_; "Type /raidcodex to open
    this window again, or /raidcodex help for every command." _Finish_: Done, saved, Home.

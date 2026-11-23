@@ -131,7 +131,7 @@ public class HomeTests
     {
         var facts = new SetupFacts(true, false, 20, false, "Ready Check", false);
         Assert.Equal("Raids and trials · keeps the last 20", SetupGuide.DoneNote(Feature.Record, true, facts));
-        Assert.Equal("Linked · private to you", SetupGuide.DoneNote(Feature.Upload, true, facts));
+        Assert.Equal("Linked · public, as on FF Logs", SetupGuide.DoneNote(Feature.Upload, true, facts));
         Assert.Equal("Detailed · Ready Check · in duties", SetupGuide.DoneNote(Feature.Meter, true, facts));
         Assert.Equal("Compact · Readout · everywhere", SetupGuide.DoneNote(Feature.Meter, true, facts with { Compact = true, Theme = "Readout", MeterEverywhere = true }));
         Assert.Equal("Turn it on any time in Settings › Features", SetupGuide.DoneNote(Feature.Cooldowns, false, facts));

@@ -327,9 +327,9 @@ public sealed partial class MainWindow
         Txt.Line(dl, new Vector2(at.X + S(15) + S(8), at.Y), Txt.Fit("What’s shared, and with whom", Face.SansSemibold, 13, w - S(23)), Face.SansSemibold, 13, Palette.White, 19);
         Kit.Reserve(at, w, S(19));
         Kit.Gap(10);
-        Txt.Para(Lead("Your pulls: the fight, where everyone stood, casts, damage and deaths, with the party’s names and jobs. Never your chat."), 19.5f);
+        Txt.Para(Lead("Your pulls: the fight, where everyone stood, casts, damage and deaths, with the party’s names, jobs and home worlds. Never your chat."), 19.5f);
         Kit.Gap(10);
-        Txt.Para(Lead("Only you can see them until you choose otherwise on the site, under Settings › Your logs."), 19.5f);
+        Txt.Para(Lead("They’re public on the Raid Codex, as logs are on FF Logs. You can make yours private, or hide your character, on the site under Settings › Your logs."), 19.5f);
         Kit.EndPanel();
     }
 
