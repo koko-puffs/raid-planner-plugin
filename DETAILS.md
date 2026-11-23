@@ -1879,16 +1879,28 @@ a countdown to when it goes off: a step's time is its earliest cue's (`CalloutTi
 a step with no cue has none and isn't shown), counted on the plan's own clock, which the cue follower
 keeps to the fight (a cast matched moves it). The steps going off within _How far ahead_ (15 s at
 first, 5 to 60), at most _How many_ (3, 1 to 5), soonest first; one that has just gone off stays two
-seconds as "NOW" (`CalloutTimeline.Upcoming`). The first big, as Present's: its callout in Archivo
-Expanded ExtraBold at 30px in capitals (22 compact, or for a callout in Chinese or Korean, which the
-30 hasn't the glyphs for), two lines at most, white; its countdown in mono 600 at 30 (18 compact)
-right-aligned in a 70px column before it (54 compact), white, ember in its last seconds (the sound's
-lead, else 3) and as "NOW"; the step's name under it (12px, muted) when the callout isn't just the
-name; a slim cast bar under them filling as it comes (over the time looked ahead). The next ones
-under it at 17px (16 compact) on one line each in the text colour, their countdowns in mono 16 (13)
-muted. 12px down and 14 in; 12 between the first and the next, 8 between the rest. Since 0.5.0, under
-the first step's name, your spot's planned cooldowns in it (`CalloutLine.You`, `PlannedUses.YouLine`;
-your spot is `PartyMembers.YourSpot`, read once a second): "You:" in ember and what to use in white
+seconds as "NOW" (`CalloutTimeline.Upcoming`). Since 0.8.2 (`CalloutWindow.DrawContent`; until then
+a countdown column beside the words, the first step big, the next in smaller capitals, a slim cast bar
+under the first) the first step is on a **card** of its own (raised, 12px corners, a 12% hairline; as
+solid as 0.55 plus 0.4 of the window's background, so its words read over a busy fight; 12px over and
+under, 12 in at its left, 14 at its right; 8, 9 and 12 smaller): at its left its countdown in a
+**ring** 64px wide (44 smaller) on a dark well, a 4px (3) arc in ember for the time left of the time
+looked ahead, emptying clockwise from twelve o'clock, the seconds in mono 600 at 30 (18) with a small
+"s" (a time of a minute or more, "1:05", smaller with none); in its last seconds (the sound's lead,
+else 3) the seconds ember and the card washed ember with an ember edge; at its time an ember disc with
+"NOW" in it and the card's edge ember with a glow. Beside the ring, 14 from it (11) and centred down
+the card: the mechanic's name over the callout as an eyebrow (mono capitals, faint; ember-light in its
+last seconds; Sans 12 for words the mono hasn't the glyphs for) when the callout isn't just the name;
+the callout in Archivo Expanded ExtraBold in capitals at 30 (22 smaller, or for a callout in Chinese
+or Korean, which the 30 hasn't the glyphs for; 16 smaller), two lines at most, white; and your
+cooldowns in a **chip** (below). The next steps under the card, 8 from it, as **rows** 32 tall (26),
+4 apart, on a dark ground with 8px corners: their times centred under the ring in mono 600 at 15 (13),
+muted, ember in their last seconds; their words in SansSemibold 15 (13) in the text colour, and the
+mechanic's name after them, faint, where there's room. 12px down and 14 in. Settings' preview beside
+the callouts' settings draws the same in small. Since 0.5.0 your spot's planned cooldowns in the first
+step (`CalloutLine.You`, `PlannedUses.YouLine`; your spot is `PartyMembers.YourSpot`, read once a
+second), since 0.8.2 in an ember-washed chip with an ember edge, 22 tall: "YOU" in ember mono capitals
+and what to use in white
 (SansSemibold 13, cut to the width): "You: Reprisal", several joined ("You: Rampart, Reprisal +4 s"),
 each with its time off the step's when it has one; none when the step has nothing for you. The sample
 says one ("You: Reprisal −3 s").
@@ -2208,6 +2220,11 @@ entry).
 ## Release notes
 
 ### 0.8.2 (not released yet)
+
+- **The callouts redesigned**: the next step is on a card of its own with its countdown in a ring that empties as it
+  comes, the mechanic's name over what to do, and your cooldowns in a chip; in its last seconds the card turns ember,
+  and at its time "NOW" sits in an ember disc. The steps after it are quiet rows under it, their times lined up under
+  the ring. The card and rows stay readable over a busy fight, whatever the background.
 
 - **DoT and HoT ticks are recorded and on the meter**: 0.8.1's diagnostics showed the game sends them as two messages
   the plugin didn't read (a DoT's on the enemy, a HoT's on the one healed, each with its source), so pulls and the

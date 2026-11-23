@@ -914,38 +914,65 @@ public sealed partial class MainWindow
         Kit.Eyebrow(dl, new Vector2(pos.X, y), "Preview", null, width, Palette.Muted);
         y += Kit.EyebrowH + S(8);
         var o = config.CalloutOverlay;
-        var padX = S(14);
-        var padY = S(12);
-        var inner = width - padX * 2;
+        var bg = Math.Clamp(o.Background, 0, 1);
+        // The callouts' own look in small (CalloutWindow, since 0.8.2): the first step on a card with its countdown ring,
+        // the next as rows with their times under the ring.
+        var pad = S(10);
+        var ring = S(o.Compact ? 28 : 34);
+        var gap = S(9);
+        var bigPx = o.Compact ? 13 : 16;
+        var bigH = S(bigPx * 1.1f);
+        var chipH = S(18);
+        var cardH = MathF.Max(ring, Kit.EyebrowH + S(2) + bigH + S(6) + chipH) + S(16);
+        var rowH = S(o.Compact ? 20 : 24);
         var shown = Math.Clamp(config.CalloutCount, 1, PreviewSteps.Length);
-        var firstPx = o.Compact ? 13 : 16;
-        var nextPx = o.Compact ? 13 : 13;
-        var firstH = S(firstPx * 1.15f);
-        var nextH = S(nextPx * 1.25f);
-        var youH = S(18);
-        var boxH = padY * 2 + firstH + (shown - 1) * (S(6) + nextH) + S(6) + youH;
+        var boxH = pad * 2 + cardH + (shown - 1) * (S(4) + rowH) + (shown > 1 ? S(2) : 0);
         var r = S(Palette.RadiusMd);
         var box = new Vector2(pos.X, y);
-        dl.AddRectFilled(box, box + new Vector2(width, boxH), Palette.U32(Palette.Rgba(13, 13, 16, Math.Clamp(o.Background, 0, 1))), r);
+        dl.AddRectFilled(box, box + new Vector2(width, boxH), Palette.U32(Palette.Rgba(13, 13, 16, bg)), r);
         dl.AddRect(box + new Vector2(0.5f), box + new Vector2(width, boxH) - new Vector2(0.5f), Palette.U32(Palette.Line2), r, ImDrawFlags.None, 1f);
-        var ty = y + padY;
-        var timeW = Txt.Width("00", Face.MonoSemibold, 16) + S(8);
-        Kit.Callout(dl, new Vector2(box.X + padX, ty), PreviewSteps[0].Name, firstPx, inner - timeW, 1, 1.15f);
-        Txt.LineRight(dl, box.X + width - padX, ty, PreviewSteps[0].Time, Face.MonoSemibold, 16, Palette.EmberHi, firstPx * 1.15f);
-        ty += firstH;
-        var old = Palette.Opacity;
+        var cMin = box + new Vector2(pad);
+        var cMax = new Vector2(box.X + width - pad, cMin.Y + cardH);
+        dl.AddRectFilled(cMin, cMax, Palette.U32(Palette.Rgba(24, 24, 29, Math.Clamp(0.55f + 0.4f * bg, 0, 0.95f))), S(9));
+        dl.AddRect(cMin, cMax, Palette.U32(Palette.Line2), S(9), ImDrawFlags.None, 1);
+        // The ring: two thirds of its time left, "8" and a small "s".
+        var c = new Vector2(cMin.X + S(8) + ring / 2, cMin.Y + cardH / 2);
+        var stroke = S(3);
+        var rad = ring / 2 - stroke / 2;
+        dl.AddCircleFilled(c, rad, Palette.U32(Palette.Rgba(9, 9, 11, 0.6f)), 32);
+        dl.AddCircle(c, rad, Palette.U32(Palette.Track), 32, stroke);
+        dl.PathArcTo(c, rad, -MathF.PI / 2, -MathF.PI / 2 + MathF.Tau * 0.55f, 20);
+        dl.PathStroke(Palette.U32(Palette.Ember), ImDrawFlags.None, stroke);
+        var npx = o.Compact ? 13 : 16;
+        var nw = Txt.Width("8", Face.MonoSemibold, npx);
+        Txt.Draw(dl, new Vector2(c.X - nw / 2, c.Y - Txt.Natural(Face.MonoSemibold, npx) / 2), "8", Face.MonoSemibold, npx, Palette.White);
+        var tx = c.X + ring / 2 + gap;
+        var tw = cMax.X - S(10) - tx;
+        var ty = cMin.Y + (cardH - (Kit.EyebrowH + S(2) + bigH + S(6) + chipH)) / 2;
+        Kit.Eyebrow(dl, new Vector2(tx, ty), PreviewSteps[0].Name, null, tw, Palette.Faint);
+        ty += Kit.EyebrowH + S(2);
+        Kit.Callout(dl, new Vector2(tx, ty), "Spread, then stack", bigPx, tw, 1, 1.1f);
+        ty += bigH + S(6);
+        // Your cooldown's chip.
+        const string you = "YOU";
+        var yw = Txt.SpacedWidth(you, Face.Mono, 10, 0.09f);
+        var rest = Txt.Fit("Reprisal", Face.SansSemibold, 13, MathF.Max(0, tw - yw - S(17)));
+        var chipW = MathF.Min(tw, S(6) + yw + S(5) + Txt.Width(rest, Face.SansSemibold, 13) + S(7));
+        dl.AddRectFilled(new Vector2(tx, ty), new Vector2(tx + chipW, ty + chipH), Palette.U32(Palette.EmberWash), chipH / 2);
+        dl.AddRect(new Vector2(tx, ty), new Vector2(tx + chipW, ty + chipH), Palette.U32(Palette.EmberLine), chipH / 2, ImDrawFlags.None, 1);
+        Txt.Spaced(dl, new Vector2(tx + S(6), ty + (chipH - Txt.Natural(Face.Mono, 10)) / 2), you, Face.Mono, 10, Palette.Ember, 0.09f);
+        Txt.Line(dl, new Vector2(tx + S(6) + yw + S(5), ty), rest, Face.SansSemibold, 13, Palette.White, 18);
+        // The next steps.
+        var ry = cMax.Y + S(6);
         for (var k = 1; k < shown; k++)
         {
-            ty += S(6);
-            Palette.Opacity = old * 0.7f;
-            Kit.Callout(dl, new Vector2(box.X + padX, ty), PreviewSteps[k].Name, nextPx, inner - timeW, 1, 1.25f);
-            Txt.LineRight(dl, box.X + width - padX, ty, PreviewSteps[k].Time, Face.MonoSemibold, 13, Palette.Muted, nextPx * 1.25f);
-            Palette.Opacity = old;
-            ty += nextH;
+            dl.AddRectFilled(new Vector2(cMin.X, ry), new Vector2(cMax.X, ry + rowH), Palette.U32(Palette.Rgba(13, 13, 16, Math.Clamp(0.3f + 0.4f * bg, 0, 0.9f))), S(6));
+            var t = PreviewSteps[k].Time;
+            var twid = Txt.Width(t, Face.MonoSemibold, 13);
+            Txt.Line(dl, new Vector2(c.X - twid / 2, ry), t, Face.MonoSemibold, 13, Palette.Muted, rowH / S(1));
+            Txt.Line(dl, new Vector2(tx, ry), Txt.Fit(PreviewSteps[k].Name, Face.SansSemibold, 13, cMax.X - S(10) - tx), Face.SansSemibold, 13, Palette.Text, rowH / S(1));
+            ry += rowH + S(4);
         }
-        ty += S(6);
-        var yw = Txt.Line(dl, new Vector2(box.X + padX, ty), "You:", Face.SansSemibold, 13, Palette.Ember, 18);
-        Txt.Line(dl, new Vector2(box.X + padX + yw + S(4), ty), Txt.Fit("Rampart, Reprisal", Face.SansMedium, 13, inner - yw - S(4)), Face.SansMedium, 13, Palette.Muted, 18);
         y += boxH + S(10);
         var sampleOn = CalloutsSampleOn?.Invoke() == true;
         if (Kit.Button("##co-sample", new Vector2(pos.X, y), sampleOn ? "Stop the sample" : "Show sample callouts", Btn.Outline, BtnSize.Sm, sampleOn ? Icon.Square : Icon.Play,
