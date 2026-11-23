@@ -355,20 +355,11 @@ public sealed partial class MeterWindow
         Kit.Rule(dl, left + S(PlateInset), left + w - S(PlateInset), stack.Away(y, h), ink.Rule);
     }
 
-    /// <summary>The columns' heads (20 tall; the heads' capitals, faint) next to the rows, right-aligned to their columns.</summary>
-    private void Columns(ImDrawListPtr dl, float left, ref MeterStack stack, float w, MeterTab tab)
-    {
-        var z = Z;
-        var f = NF.Head;
-        var h = S(z.Cols);
-        var y = stack.Near(h);
-        var (a, b) = MeterView.Heads(tab, config.MeterRank);
-        var g = GridOf(left, w, shown, tab);
-        // Against the rows: at the band's foot when they're under it, at its top when they're above (the head at the bottom).
-        var ly = stack.Up ? y + S(2) : y + h - S(2) - S(14);
-        PlateArt.LineRight(dl, g.ValueR, ly, a, f, NI.Faint, 14);
-        PlateArt.LineRight(dl, g.SecondR, ly, b, f, NI.Faint, 14);
-    }
+    /// <summary>
+    /// The space between the tabs (or pace) and the rows (6 tall). Since 0.8.1: until then the columns' heads stood there
+    /// (ENCDPS and %, HPS and Over, Taken and %, 20 tall).
+    /// </summary>
+    private void UnderTabs(ref MeterStack stack) => stack.Near(S(Z.UnderTabs));
 
     // ---------------------------------------------------------------------------------------------
     // The rows.
@@ -744,7 +735,7 @@ public sealed partial class MeterWindow
         var stack = new MeterStack(top.Y, bottom, HeadBottom);
         Header(dl, top.X, ref stack, w, "0:00", false, null, TagKind.Wipe, null, m, "Waiting for the first hit", false);
         TabsRow(dl, top.X, ref stack, w);
-        Columns(dl, top.X, ref stack, w, MeterTab.Damage);
+        UnderTabs(ref stack);
         var fy = stack.Far(S(z.Foot));
         var g = GridOf(top.X, w, last, MeterTab.Damage);
         var rowH = S(z.Row);

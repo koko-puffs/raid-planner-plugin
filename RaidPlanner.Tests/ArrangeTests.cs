@@ -116,22 +116,22 @@ public class ArrangeTests
     public void The_normal_meter_is_as_tall_as_what_it_shows()
     {
         var z = MeterSizes.Normal;
-        // One player, no pace yet, no limit break: the head, the tabs, the column heads, the row and the foot. No empty band (it was 189).
-        Assert.Equal(36 + 27 + 20 + 25 + 28, MeterFit.Fight(z, 1, false, false));
+        // One player, no pace yet, no limit break: the head, the tabs, the space under them, the row and the foot. No empty band (it was 189).
+        Assert.Equal(36 + 27 + 6 + 25 + 28, MeterFit.Fight(z, 1, false, false));
         // Pace's row and the limit break's only when they show.
-        Assert.Equal(136 + 26, MeterFit.Fight(z, 1, true, false));
-        Assert.Equal(136 + 27, MeterFit.Fight(z, 1, false, true));
-        // Eight with both: the mock-up's 364, as before.
-        Assert.Equal(364, MeterFit.Fight(z, 8, true, true));
+        Assert.Equal(122 + 26, MeterFit.Fight(z, 1, true, false));
+        Assert.Equal(122 + 27, MeterFit.Fight(z, 1, false, true));
+        // Eight with both: 350 (the mock-up's 364 less the columns' heads, gone in 0.8.1).
+        Assert.Equal(350, MeterFit.Fight(z, 8, true, true));
         // Waiting: the party with dashes, no pace or limit break.
-        Assert.Equal(36 + 27 + 20 + 8 * 25 + 28, MeterFit.Waiting(z, 8));
+        Assert.Equal(36 + 27 + 6 + 8 * 25 + 28, MeterFit.Waiting(z, 8));
         // A row comes, the meter grows by it; one goes, it shrinks.
         Assert.Equal(z.Row, MeterFit.Fight(z, 5, false, true) - MeterFit.Fight(z, 4, false, true));
         // The rows it fits again are what it shows.
         for (var n = 0; n <= 8; n++) Assert.Equal(n, z.RowsIn(MeterFit.Fight(z, n, false, false), false, false));
         // A theme's taller rows.
         var mochi = MeterSizes.For(MeterThemes.Of(MeterThemeId.Mochi));
-        Assert.Equal(36 + 27 + 20 + 3 * 29 + 28, MeterFit.Fight(mochi, 3, false, false));
+        Assert.Equal(36 + 27 + 6 + 3 * 29 + 28, MeterFit.Fight(mochi, 3, false, false));
     }
 
     [Fact]
@@ -144,13 +144,13 @@ public class ArrangeTests
         Assert.Equal(36 + 27 + 28 + MeterFit.Message, MeterFit.Deaths(z, 0, 44, false, 8));
         // Live: the alive line in the foot's place.
         Assert.Equal(36 + 27 + 44 + MeterFit.Alive, MeterFit.Deaths(z, 1, 44, true, 8));
-        // Many: no taller than the party's fight (eight and the limit break, 338).
+        // Many: no taller than the party's fight (eight and the limit break, 324).
         Assert.Equal(MeterFit.ListCap(z, 8), MeterFit.Deaths(z, 20, 44, false, 8));
-        Assert.Equal(338, MeterFit.ListCap(z, 8));
+        Assert.Equal(324, MeterFit.ListCap(z, 8));
         // Events: a 23px row each, the foot; none, its line; many, at most the party's.
         Assert.Equal(36 + 27 + 3 * 23 + 28, MeterFit.Events(z, 3, 8));
         Assert.Equal(36 + 27 + 28 + MeterFit.Message, MeterFit.Events(z, 0, 8));
-        Assert.Equal(338, MeterFit.Events(z, 64, 8));
+        Assert.Equal(324, MeterFit.Events(z, 64, 8));
         // A solo meter's list still has room for its empty line.
         Assert.Equal(36 + 27 + 28 + MeterFit.Message, MeterFit.Events(z, 0, 1));
     }
@@ -159,11 +159,11 @@ public class ArrangeTests
     public void Your_height_is_the_most_it_grows_to()
     {
         var z = MeterSizes.Normal;
-        // Sized to 250 (the title bar's 26 in it): one player is 136 + 26, under it; eight are cut to 250.
-        Assert.Equal(136 + 26, MeterLayout.FightHeight(MeterFit.Fight(z, 1, false, false), 26, 250, 60, 1400));
+        // Sized to 250 (the title bar's 26 in it): one player is 122 + 26, under it; eight are cut to 250.
+        Assert.Equal(122 + 26, MeterLayout.FightHeight(MeterFit.Fight(z, 1, false, false), 26, 250, 60, 1400));
         Assert.Equal(250, MeterLayout.FightHeight(MeterFit.Fight(z, 8, true, true), 26, 250, 60, 1400));
         // Never sized: what it shows.
-        Assert.Equal(136 + 26, MeterLayout.FightHeight(MeterFit.Fight(z, 1, false, false), 26, 0, 60, 1400));
+        Assert.Equal(122 + 26, MeterLayout.FightHeight(MeterFit.Fight(z, 1, false, false), 26, 0, 60, 1400));
     }
 
     [Fact]

@@ -1406,7 +1406,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   bar, `ThemeBar.BeforeNumber`, before the job and the number too); you in the theme's mark
   (`PlateMeter.YouMark`; Readout's reverse video), the dead muted with its death mark (struck through
   for the dagger, glitched faintly for Neon). The tabs in the theme's words with its accent under the
-  one you're on (Ready Check's the ember cast gradient), the column heads, pace (its label in the
+  one you're on (Ready Check's the ember cast gradient), pace (its label in the
   heads' capitals, the bar in the accent, ahead in good or bad), the limit break's row (its mark in the
   theme's colour, Mochi's star, no plate), the foot (on a plate for Ready Check, Neon and Native, else a
   hairline; the limit break's pips as compact's), the Preview and outcome tags in its chips (Readout's
@@ -1489,9 +1489,10 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   for 2.5 seconds.
 - **Its height** (since 0.7.4 fitted to what it shows, `MeterFit`, tested): folded, empty or stopped, the
   window is as tall as what it shows (ImGui fits it, its width kept). In a fight it's as tall as what it
-  draws: the head, the tabs, pace's row only once pace shows, the column heads, a row each, the limit
-  break's row only once it was used, and the foot (136 for one player with neither, 364 for eight with
-  both); waiting, the head, the tabs, the column heads, the party with dashes and the foot; Deaths, a row
+  draws: the head, the tabs, pace's row only once pace shows, 6px under them, a row each, the limit
+  break's row only once it was used, and the foot (122 for one player with neither, 350 for eight with
+  both); waiting, the head, the tabs, 6px under them, the party with dashes and the foot (since 0.8.1 there are
+  no column heads, ENCDPS and % and the like, 20 tall, between the tabs and the rows); Deaths, a row
   each (as tall as its faces), then the alive line live or the foot (and "Nobody died" with none); Events,
   a 23px row each (the newest 64) and the foot (and its line with none); a list never taller than the
   party's fight on Damage, so a long one doesn't stretch it. Until 0.7.4 it kept room for pace and the
@@ -1525,11 +1526,10 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   left button went down on it and is still down) it's neither placed nor sized.
 - **The head and the order** (since 0.7.4; _Head_, `MeterHead`, and _Order_, `MeterOrder`; `MeterArrange`,
   tested; until then growing up flipped both with Grows): the head (the clock, the picker, the lock, and a
-  narrow meter's tab menu; the tabs, pace and the column heads beside it; compact's head) sits at the
+  narrow meter's tab menu; the tabs and pace beside it; compact's head) sits at the
   **top** or the **bottom**, whichever way the meter grows, and the foot (the limit break's row and the
   party's line) at the other edge. With the head at the bottom everything else is the other way up from
-  it: the tabs over the head, pace over them, the column heads over those (hugging the rows, at their
-  band's top), the rows, the limit break over them and the party's line at the top; the empty and stopped
+  it: the tabs over the head, pace over them, the rows, the limit break over them and the party's line at the top; the empty and stopped
   states the Boss and its words over the tabs, waiting likewise; each band's hairline on its side away from
   the head, the limit break's and the foot's toward it; the themes' head bands turned to face the rows
   (Native's title band inset from the window's edge it's against and its gilt rule toward the rows, Neon's
@@ -1556,8 +1556,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     tab's short word) and the lock. The left is drawn only as far as it fits before them.
   - **The menu** (300 wide, off the head as the picker opens): the five tabs (the one you're on ticked,
     deaths and events counted), the fights kept as the picker lists them, _Copy as text_, and at its foot
-    _Pace against_, _Compact_ and _One line_. It replaces the tab row, the picker's button, pace's row and
-    the column heads.
+    _Pace against_, _Compact_ and _One line_. It replaces the tab row, the picker's button and pace's row.
   - **The rows**: at most eight, the top eight; when you're ranked below the last row shown (ninth or
     lower: the window is never shorter than its eight), the last row is you, pinned at the end of the list away
     from the top player (the bottom highest first, the top lowest first) past a dashed rule, with
@@ -2204,6 +2203,9 @@ entry).
 ## Release notes
 
 ### 0.8.1 (not released yet)
+
+- **The meter's column heads are gone** (ENCDPS and %, HPS and Over, Taken and %): the rows start under the tabs,
+  and the meter is 14px shorter.
 
 - **Diagnostics look further for DoT and HoT ticks** (`actor-control`, `fly-text`): a 0.8.0 log showed a White
   Mage's Dia and Regen ticks never come as the message the plugin reads them from, so the plugin now writes the

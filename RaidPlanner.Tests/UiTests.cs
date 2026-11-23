@@ -319,8 +319,6 @@ public class MeterViewTests
         Assert.Equal("13,103,000", MeterView.ValueText(Row(9, "OT", 0, 0, 0, 13_103_000), MeterTab.Taken, MeterRank.EncDps));
         Assert.Equal("27.8", MeterView.Second(m1, MeterTab.Damage));
         Assert.Equal("25%", MeterView.Second(m1, MeterTab.Healing));
-        Assert.Equal(("ENCDPS", "%"), MeterView.Heads(MeterTab.Damage, MeterRank.EncDps));
-        Assert.Equal(("HPS", "Over"), MeterView.Heads(MeterTab.Healing, MeterRank.EncDps));
         Assert.Equal(("165,000", (string?)null), MeterView.Party(e, MeterTab.Damage, MeterRank.EncDps));
         Assert.Equal(("19,410", "HPS"), MeterView.Party(e, MeterTab.Healing, MeterRank.EncDps));
         Assert.Equal(1f, MeterView.Bar(m1, 27840, MeterTab.Damage, MeterRank.EncDps));
@@ -403,11 +401,11 @@ public class MeterLayoutTests
     public void The_normal_meter_is_the_mock_ups()
     {
         var z = MeterSizes.Normal;
-        // 36 head + 27 tabs + 26 pace + 20 heads + 8 × 25 rows + 27 limit break + 28 foot.
-        Assert.Equal(364, z.Needed(8, true));
-        Assert.Equal(338, z.Needed(8, false));
-        Assert.Equal(8, z.RowsIn(364, true));
-        Assert.Equal(7, z.RowsIn(363 - 1, true));
+        // 36 head + 27 tabs + 26 pace + 6 under them + 8 × 25 rows + 27 limit break + 28 foot.
+        Assert.Equal(350, z.Needed(8, true));
+        Assert.Equal(324, z.Needed(8, false));
+        Assert.Equal(8, z.RowsIn(350, true));
+        Assert.Equal(7, z.RowsIn(349 - 1, true));
         Assert.Equal(0, z.RowsIn(10, true));
     }
 

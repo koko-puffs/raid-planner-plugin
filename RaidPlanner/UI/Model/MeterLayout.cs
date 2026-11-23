@@ -101,7 +101,7 @@ public sealed record MeterSizes(
     float Head,
     float Tabs,
     float Pace,
-    float Cols,
+    float UnderTabs,
     float Row,
     float LimitBreak,
     float Foot,
@@ -118,16 +118,19 @@ public sealed record MeterSizes(
     int SecondPx,
     int FootPx)
 {
-    /// <summary>The mock-up's meter: a 36px head, 27px tabs, 26px pace, 20px column heads, 25px rows, a 27px limit break, a 28px foot.</summary>
-    public static readonly MeterSizes Normal = new(36, 27, 26, 20, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11);
+    /// <summary>
+    /// The mock-up's meter: a 36px head, 27px tabs, 26px pace, 6px under them (since 0.8.1; it was the columns' heads,
+    /// ENCDPS and %, 20 tall), 25px rows, a 27px limit break, a 28px foot.
+    /// </summary>
+    public static readonly MeterSizes Normal = new(36, 27, 26, 6, 25, 27, 28, 12, 8, 18, 30, 66, 40, 15, 13, 10, 13, 11, 11);
 
     /// <summary>
     /// How tall a fight's content is for <paramref name="rows"/> rows (CSS px): the head, the tabs, pace's
-    /// row when it shows, the column heads, a row each, the limit break's row when it shows, and the foot.
+    /// row when it shows, the space under them, a row each, the limit break's row when it shows, and the foot.
     /// Since 0.7.4 the meter is fitted to what it shows (<see cref="MeterFit"/>): no room is kept for pace or
     /// the limit break before they come (it grows by their rows then), so there's no empty band in it.
     /// </summary>
-    public float Needed(int rows, bool pace, bool limitBreak = true) => Head + Tabs + (pace ? Pace : 0) + Cols + Math.Max(0, rows) * Row + (limitBreak ? LimitBreak : 0) + Foot;
+    public float Needed(int rows, bool pace, bool limitBreak = true) => Head + Tabs + (pace ? Pace : 0) + UnderTabs + Math.Max(0, rows) * Row + (limitBreak ? LimitBreak : 0) + Foot;
 
     /// <summary>
     /// The normal meter's sizes in a theme (since 0.7.3 it draws in the compact meter's theme): Ready Check's are
@@ -155,10 +158,10 @@ public static class MeterFit
     /// <summary>The Deaths tab's lines under a live fight's deaths ("7 alive" and its hint), in place of the foot.</summary>
     public const float Alive = 14 + 19.5f + 7.2f + 16 + 6;
 
-    /// <summary>A fight on Damage, Healing or Taken: the head, the tabs, pace when it shows, the column heads, the rows, the limit break when it shows, the foot.</summary>
+    /// <summary>A fight on Damage, Healing or Taken: the head, the tabs, pace when it shows, the space under them, the rows, the limit break when it shows, the foot.</summary>
     public static float Fight(MeterSizes z, int rows, bool pace, bool limitBreak) => z.Needed(rows, pace, limitBreak);
 
-    /// <summary>Waiting for the first hit: the head, the tabs, the column heads, the party with dashes, the foot.</summary>
+    /// <summary>Waiting for the first hit: the head, the tabs, the space under them, the party with dashes, the foot.</summary>
     public static float Waiting(MeterSizes z, int rows) => z.Needed(rows, false, false);
 
     /// <summary>The Events tab's row (23 tall, or the theme's row less 2).</summary>
@@ -190,7 +193,7 @@ public static class MeterFit
 /// <summary>
 /// The meter's bands laid from its head's edge: the top, or the bottom with its head there (up;
 /// since 0.7.4 <see cref="MeterHead"/>, apart from which way it grows). The head first, then what goes next to it
-/// (the tabs, pace, the column heads), the rows running away from it (each row's place from the head is
+/// (the tabs, pace, the space under them), the rows running away from it (each row's place from the head is
 /// <see cref="MeterArrange.FromHead"/>'s), and at the far edge the party's line. Screen pixels.
 /// </summary>
 public struct MeterStack

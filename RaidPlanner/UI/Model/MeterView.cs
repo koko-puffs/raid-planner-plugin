@@ -86,14 +86,6 @@ public static class MeterView
         _ => Format.Share(r.DamageShare),
     };
 
-    /// <summary>The two columns' heads.</summary>
-    public static (string Value, string Second) Heads(MeterTab tab, MeterRank rank) => tab switch
-    {
-        MeterTab.Healing => ("HPS", "Over"),
-        MeterTab.Taken => ("Taken", "%"),
-        _ => (rank == MeterRank.Dps ? "DPS" : "ENCDPS", "%"),
-    };
-
     /// <summary>A row's bar: its number against the top player's (0–1).</summary>
     public static float Bar(MeterRow r, double top, MeterTab tab, MeterRank rank) =>
         top <= 0 ? 0 : (float)Math.Clamp(Value(r, tab, rank) / top, 0, 1);

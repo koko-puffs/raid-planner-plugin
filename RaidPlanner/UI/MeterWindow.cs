@@ -667,7 +667,7 @@ public sealed partial class MeterWindow : Window
         }
         if (tab == MeterTab.Damage && config.MeterPace != PaceAgainst.Off && m.Pace(e.Id, config.MeterPace) is { } pace)
             PaceRow(dl, top.X, ref stack, w, pace);
-        Columns(dl, top.X, ref stack, w, tab);
+        UnderTabs(ref stack);
         var fy = stack.Far(S(z.Foot));
         Rows(dl, top.X, w, e, tab, stack);
         Footer(dl, top.X, fy, w, e, tab, ended, stack);
