@@ -3,8 +3,8 @@
     "Author": "koko",
     "Name": "Raid Codex",
     "InternalName": "RaidPlanner",
-    "AssemblyVersion": "0.8.0.0",
-    "TestingAssemblyVersion": "0.8.0.0",
+    "AssemblyVersion": "0.8.1.0",
+    "TestingAssemblyVersion": "0.8.1.0",
     "Punchline": "Record a fight, then make it a plan on Koko's Raid Codex.",
     "Description": "Records the fights you're in: the boss's casts and where they land, stacks, spreads, tankbusters, tethers, head markers and waymarks, and where your party stood. Every pull goes to your logs on Koko's Raid Codex as it ends, public with your party's names as on FF Logs (you can make yours private, or turn uploading off). Turn any pull into a plan, step by step, ready to draw your strats on.\n\nIn a duty you have a plan for, a small window follows the pull step by step, with callouts a few seconds before each mechanic. A compact damage meter in six themes shows the party's numbers as you fight.\n\nIt only watches: nothing is sent to the game.\n\n/raidcodex (or /rc) opens it, /raidcodex settings opens Settings and /raidcodex help lists every command.",
     "ApplicableVersion": "any",
@@ -28,9 +28,9 @@
     "AcceptsFeedback": true,
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1795463028,
-    "DownloadLinkInstall": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.0/RaidPlanner.zip",
-    "DownloadLinkUpdate": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.0/RaidPlanner.zip",
-    "DownloadLinkTesting": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.0/RaidPlanner.zip"
+    "LastUpdate": 1795465298,
+    "DownloadLinkInstall": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.1/RaidPlanner.zip",
+    "DownloadLinkUpdate": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.1/RaidPlanner.zip",
+    "DownloadLinkTesting": "https://github.com/koko-puffs/raid-planner-plugin/releases/download/v0.8.1/RaidPlanner.zip"
   }
 ]
