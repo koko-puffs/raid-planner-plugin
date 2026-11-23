@@ -88,9 +88,9 @@ public sealed class PlanWindow : Window
         this.recorder = recorder;
         this.data = data;
         this.fonts = fonts;
-        Size = new Vector2(340, 520);
+        Size = Theme.Units(new Vector2(340, 520));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(240, 300), MaximumSize = new Vector2(1200, 1600) };
+        SizeConstraints = Limits.Now;
         // A plan on screen during a fight shouldn't close on Escape, take the game's focus, or click.
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
@@ -111,6 +111,12 @@ public sealed class PlanWindow : Window
     /// <summary>A place and size to put it at before it's next drawn (screen px; Arrange windows' Cancel and Reset places).</summary>
     private (Vector2 Pos, Vector2? Size)? putAt;
 
+    /// <summary>Its smallest and largest size (CSS px).</summary>
+    private static readonly CssLimits Limits = new(new Vector2(240, 300), new Vector2(1200, 1600));
+
+    /// <summary>Grows or shrinks it with the windows' size (Settings → Windows → Size).</summary>
+    private readonly ScaleFollower follower = new();
+
     /// <summary>The frame after one it was sized at: its size is ImGui's again (as you leave it).</summary>
     private bool sizedOnce;
 
@@ -121,7 +127,7 @@ public sealed class PlanWindow : Window
     public void ResetPlace()
     {
         var vp = ImGui.GetMainViewport();
-        var size = Drawn?.Size ?? new Vector2(340, 520) * ImGuiHelpers.GlobalScale;
+        var size = Drawn?.Size ?? new Vector2(S(340), S(520));
         putAt = (ArrangeLayout.PlanFirst(vp.WorkPos, vp.WorkPos + vp.WorkSize, size), null);
     }
 
@@ -132,6 +138,14 @@ public sealed class PlanWindow : Window
             sizedOnce = false;
             SizeCondition = ImGuiCond.FirstUseEver;
         }
+        SizeConstraints = Limits.Now;
+        if (Drawn is { } was && follower.Resize(was.Size) is { } resized)
+        {
+            // The windows' size moved (Settings → Windows → Size): it grows or shrinks with it.
+            Size = resized;
+            SizeCondition = ImGuiCond.Always;
+            sizedOnce = true;
+        }
         if (putAt is { } put)
         {
             putAt = null;
@@ -139,7 +153,7 @@ public sealed class PlanWindow : Window
             if (put.Size is { } size && size.X > 0 && size.Y > 0)
             {
                 // Dalamud sets the size after this, from Size (CSS px), so it's given there for one frame.
-                Size = size / ImGuiHelpers.GlobalScale;
+                Size = Theme.UnitsOfScreen(size);
                 SizeCondition = ImGuiCond.Always;
                 sizedOnce = true;
             }
@@ -458,7 +472,7 @@ public sealed class PlanWindow : Window
             if (h >= S(19.5f)) Txt.Line(dl, new Vector2(left, y), "No notes for this step.", Face.Sans, 13, Palette.Muted, 19.5f);
             return;
         }
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = Theme.Scale;
         // Wrapped again for a new width or scale, and until the face is built (measured in Dalamud's font before).
         if (MathF.Abs(v.LinesWidth - w) > 0.5f || v.LinesScale != scale || !v.LinesReady)
         {

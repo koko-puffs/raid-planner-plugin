@@ -962,7 +962,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 - **The ground**: basalt at 96% (`.dw`, the site's near-solid fallback for its glass: ImGui can't
   blur), a white hairline at 9% round it and 14px corners, a shadow faked with two rings of black
   on the background draw list; a hairline under the title bar.
-- **Three voices** (`Fonts`, all through Dalamud's font atlas, at fixed sizes): Archivo Expanded
+- **Three voices** (`Fonts`, all through Dalamud's font atlas, at fixed sizes, times the windows' size: Size, below): Archivo Expanded
   ExtraBold (a static instance of Archivo at wdth 125, wght 800, made with fontTools; latin and
   latin-ext; OFL, `Resources/Fonts/OFL-Archivo.txt`) at 13, 16, 17, 22 and (since 0.4.0, the on-screen
   callouts' first step; latin only, so a callout in Chinese or Korean is drawn at 22) 30px for the callout, in
@@ -1002,6 +1002,23 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   error and warning boxes, the Boss (`Kit/Boss.cs`: the site's enemy shield and face from
   board/enemyArt.ts, flattened and cut into triangles once, `Model/Polygon`, shaded per vertex; asleep
   with lids and z's, awake, tilted).
+- **Size** (since 0.8.0; `Kit/UiScale.cs`, `Model/WindowSize.cs`; Settings → Windows → Size, `/raidcodex size`):
+  every size is drawn at Dalamud's global scale times the plugin's own (`Theme.S`, `Theme.Scale`), so the
+  windows, their words, icons and spacing grow and shrink together. _Fit to my screen_ (on at first,
+  `Configuration.WindowSize` 0) makes them as big as the screen is tall over 1440px (in tens of %: 150% on 4K,
+  200% from 2880px, never smaller than 100%), counting what Dalamud's own scale gives already (Dalamud at 150% on
+  4K: the plugin adds nothing); off, the size picked (80–200%) is on top of Dalamud's. The fonts are built again
+  at a new scale once it's held still 0.4 s (a stepper pressed a few times builds once), as a whole new set beside
+  the old one, drawn with from the frame every font of it is built (`Fonts.Follow`): `UiScale.Factor` moves on that
+  frame, so the words and the windows move together, and what's measured in a font (keyed on `S(1)` and
+  `Fonts.Generation`) is measured again. Dalamud's window sizes are in its own units (it multiplies them by its
+  scale), so the plugin gives them times its own (`Theme.Units`, `CssLimits` for the smallest and largest); the
+  windows ImGui sizes (the main window, the plan window, the opened-up meter) grow or shrink by the same ratio when
+  it moves (`ScaleFollower`, from the size they were last drawn at), and the overlays and the meter, sized by the
+  plugin every frame, follow by themselves (their saved widths and heights are CSS px). The scale drawn at is kept
+  (`Configuration.WindowScaleWas`): fitting starts the fonts at it (the screen isn't known before the first frame),
+  and a window ImGui remembers from last time is grown from it. The title bars stay Dalamud's own size (its font
+  and buttons, as above).
 - **Toasts** (`Frame.Toast`): raised near-solid, 10px corners, a hairline, an icon in its colour
   (it worked green, it didn't red, news ember), at most one action in ember-light ("Open", "Why"), and
   a 2px bar along its foot counting its 2.6 seconds down in its colour; it waits while pointed at and
@@ -1148,7 +1165,10 @@ above, 18 below), a footer on the basalt band where a screen has one.
     replays_ (dimmed while places aren't kept), _Show it in the server info bar_, _Recordings folder_ · Open.
     A hook the game hides is said in an amber warning box (here and on Advanced).
   - **Damage meter**, **Plan and callouts**, **Party cooldowns**: below (The meter's windows, The overlays).
-  - **Windows**: a box saying _Arrange windows_ shows every window at once to drag each into place, with the
+  - **Windows**: first **Size** (since 0.8.0; above, The windows' look, Size): _Fit to my screen_ (a switch, on)
+    and under it _Window size_, a stepper from 80% to 200% in tens, dimmed while the windows fit the screen (it
+    shows what fitting gives then: "Fitting your screen. Turn that off to pick."; turning fitting off starts the
+    stepper there). Then a box saying _Arrange windows_ shows every window at once to drag each into place, with the
     button (`StartArrange`; "Arranging…" while it's on); then a section each for the **Damage meter** (_Show the
     meter_, _Lock it where it is_ with _Click-through when locked_ under it, _Grows_, _Background_), the **Plan
     window** (_Show my plan in duties_, _Lock it where it is_, _The plan window_ · Show or Hide), the
@@ -1972,9 +1992,9 @@ RaidPlanner/
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
               Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, Home's and the guide's
               parts: HomeParts, the themes' drawing: PlateArt, Settings' panes, sections, more row and
-              tags: SettingsParts); Arrange windows (ArrangeWindow: the toolbar and ArrangePanel;
+              tags: SettingsParts; the windows' size: UiScale, ScaleFollower, CssLimits); Arrange windows (ArrangeWindow: the toolbar and ArrangePanel;
               ArrangeMode: what the windows read, their head and outline); Model/ (the
-              faces: Faces; the meter's themes' token tables: MeterTheme; compact's
+              faces: Faces; how big the windows are: WindowSize; the meter's themes' token tables: MeterTheme; compact's
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
@@ -2007,7 +2027,10 @@ Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the pa
 `unlock` gives it the mouse back (and shows it), `preview` (or `sample`) shows or stops its sample,
 `settings` opens Settings on its tab (Cooldowns, Plan window). Since 0.8.0 `/raidcodex arrange` (or `arrange
 windows`) starts Arrange windows (above): every window that's on shown to drag into place, Done, Cancel and Reset
-places on its toolbar (while it's on, nothing new).
+places on its toolbar (while it's on, nothing new). Since 0.8.0 `/raidcodex size` says how big the windows are;
+`/raidcodex size fit` (or `auto`) fits them to the screen and `/raidcodex size 150` (or `150%`) makes them that size,
+80 to 200 in tens (`WindowSize.Parse`; above, The windows' look, Size): the way back if a size makes Settings hard to
+reach.
 
 Since 0.5.1 the command is `/raidcodex` and `/raidplan` (from when the plugin was Raid Planner) still
 works; since 0.7.4 `/rc` does too. All three are registered and each does the same
@@ -2192,6 +2215,9 @@ and settings").
   once on your screen, with a sample in it, to drag into place; a window picked has its options beside it (which way
   it grows, click-through, background). _Done_ locks them where they are, _Cancel_ puts everything back, _Reset
   places_ moves them to where they first go. The main window steps aside while you arrange.
+- **Windows sized for your screen** (Settings → Windows → Size, `/raidcodex size`): on a screen taller than 1440 px
+  every window, its words, icons and spacing are bigger, as much as the screen is taller (150% on 4K), unless
+  Dalamud's own scale already does it; or pick a size from 80% to 200%. Open windows grow or shrink with it.
 - **The meter is Detailed on a fresh install** (it was compact since 0.7.0); saved settings keep theirs.
 - **Uploaded logs are said to be public**, as on FF Logs, wherever the plugin speaks of them (the guide included):
   you can make yours private on the site.

@@ -96,8 +96,9 @@ shows what most people change; the rest fold under one "N more" row.
   on-screen callouts (how far ahead, how many, a sound before each step) with a preview, _Share my step
   with the site_ (off) and _Send my party to my roster_ (only when you press it).
 - **Party cooldowns**: the tracker (off), in duties or everywhere, yours too, and which cooldowns by kind.
-- **Windows**: _Arrange windows_, and for each window: show it, lock it, click-through, which way it grows,
-  its background.
+- **Windows**: how big the windows are (_Fit to my screen_, on: bigger on a big screen, 150% on 4K; or a
+  size from 80% to 200%, also `/raidcodex size 150`), _Arrange windows_, and for each window: show it, lock
+  it, click-through, which way it grows, its background.
 - **Account and privacy**: link or unlink your account, who sees your logs, and what goes to the site.
 - **Advanced**: _Diagnostics_ (off; what it reads from the game goes to `diagnostics-<date>.log` in the
   recordings folder, with character names), kept fights, the setup guide.

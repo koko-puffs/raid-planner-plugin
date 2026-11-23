@@ -53,6 +53,7 @@ public static class CommandWords
         ("callouts", "shows or hides the on-screen callouts"),
         ("cooldowns / callouts unlock, preview, settings", "gives it the mouse back, shows its sample, opens its settings"),
         ("arrange", "shows every window that's on, to drag where you want (Done locks them)"),
+        ("size fit / size 150", "fits the windows to your screen, or makes them a size from 80 to 200 (%)"),
         ("help", "this list"),
     ];
 

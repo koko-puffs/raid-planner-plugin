@@ -243,6 +243,20 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>How many seconds before a step its sound plays.</summary>
     public int CalloutSoundLead { get; set; } = 3;
 
+    // How big the windows are (0.8.0; Settings → Windows → Size, /raidcodex size).
+
+    /// <summary>
+    /// Every window's size, on top of Dalamud's own scale (<see cref="UI.Model.WindowSize"/>): 0 fits the screen (bigger on
+    /// one taller than 1440 px: 150% on 4K), else the size picked, 80 to 200 (%).
+    /// </summary>
+    public int WindowSize { get; set; } = UI.Model.WindowSize.Fit;
+
+    /// <summary>
+    /// The plugin's own scale the windows were last drawn at (1 before 0.8.0): the windows ImGui sizes (the main window,
+    /// the plan window, the opened-up meter) are grown or shrunk from it when it's another as the plugin starts.
+    /// </summary>
+    public float WindowScaleWas { get; set; } = 1;
+
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();
 

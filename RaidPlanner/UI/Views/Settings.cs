@@ -513,6 +513,11 @@ public sealed partial class MainWindow
             case SettingId.CdBackground: c.Cooldowns.Background = d.Cooldowns.Background; break;
             case SettingId.CdPicks: c.CooldownPicks.Clear(); break;
 
+            case SettingId.WindowFit:
+            case SettingId.WindowScale:
+                c.WindowSize = d.WindowSize;
+                break;
+
             case SettingId.Diagnostics:
                 c.Diagnostics = d.Diagnostics;
                 recorder.Diagnostics.On = c.Diagnostics;

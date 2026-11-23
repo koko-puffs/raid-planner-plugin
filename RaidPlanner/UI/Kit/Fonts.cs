@@ -11,7 +11,9 @@ namespace RaidPlanner.UI;
 
 /// <summary>
 /// The faces at the sizes the windows use, loaded through Dalamud's font atlas (so they follow
-/// Dalamud's global scale and rebuild with it). Every (face, size) is a font in the atlas (30 on
+/// Dalamud's global scale and rebuild with it), times the plugin's own scale (since 0.8.0, Settings →
+/// Windows → Size: <see cref="UiScale"/>; a new one builds a whole new set, drawn with once it's all
+/// built, <see cref="Follow"/>). Every (face, size) is a font in the atlas (30 on
 /// most clients, some 20,000 glyphs, a few million pixels at 100%), so the set is fixed, and a size
 /// not here is drawn at the nearest one:
 /// Geist 400 at 11, 12, 13, 14; 500 at 12, 13, 14; 600 at 7, 8, 10, 13, 14, 15;
@@ -72,57 +74,92 @@ public sealed class Fonts : IDisposable
         (Face.Callout, 13), (Face.Callout, 16), (Face.Callout, 17), (Face.Callout, 22), (Face.Callout, 30),
     };
 
-    /// <summary>Each (face, size) wanted, to its font; faces built alike (a Japanese client's) share one.</summary>
-    private readonly Dictionary<(Face, int), IFontHandle> handles = new();
-
-    /// <summary>Each font built, once.</summary>
-    private readonly List<IFontHandle> built = new();
-
-    /// <summary>A size asked for that isn't loaded, to the nearest that is (worked out once).</summary>
-    private readonly Dictionary<(Face, int), IFontHandle> nearest = new();
-
     /// <summary>The client is Japanese: callouts and sans words are Dalamud's font, and callouts aren't put in capitals.</summary>
     public bool Japanese { get; }
 
-    /// <summary>A theme's faces built while it's picked (<see cref="Want"/>), each (face, size) to its font.</summary>
-    private readonly Dictionary<(Face, int), IFontHandle> themed = new();
-
     private readonly IFontAtlas atlas;
+
+    /// <summary>The fonts drawn with, at the plugin's scale now (<see cref="UiScale.Factor"/>).</summary>
+    private FontSet current;
+
+    /// <summary>
+    /// The fonts being built at a new scale (Settings → Windows → Size, or a new screen): drawn with once every one of
+    /// them is built, so the windows never show half their words at one size and half at the other.
+    /// </summary>
+    private FontSet? pending;
+
+    /// <summary>The scale asked for and since when (seconds, ImGui's clock): a new build waits until it's held still.</summary>
+    private (float Factor, double Since) asked = (-1, 0);
+
+    /// <summary>How long a new scale is held before the fonts are built at it (a stepper pressed a few times builds once).</summary>
+    private const double Settle = 0.4;
+
+    /// <summary>The faces a theme draws in that the windows don't (<see cref="Want"/>).</summary>
+    private HashSet<(Face, int)> themedWanted = new();
 
     private int generation;
 
     /// <summary>
-    /// Counts the atlas's builds (and a theme's faces changing): what was measured in a font before
-    /// (the compact meter's columns) is measured again when it moves. Read from the draw thread; a build
+    /// Counts the atlas's builds (and a theme's faces changing, and the fonts' scale moving): what was measured in a
+    /// font before (the compact meter's columns) is measured again when it moves. Read from the draw thread; a build
     /// may step on another.
     /// </summary>
     public int Generation => Volatile.Read(ref generation);
 
-    public Fonts()
+    /// <param name="factor">The plugin's own scale to build the fonts at first (<see cref="UiScale.Factor"/>).</param>
+    public Fonts(float factor)
     {
         atlas = Services.PluginInterface.UiBuilder.FontAtlas;
         atlas.BuildStepChange += OnBuildStep;
         Japanese = Services.ClientState.ClientLanguage == ClientLanguage.Japanese;
-        var alike = new Dictionary<(string File, float Size, bool Languages), IFontHandle>();
-        foreach (var (face, px) in Wanted)
-        {
-            var (file, ratio) = FileOf(face);
-            var mono = face is Face.Mono or Face.MonoSemibold;
-            var dalamudFont = Japanese && !mono && px >= 11;
-            // Dalamud's font is drawn at Geist's line for its size, so it sits in the same line boxes.
-            var size = dalamudFont ? px * GeistLine : px * ratio;
-            // Dalamud's font brings its language's glyphs itself; Geist and Archivo get them only where a plan's words go.
-            var languages = !dalamudFont && Array.IndexOf(PlanText, (face, px)) >= 0;
-            var key = (dalamudFont ? "Dalamud" : file, MathF.Round(size, 2), languages);
-            if (!alike.TryGetValue(key, out var handle))
-            {
-                handle = Make(atlas, file, size, dalamudFont, languages);
-                alike[key] = handle;
-                built.Add(handle);
-            }
-            handles[(face, px)] = handle;
-        }
+        current = new FontSet(atlas, factor, Japanese, themedWanted);
     }
+
+    /// <summary>
+    /// Each frame, before the windows draw: the scale the windows want (<see cref="UiScale.Wanted"/>). Once it's held
+    /// still a moment and differs from the fonts', they're built again at it; once they're all built they're drawn
+    /// with, the old ones let go, and <see cref="UiScale.Factor"/> moves with them (so the windows' sizes and their
+    /// words move together, on one frame).
+    /// </summary>
+    public void Follow(float wanted, double now)
+    {
+        if (MathF.Abs(wanted - asked.Factor) > 0.001f) asked = (wanted, now);
+        var target = pending?.Factor ?? current.Factor;
+        if (MathF.Abs(asked.Factor - target) > 0.001f && now - asked.Since >= Settle)
+        {
+            // Back to the size drawn now (stepped there and back): nothing to build.
+            pending?.Dispose();
+            pending = MathF.Abs(asked.Factor - current.Factor) > 0.001f ? new FontSet(atlas, asked.Factor, Japanese, themedWanted) : null;
+        }
+        if (pending is not { Ready: true } done) return;
+        current.Dispose();
+        current = done;
+        pending = null;
+        Interlocked.Increment(ref generation);
+        UiScale.Moved(current.Factor);
+    }
+
+    /// <summary>
+    /// The faces a theme draws in, loaded (those the windows don't load already), and the faces of the
+    /// theme before let go: a theme's fonts are in the atlas only while it's picked. Cheap when nothing changes.
+    /// </summary>
+    public void Want(IEnumerable<(Face Face, int Px)> faces)
+    {
+        var wanted = new HashSet<(Face, int)>();
+        foreach (var f in faces)
+            if (!current.Handles.ContainsKey(f))
+                wanted.Add(f);
+        if (wanted.SetEquals(themedWanted)) return;
+        themedWanted = wanted;
+        current.Theme(wanted);
+        pending?.Theme(wanted);
+        Interlocked.Increment(ref generation);
+    }
+
+    /// <summary>Pushes a face at a CSS size (the nearest loaded size when that one isn't).</summary>
+    public IDisposable Push(Face face, int px) => Handle(face, px).Push();
+
+    public IFontHandle Handle(Face face, int px) => current.Handle(face, px);
 
     /// <summary>A face's file and its line's ratio to its size.</summary>
     private static (string File, float Ratio) FileOf(Face face) => face switch
@@ -140,65 +177,129 @@ public sealed class Fonts : IDisposable
     };
 
     /// <summary>
-    /// The faces a theme draws in, loaded (those the windows don't load already), and the faces of the
-    /// theme before let go: a theme's fonts are in the atlas only while it's picked. Cheap when nothing changes.
+    /// Every font the windows draw in, at one scale (the plugin's own, on top of Dalamud's, which the atlas applies
+    /// itself): the faces at the sizes wanted, a theme's while it's picked, and the nearest loaded for a size that isn't.
     /// </summary>
-    public void Want(IEnumerable<(Face Face, int Px)> faces)
+    private sealed class FontSet : IDisposable
     {
-        var wanted = new HashSet<(Face, int)>();
-        foreach (var f in faces)
-            if (!handles.ContainsKey(f))
-                wanted.Add(f);
-        if (wanted.SetEquals(themed.Keys)) return;
-        foreach (var key in themed.Keys.ToList())
+        public readonly float Factor;
+
+        /// <summary>Each (face, size) wanted, to its font; faces built alike (a Japanese client's) share one.</summary>
+        public readonly Dictionary<(Face, int), IFontHandle> Handles = new();
+
+        /// <summary>Each font built, once.</summary>
+        private readonly List<IFontHandle> built = new();
+
+        /// <summary>A theme's faces built while it's picked, each (face, size) to its font.</summary>
+        private readonly Dictionary<(Face, int), IFontHandle> themed = new();
+
+        /// <summary>A size asked for that isn't loaded, to the nearest that is (worked out once).</summary>
+        private readonly Dictionary<(Face, int), IFontHandle> nearest = new();
+
+        private readonly IFontAtlas atlas;
+
+        public FontSet(IFontAtlas atlas, float factor, bool japanese, IEnumerable<(Face, int)> themedFaces)
         {
-            if (wanted.Contains(key)) continue;
-            themed[key].Dispose();
-            themed.Remove(key);
+            this.atlas = atlas;
+            Factor = factor;
+            var alike = new Dictionary<(string File, float Size, bool Languages), IFontHandle>();
+            foreach (var (face, px) in Wanted)
+            {
+                var (file, ratio) = FileOf(face);
+                var mono = face is Face.Mono or Face.MonoSemibold;
+                var dalamudFont = japanese && !mono && px >= 11;
+                // Dalamud's font is drawn at Geist's line for its size, so it sits in the same line boxes.
+                var size = (dalamudFont ? px * GeistLine : px * ratio) * factor;
+                // Dalamud's font brings its language's glyphs itself; Geist and Archivo get them only where a plan's words go.
+                var languages = !dalamudFont && Array.IndexOf(PlanText, (face, px)) >= 0;
+                var key = (dalamudFont ? "Dalamud" : file, MathF.Round(size, 2), languages);
+                if (!alike.TryGetValue(key, out var handle))
+                {
+                    handle = Make(atlas, file, size, dalamudFont, languages);
+                    alike[key] = handle;
+                    built.Add(handle);
+                }
+                Handles[(face, px)] = handle;
+            }
+            Theme(themedFaces);
         }
-        foreach (var (face, px) in wanted)
-            if (!themed.ContainsKey((face, px)))
-                themed[(face, px)] = MakeThemed(face, px);
-        nearest.Clear();
-        Interlocked.Increment(ref generation);
-    }
 
-    /// <summary>A theme's face: the game's through Dalamud, else a shipped file at its line's size.</summary>
-    private IFontHandle MakeThemed(Face face, int px)
-    {
-        var family = face switch
+        /// <summary>Every font built (or failed: one that can't be is drawn as Dalamud's, not waited for for ever).</summary>
+        public bool Ready
         {
-            Face.GameAxis => GameFontFamily.Axis,
-            Face.GameNumbers => GameFontFamily.MiedingerMid,
-            Face.GameTitle => GameFontFamily.Jupiter,
-            _ => GameFontFamily.Undefined,
-        };
-        // The game's fonts at Geist's line for the size, so they sit in the same line boxes.
-        if (family != GameFontFamily.Undefined) return atlas.NewGameFontHandle(new GameFontStyle(family, px * GeistLine));
-        var (file, ratio) = FileOf(face);
-        return Make(atlas, file, px * ratio, false, false);
-    }
+            get
+            {
+                foreach (var h in built)
+                    if (!h.Available && h.LoadException == null)
+                        return false;
+                foreach (var h in themed.Values)
+                    if (!h.Available && h.LoadException == null)
+                        return false;
+                return true;
+            }
+        }
 
-    /// <summary>Pushes a face at a CSS size (the nearest loaded size when that one isn't).</summary>
-    public IDisposable Push(Face face, int px) => Handle(face, px).Push();
-
-    public IFontHandle Handle(Face face, int px)
-    {
-        if (handles.TryGetValue((face, px), out var h)) return h;
-        if (themed.TryGetValue((face, px), out h)) return h;
-        if (nearest.TryGetValue((face, px), out h)) return h;
-        // A theme's face not loaded (its theme isn't picked): the windows' own nearest in spirit.
-        var stand = face switch
+        /// <summary>A theme's faces built (those not already), the ones no longer wanted let go.</summary>
+        public void Theme(IEnumerable<(Face, int)> faces)
         {
-            Face.Round or Face.Serif or Face.GameAxis or Face.GameTitle => Face.SansMedium,
-            Face.RoundBlack or Face.SerifSemibold => Face.SansSemibold,
-            Face.GameNumbers => Face.MonoSemibold,
-            _ => face,
-        };
-        var best = handles.Keys.Where(k => k.Item1 == stand).OrderBy(k => Math.Abs(k.Item2 - px)).FirstOrDefault();
-        h = handles.TryGetValue(best, out var found) ? found : handles[(Face.Sans, 14)];
-        nearest[(face, px)] = h;
-        return h;
+            var wanted = new HashSet<(Face, int)>(faces);
+            foreach (var key in themed.Keys.ToList())
+            {
+                if (wanted.Contains(key)) continue;
+                themed[key].Dispose();
+                themed.Remove(key);
+            }
+            foreach (var (face, px) in wanted)
+                if (!themed.ContainsKey((face, px)))
+                    themed[(face, px)] = MakeThemed(face, px);
+            nearest.Clear();
+        }
+
+        /// <summary>A theme's face: the game's through Dalamud, else a shipped file at its line's size.</summary>
+        private IFontHandle MakeThemed(Face face, int px)
+        {
+            var family = face switch
+            {
+                Face.GameAxis => GameFontFamily.Axis,
+                Face.GameNumbers => GameFontFamily.MiedingerMid,
+                Face.GameTitle => GameFontFamily.Jupiter,
+                _ => GameFontFamily.Undefined,
+            };
+            // The game's fonts at Geist's line for the size, so they sit in the same line boxes.
+            if (family != GameFontFamily.Undefined) return atlas.NewGameFontHandle(new GameFontStyle(family, px * GeistLine * Factor));
+            var (file, ratio) = FileOf(face);
+            return Make(atlas, file, px * ratio * Factor, false, false);
+        }
+
+        public IFontHandle Handle(Face face, int px)
+        {
+            if (Handles.TryGetValue((face, px), out var h)) return h;
+            if (themed.TryGetValue((face, px), out h)) return h;
+            if (nearest.TryGetValue((face, px), out h)) return h;
+            // A theme's face not loaded (its theme isn't picked): the windows' own nearest in spirit.
+            var stand = face switch
+            {
+                Face.Round or Face.Serif or Face.GameAxis or Face.GameTitle => Face.SansMedium,
+                Face.RoundBlack or Face.SerifSemibold => Face.SansSemibold,
+                Face.GameNumbers => Face.MonoSemibold,
+                _ => face,
+            };
+            var best = Handles.Keys.Where(k => k.Item1 == stand).OrderBy(k => Math.Abs(k.Item2 - px)).FirstOrDefault();
+            h = Handles.TryGetValue(best, out var found) ? found : Handles[(Face.Sans, 14)];
+            nearest[(face, px)] = h;
+            return h;
+        }
+
+        public void Dispose()
+        {
+            // Each built font once (faces built alike share one).
+            foreach (var h in built) h.Dispose();
+            built.Clear();
+            foreach (var h in themed.Values) h.Dispose();
+            themed.Clear();
+            Handles.Clear();
+            nearest.Clear();
+        }
     }
 
     private static IFontHandle Make(IFontAtlas atlas, string file, float sizePx, bool dalamudFont, bool languages) =>
@@ -235,12 +336,8 @@ public sealed class Fonts : IDisposable
     public void Dispose()
     {
         atlas.BuildStepChange -= OnBuildStep;
-        // Each built font once (faces built alike share one).
-        foreach (var h in built) h.Dispose();
-        built.Clear();
-        foreach (var h in themed.Values) h.Dispose();
-        themed.Clear();
-        handles.Clear();
-        nearest.Clear();
+        pending?.Dispose();
+        pending = null;
+        current.Dispose();
     }
 }

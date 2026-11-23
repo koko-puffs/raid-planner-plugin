@@ -43,7 +43,7 @@ public abstract class OverlayWindow : Window
     /// <summary>The content's height asked for this frame (screen px), worked out before Begin.</summary>
     private float contentH;
 
-    private static readonly WindowSizeConstraints Sizes = new() { MinimumSize = new Vector2(180, 20), MaximumSize = new Vector2(1200, 1400) };
+    private static readonly CssLimits Sizes = new(new Vector2(180, 20), new Vector2(1200, 1400));
 
     /// <summary>Which window it is in Arrange windows.</summary>
     private readonly ArrangePart part;
@@ -62,7 +62,7 @@ public abstract class OverlayWindow : Window
         this.settings = settings;
         this.firstWidth = firstWidth;
         this.firstAt = firstAt;
-        SizeConstraints = Sizes;
+        SizeConstraints = Sizes.Now;
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
         IsOpen = settings().Show;
@@ -163,7 +163,8 @@ public abstract class OverlayWindow : Window
         }
         // Not resizable while the mouse is over one of its buttons: a press there is theirs.
         else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = Theme.Scale;
+        SizeConstraints = Sizes.Now;
         var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         contentH = MathF.Max(S(8), S(Measure(WidthCss)));
         if (held)
@@ -172,7 +173,7 @@ public abstract class OverlayWindow : Window
             return;
         }
         var height = contentH + chrome;
-        Size = new Vector2(WidthCss, height / scale);
+        Size = Theme.Units(new Vector2(WidthCss, height / scale));
         SizeCondition = ImGuiCond.Always;
         var vp = ImGui.GetMainViewport();
         if (resetWanted)
@@ -219,7 +220,7 @@ public abstract class OverlayWindow : Window
         else if (held && drawnOnce && (pos != lastPos || size != lastSize))
         {
             SetAnchor(s, MeterLayout.Corner(pos, size, s.Grows));
-            if (MathF.Abs(size.X - lastSize.X) > 0.5f) s.Width = MathF.Round(size.X / ImGuiHelpers.GlobalScale);
+            if (MathF.Abs(size.X - lastSize.X) > 0.5f) s.Width = MathF.Round(size.X / Theme.Scale);
             dirty = true;
         }
         lastPos = pos;

@@ -69,9 +69,9 @@ public sealed partial class MainWindow : Window, IDisposable
         this.fonts = fonts;
         Txt.Fonts = fonts;
 
-        Size = new Vector2(560, 800);
+        Size = Theme.Units(new Vector2(560, 800));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(460, 520), MaximumSize = new Vector2(1400, 2400) };
+        SizeConstraints = Limits.Now;
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
         dialogs.AddedWindowFlags = ImGuiWindowFlags.NoCollapse;
     }
@@ -214,14 +214,15 @@ public sealed partial class MainWindow : Window, IDisposable
 
     public override void PreDraw()
     {
+        SizeConstraints = Limits.Now;
         if (!firstSizeFitted)
         {
-            // The first size could be taller than the screen, with the footer off it.
+            // The first size could be taller than the screen, with the footer off it (Size is in Dalamud's units).
             firstSizeFitted = true;
             var screenH = ImGui.GetMainViewport().Size.Y;
-            var scale = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
-            if (screenH > 0 && scale > 0 && Size is { } size && size.Y * scale > screenH * 0.9f)
-                Size = new Vector2(size.X, MathF.Max(520, screenH * 0.9f / scale));
+            var units = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+            if (screenH > 0 && units > 0 && Size is { } size && size.Y * units > screenH * 0.9f)
+                Size = new Vector2(size.X, MathF.Max(Limits.Min.Y * UiScale.Factor, screenH * 0.9f / units));
         }
         // Settings' sidebar needs about 700px beside its pages: the first time Settings is shown after the window opens,
         // a narrower window is widened (to 820, as far as the screen allows). Dalamud sizes the window from Size after
@@ -231,17 +232,24 @@ public sealed partial class MainWindow : Window, IDisposable
             sizedOnce = false;
             SizeCondition = ImGuiCond.FirstUseEver;
         }
-        if (screen == Screen.Settings && !settingsWidened)
+        if (follower.Resize(lastSize) is { } resized)
+        {
+            // The windows' size moved (Settings → Windows → Size): it grows or shrinks with it (Settings is widened after, if it still needs it).
+            Size = resized;
+            SizeCondition = ImGuiCond.Always;
+            sizedOnce = true;
+        }
+        else if (screen == Screen.Settings && !settingsWidened)
         {
             settingsWidened = true;
-            var scale = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+            var scale = Theme.Scale;
             var screenW = ImGui.GetMainViewport().Size.X;
             if (scale > 0 && lastSize.X > 0 && lastSize.X < SettingsWide * scale && screenW > 0)
             {
                 var w = MathF.Min(SettingsWide * scale, screenW * 0.9f);
                 if (w > lastSize.X)
                 {
-                    Size = new Vector2(w, lastSize.Y) / scale;
+                    Size = Theme.UnitsOfScreen(new Vector2(w, lastSize.Y));
                     SizeCondition = ImGuiCond.Always;
                     sizedOnce = true;
                 }
@@ -251,6 +259,12 @@ public sealed partial class MainWindow : Window, IDisposable
     }
 
     private bool firstSizeFitted;
+
+    /// <summary>Its smallest and largest size (CSS px).</summary>
+    private static readonly CssLimits Limits = new(new Vector2(460, 520), new Vector2(1400, 2400));
+
+    /// <summary>Grows or shrinks it with the windows' size (Settings → Windows → Size).</summary>
+    private readonly ScaleFollower follower = new();
 
     /// <summary>The window's width for Settings with its sidebar (CSS px).</summary>
     private const float SettingsWide = 820;

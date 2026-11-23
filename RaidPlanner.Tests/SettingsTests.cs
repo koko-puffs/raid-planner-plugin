@@ -71,7 +71,7 @@ public class SettingsIndexTests
         Assert.Equal(new[] { SettingId.ShowMeter, SettingId.MeterWhere, SettingId.MeterHide }, meter[0].Rows.Select(r => r.Id));
         Assert.DoesNotContain(meter.SelectMany(s => s.Rows), r => r.More);
         var windows = SettingsIndex.Sections(SettingsTab.Windows).Select(s => s.Title).ToList();
-        Assert.Equal(new[] { "Arrange", "Damage meter", "Plan window", "Callouts", "Party cooldowns" }, windows);
+        Assert.Equal(new[] { "Size", "Arrange", "Damage meter", "Plan window", "Callouts", "Party cooldowns" }, windows);
         Assert.NotNull(SettingsIndex.Section(SettingsTab.Plans, "On-screen callouts"));
     }
 

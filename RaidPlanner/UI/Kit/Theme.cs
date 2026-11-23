@@ -31,8 +31,20 @@ public static class Theme
     /// <summary>The main window's padding (`.dw-hd`, `.dw-bd`, `.dw-ft`): 20 at the sides.</summary>
     public const float SidePad = 20;
 
-    /// <summary>CSS pixels to screen pixels (Dalamud's global scale).</summary>
-    public static float S(float px) => px * ImGuiHelpers.GlobalScale;
+    /// <summary>CSS pixels to screen pixels: Dalamud's global scale times the plugin's own (Settings → Windows → Size, <see cref="UiScale"/>).</summary>
+    public static float S(float px) => px * Scale;
+
+    /// <summary>Screen pixels per CSS pixel: Dalamud's global scale times the plugin's own.</summary>
+    public static float Scale => ImGuiHelpers.GlobalScale * UiScale.Factor;
+
+    /// <summary>
+    /// CSS pixels to Dalamud's window units (<see cref="Dalamud.Interface.Windowing.Window.Size"/>, which Dalamud
+    /// multiplies by its own global scale): times the plugin's own scale.
+    /// </summary>
+    public static Vector2 Units(Vector2 css) => css * UiScale.Factor;
+
+    /// <summary>Screen pixels to Dalamud's window units.</summary>
+    public static Vector2 UnitsOfScreen(Vector2 screen) => screen / ImGuiHelpers.GlobalScale;
 
     public static bool ReducedMotion => Services.PluginInterface.UiBuilder.ShouldUseReducedMotion;
 

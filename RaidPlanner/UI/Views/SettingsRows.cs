@@ -584,6 +584,30 @@ public sealed partial class MainWindow
                 break;
 
             // ---- The rest.
+            case SettingId.WindowFit:
+                if (SwitchRow(i, "##win-fit", n, l, config.WindowSize == WindowSize.Fit,
+                        "On, the windows grow with a screen taller than 1440 pixels, as much taller as it is: 150% on 4K, 200% at 5K, unless Dalamud's own scale (its Global Font Scale) "
+                        + "already makes them that big. Off, they're the size you pick under it. Their title bars stay Dalamud's own size."))
+                {
+                    config.WindowSize = config.WindowSize == WindowSize.Fit ? WindowSize.Clamp((int)MathF.Round(UiScale.Wanted * 100)) : WindowSize.Fit;
+                    config.Save();
+                }
+                break;
+            case SettingId.WindowScale:
+            {
+                var fit = config.WindowSize == WindowSize.Fit;
+                var now = fit ? UiScale.Wanted : config.WindowSize / 100f;
+                var step = StepperRow(i, "##win-size", n, fit ? "Fitting your screen. Turn that off to pick." : l, WindowSize.Words(now),
+                    !fit && config.WindowSize > WindowSize.Smallest, !fit && config.WindowSize < WindowSize.Largest,
+                    "Every window, its words, icons and spacing grow or shrink together: the meter, the plan window, the callouts, the cooldowns and this one. 100% is Dalamud's own size "
+                    + "(its Global Font Scale, in Dalamud's settings). The fonts are built again at the new size, which takes a moment.", sub: sub);
+                if (step != 0)
+                {
+                    config.WindowSize = WindowSize.Stepped(config.WindowSize, step, now);
+                    config.Save();
+                }
+                break;
+            }
             case SettingId.Arrange:
             {
                 var arranging = Arranging?.Invoke() == true;

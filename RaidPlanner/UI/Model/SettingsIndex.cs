@@ -117,6 +117,12 @@ namespace RaidPlanner.UI.Model
         CdPicks,
 
         // The rest.
+
+        /// <summary>0.8.0: the windows fit the screen (Settings → Windows → Size).</summary>
+        WindowFit,
+
+        /// <summary>0.8.0: the windows' size picked (80–200%), while they don't fit the screen.</summary>
+        WindowScale,
         Arrange,
         Account,
         Codex,
@@ -166,7 +172,7 @@ namespace RaidPlanner.UI.Model
             SettingsTab.Meter => "What the meter shows and how it looks. Where it sits:",
             SettingsTab.Plans => "Your static's plan during the fight: the board, and the next steps called out on screen. Where they sit:",
             SettingsTab.Cooldowns => "Your party's raid buffs and mitigation, and when each is ready again. Where it sits:",
-            SettingsTab.Windows => "Where each window sits, and whether it can be moved or clicked through.",
+            SettingsTab.Windows => "How big the windows are, where each sits, and whether it can be moved or clicked through.",
             SettingsTab.Account => "Your Raid Codex account, and what the plugin shares with the site.",
             _ => "Rarely needed: for checking what the plugin reads, and a few odd ends.",
         };
@@ -259,6 +265,8 @@ namespace RaidPlanner.UI.Model
             new(SettingId.CdCompact, Cds, "More", "Smaller rows", "Smaller rows and words.", "smaller rows", More: true),
 
             // Windows.
+            new(SettingId.WindowFit, Win, "Size", "Fit to my screen", "Bigger windows on a big screen: 150% on 4K."),
+            new(SettingId.WindowScale, Win, "Size", "Window size", "Every window, its words and icons, beside Dalamud's own scale.", "window size", Sub: true),
             new(SettingId.Arrange, Win, "Arrange", "Arrange windows", "Shows every window at once, to drag each into place.", Action: true),
             new(SettingId.ShowMeter, Win, "Damage meter", "Show the meter", "Its own window, over the game.", Echo: true, Keep: true),
             new(SettingId.MeterLock, Win, "Damage meter", "Lock it where it is", "No title bar, and no moving it by accident."),

@@ -46,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
     private void DrawWindows()
     {
         var started = Game.Stalls.Start();
+        FollowScale();
         windows.Draw();
         Game.Stalls.End("drawing its windows and overlays", started);
     }
@@ -108,7 +109,10 @@ public sealed class Plugin : IDalamudPlugin
             uploads = new Uploads(config, data, recorder, site);
             logs = new LogUploader(config, store, recorder, site, version);
 
-            fonts = new Fonts();
+            // The windows' size (Settings → Windows → Size): fitting the screen, the scale it gave last time (the screen
+            // isn't known until the first frame: FollowScale moves it then if it's another).
+            UiScale.Start(config.WindowSize == WindowSize.Fit ? WindowScaleWas() : WindowSize.Factor(config.WindowSize, 0, 1), WindowScaleWas());
+            fonts = new Fonts(UiScale.Factor);
             window = new MainWindow(config, store, recorder, site, plans, uploads, logs, fonts);
             planWindow = new PlanWindow(config, plans, recorder, data, fonts);
             meterWindow = new MeterWindow(config, fonts);
@@ -309,10 +313,63 @@ public sealed class Plugin : IDalamudPlugin
                 // main window steps aside as from Settings.
                 window.StartArrange?.Invoke();
                 break;
+            case var size when size == "size" || size.StartsWith("size ", StringComparison.Ordinal):
+                SetSize(size.Length > 4 ? size[5..] : string.Empty);
+                break;
             default:
                 window.Toggle();
                 break;
         }
+    }
+
+    /// <summary>The scale the windows were drawn at when the plugin last ran (1 before 0.8.0, or if the file says something odd).</summary>
+    private float WindowScaleWas() => config.WindowScaleWas is >= 0.5f and <= 4f ? config.WindowScaleWas : 1;
+
+    private DateTime scaleFailedAt;
+
+    /// <summary>
+    /// Each frame, before the windows draw: the scale the size setting and the screen want (Settings → Windows → Size), the
+    /// fonts built at it once it's held still (<see cref="Fonts.Follow"/>), and the scale drawn at kept for next time.
+    /// </summary>
+    private void FollowScale()
+    {
+        try
+        {
+            var wanted = WindowSize.Factor(config.WindowSize, Dalamud.Bindings.ImGui.ImGui.GetMainViewport().Size.Y, Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale);
+            UiScale.Want(wanted);
+            fonts.Follow(wanted, Dalamud.Bindings.ImGui.ImGui.GetTime());
+            if (MathF.Abs(UiScale.Factor - config.WindowScaleWas) > 0.001f)
+            {
+                config.WindowScaleWas = UiScale.Factor;
+                config.Save();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - scaleFailedAt < TimeSpan.FromSeconds(30)) return;
+            scaleFailedAt = DateTime.UtcNow;
+            Services.Log.Error(ex, "Raid Codex couldn't follow the windows' size");
+        }
+    }
+
+    /// <summary>/raidcodex size: fit (the screen) or a size picked (80–200%), said in chat; otherwise what it is now.</summary>
+    private void SetSize(string words)
+    {
+        var picked = WindowSize.Parse(words);
+        if (picked is { } p)
+        {
+            config.WindowSize = p;
+            config.Save();
+        }
+        else if (words.Length > 0)
+        {
+            PlanService.Print($"{CommandWords.Main} size takes fit, or a size from {WindowSize.Smallest} to {WindowSize.Largest} (%).");
+            return;
+        }
+        var factor = config.WindowSize == WindowSize.Fit ? UiScale.Wanted : config.WindowSize / 100f;
+        PlanService.Print(config.WindowSize == WindowSize.Fit
+            ? $"The windows fit your screen: {WindowSize.Words(factor)}."
+            : $"The windows are {WindowSize.Words(factor)}.");
     }
 
     /// <summary>/raidcodex cooldowns, /raidcodex callouts: shown or hidden (their setting), said in chat; a sample showing stops.</summary>

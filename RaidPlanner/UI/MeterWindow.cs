@@ -46,10 +46,10 @@ public sealed partial class MeterWindow : Window
     /// <summary>The height it first opens to before it knows its party (CSS px).</summary>
     private const float OpenHeight = 382;
 
-    private static readonly WindowSizeConstraints Sizes = new() { MinimumSize = new Vector2(260, 60), MaximumSize = new Vector2(720, 1400) };
+    private static readonly CssLimits Sizes = new(new Vector2(260, 60), new Vector2(720, 1400));
 
     /// <summary>Folded or empty it's as tall as what it shows (a line, or the Boss and its words).</summary>
-    private static readonly WindowSizeConstraints FitSizes = new() { MinimumSize = new Vector2(260, 0), MaximumSize = new Vector2(720, 1400) };
+    private static readonly CssLimits FitSizes = new(new Vector2(260, 0), new Vector2(720, 1400));
 
     private static readonly string[] TabIds = { "##mtab0", "##mtab1", "##mtab2", "##mtab3", "##mtab4" };
 
@@ -193,9 +193,9 @@ public sealed partial class MeterWindow : Window
     {
         this.config = config;
         this.fonts = fonts;
-        Size = new Vector2(330, OpenHeight);
+        Size = Theme.Units(new Vector2(330, OpenHeight));
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = Sizes;
+        SizeConstraints = Sizes.Now;
         RespectCloseHotkey = false;
         DisableWindowSounds = true;
         IsOpen = config.ShowMeter;
@@ -403,7 +403,7 @@ public sealed partial class MeterWindow : Window
         }
         // Compact is never resized by hand; the normal meter isn't while the mouse is over its buttons (a press there is theirs).
         if (!MeterLayout.Resizable(config.MeterCompact, Locked) || guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
-        var scale = ImGuiHelpers.GlobalScale;
+        var scale = Theme.Scale;
         var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         if (config.MeterCompact)
         {
@@ -413,13 +413,13 @@ public sealed partial class MeterWindow : Window
         // Folded (or empty) it's as tall as what it shows, as wide as it was (ImGui fits the height to what
         // was drawn; the width is set, so it's kept: known once it's been drawn).
         var fits = widthKnown && view is View.Nothing or View.Stopped or View.Folded;
-        SizeConstraints = fits ? FitSizes : Sizes;
+        SizeConstraints = fits ? FitSizes.Now : Sizes.Now;
         var height = float.NaN;
         if (fits)
         {
             holdH = 0;
             Flags |= ImGuiWindowFlags.AlwaysAutoResize;
-            Size = new Vector2(widthCss, 0);
+            Size = Theme.Units(new Vector2(widthCss, 0));
             SizeCondition = ImGuiCond.Always;
             if (contentH > 0) height = contentH + chrome;
         }
@@ -428,10 +428,10 @@ public sealed partial class MeterWindow : Window
             // In a fight: as tall as what it shows (its rows, pace and the limit break when they show; a bigger
             // party, a taller meter), at most the height you gave it. The anchored edge stays; the other moves.
             var given = config.MeterHeight;
-            var h = MeterLayout.FightHeight(Fitted(), chrome / scale, given, Sizes.MinimumSize.Y, Sizes.MaximumSize.Y);
+            var h = MeterLayout.FightHeight(Fitted(), chrome / scale, given, Sizes.Min.Y, Sizes.Max.Y);
             // While the mouse is on it, the height it had as the mouse came (a tab switch doesn't move its head under the mouse).
             h = HoldHeight(h);
-            Size = new Vector2(widthCss, h);
+            Size = Theme.Units(new Vector2(widthCss, h));
             SizeCondition = ImGuiCond.Always;
             height = h * scale;
             fightH = height;
@@ -543,7 +543,7 @@ public sealed partial class MeterWindow : Window
             SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
             anchorMoved = true;
             // The normal meter sized by its edge in a fight: that's the height you're giving it (compact can't be sized).
-            if (!config.MeterCompact && view is View.Fight or View.Waiting && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / ImGuiHelpers.GlobalScale;
+            if (!config.MeterCompact && view is View.Fight or View.Waiting && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / Theme.Scale;
         }
         lastPos = pos;
         lastSize = size;
@@ -589,7 +589,7 @@ public sealed partial class MeterWindow : Window
             DrawPlate(top, w, bottom, m);
             return;
         }
-        widthCss = w / ImGuiHelpers.GlobalScale;
+        widthCss = w / Theme.Scale;
         widthKnown = true;
         previewInFoot = false;
         // A death's row's height in its faces, for the height fitted to the Deaths tab before it's drawn.

@@ -69,10 +69,9 @@ public sealed class MeterDetailWindow : Window
     {
         this.config = config;
         this.fonts = fonts;
-        Size = new Vector2(1180, 560);
+        Size = Theme.Units(new Vector2(1180, 560));
         SizeCondition = ImGuiCond.FirstUseEver;
-        // At least as wide as the five tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100.
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(980, 360), MaximumSize = new Vector2(2400, 1600) };
+        SizeConstraints = Limits.Now;
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse;
     }
 
@@ -94,8 +93,32 @@ public sealed class MeterDetailWindow : Window
         BringToFront();
     }
 
+    /// <summary>At least as wide as the five tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100 (CSS px).</summary>
+    private static readonly CssLimits Limits = new(new Vector2(980, 360), new Vector2(2400, 1600));
+
+    /// <summary>Grows or shrinks it with the windows' size (Settings → Windows → Size).</summary>
+    private readonly ScaleFollower follower = new();
+
+    /// <summary>Its size as last drawn (screen px).</summary>
+    private Vector2 drawnSize;
+
+    /// <summary>Size was given for one frame (the windows' size moved): ImGui's again from the next.</summary>
+    private bool sizedOnce;
+
     public override void PreDraw()
     {
+        SizeConstraints = Limits.Now;
+        if (sizedOnce)
+        {
+            sizedOnce = false;
+            SizeCondition = ImGuiCond.FirstUseEver;
+        }
+        if (follower.Resize(drawnSize) is { } resized)
+        {
+            Size = resized;
+            SizeCondition = ImGuiCond.Always;
+            sizedOnce = true;
+        }
         // A theme draws its own ground and frame (as the compact meter does); Ready Check's is the kit's window.
         if (Rc) Theme.PushFrame();
         else Theme.PushFrame(Vector4.Zero, T.Win.Radius, Vector4.Zero);
@@ -105,6 +128,7 @@ public sealed class MeterDetailWindow : Window
 
     public override void Draw()
     {
+        drawnSize = ImGui.GetWindowSize();
         Kit.ResetFrame();
         Frame.ResetFrame();
         Theme.PushInside();

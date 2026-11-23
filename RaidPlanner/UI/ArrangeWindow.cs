@@ -257,7 +257,7 @@ public sealed class ArrangeWindow : Window
             if (Session.Before(ArrangePart.Plan) is { Anchored: false } p && plan.Drawn is { } d)
                 Session.Learnt(ArrangePart.Plan, WindowPlace.OfPlan(p.Locked, d.Pos, d.Size));
             var size = Measure();
-            Size = size / ImGuiHelpers.GlobalScale;
+            Size = Theme.UnitsOfScreen(size);
             SizeCondition = ImGuiCond.Always;
             var vp = ImGui.GetMainViewport();
             ImGui.SetNextWindowPos(ArrangeLayout.Toolbar(vp.WorkPos, vp.WorkPos + vp.WorkSize, size, S(FromBottom)), ImGuiCond.Always);
@@ -393,7 +393,7 @@ public sealed class ArrangePanel : Window
             | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoSavedSettings;
         if (Picked is { } part)
         {
-            Size = new Vector2(WidthCss, HeightCss(part));
+            Size = Theme.Units(new Vector2(WidthCss, HeightCss(part)));
             SizeCondition = ImGuiCond.Always;
             var vp = ImGui.GetMainViewport();
             ImGui.SetNextWindowPos(ArrangeLayout.Panel(vp.WorkPos, vp.WorkPos + vp.WorkSize, S(WidthCss), S(FromEdge)), ImGuiCond.Always);

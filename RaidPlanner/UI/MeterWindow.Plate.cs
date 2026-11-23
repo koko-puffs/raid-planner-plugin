@@ -23,7 +23,7 @@ public sealed partial class MeterWindow
     private const float PlateMenuWidth = 300;
 
     /// <summary>Compact can be narrower than the normal meter (its themes are 248 to 268 wide).</summary>
-    private static readonly WindowSizeConstraints PlateSizesLimits = new() { MinimumSize = new Vector2(200, 20), MaximumSize = new Vector2(720, 1400) };
+    private static readonly CssLimits PlateSizesLimits = new(new Vector2(200, 20), new Vector2(720, 1400));
 
     private readonly PlateMeter plate = new();
 
@@ -88,7 +88,7 @@ public sealed partial class MeterWindow
     {
         var t = PlateTheme;
         var width = t.Win.Width;
-        SizeConstraints = PlateSizesLimits;
+        SizeConstraints = PlateSizesLimits.Now;
         float h;
         if (PlateOneLine)
         {
@@ -99,9 +99,9 @@ public sealed partial class MeterWindow
         {
             var needed = plate.Needed(PartyRows(), view == View.Waiting);
             // Held while the mouse is on it (MeterLayout.Hold): a tab picked or a row come doesn't move its head under the mouse.
-            h = HoldHeight(MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.MaximumSize.Y));
+            h = HoldHeight(MeterLayout.FightHeight(needed, chrome / scale, 0, 20, Sizes.Max.Y));
         }
-        Size = new Vector2(width, h);
+        Size = Theme.Units(new Vector2(width, h));
         SizeCondition = ImGuiCond.Always;
         fightH = h * scale;
         PlaceAt(width * scale, h * scale);
