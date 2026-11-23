@@ -6,7 +6,9 @@ using RaidPlanner.Core;
 namespace RaidPlanner.UI.Model;
 
 /// <summary>A row of a pull's list: a mechanic (from the timeline) or a death.</summary>
-public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<MechanicKind> Kinds, string? DeathSlot = null, string? DeathJob = null)
+/// <remarks>A death also says who (their name when the recording has it, else their spot) and what killed them, when known.</remarks>
+public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<MechanicKind> Kinds, string? DeathSlot = null, string? DeathJob = null,
+    string? DeathWho = null, string? DeathBy = null)
 {
     public bool Death => DeathSlot != null;
 }
@@ -19,6 +21,9 @@ public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<Mec
 /// </summary>
 public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double> Phases, IReadOnlyList<double> Deaths, int Waymarks, int Tethers, int WipeDeaths)
 {
+    /// <summary>When the wipe began (its first death), for a wiped pull whose wipe was seen; else null.</summary>
+    public double? WipeAt { get; init; }
+
     /// <summary>Seconds every enemy must be gone for the next one back to start a phase (RecordingBuilder.PhaseGap).</summary>
     public const double PhaseGap = 8;
 
@@ -43,13 +48,16 @@ public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double>
                 ? r.Statuses.TryGetValue(d.By, out var st) ? st.Name : null
                 : r.Actions.TryGetValue(d.By, out var a) ? a.Name : null;
             var slot = who?.Slot ?? "?";
-            rows.Add(new PullRow(d.T, by is { Length: > 0 } ? $"{slot} died · {by}" : $"{slot} died", 1, Array.Empty<MechanicKind>(), slot, who?.Job));
+            var name = PartyMember.Clean(who?.Name) ?? slot;
+            var killer = by is { Length: > 0 } ? by.Trim() : null;
+            rows.Add(new PullRow(d.T, killer != null ? $"{name} died to {killer}" : $"{name} died", 1, Array.Empty<MechanicKind>(), slot, who?.Job, name, killer));
             deaths.Add(d.T);
         }
         rows.Sort((a, b) => a.T != b.T ? a.T.CompareTo(b.T) : a.Death.CompareTo(b.Death));
         var waymarks = r.Events.OfType<WaymarksEvent>().LastOrDefault()?.Marks.Count ?? 0;
         var tethers = r.Events.OfType<TetherEvent>().Count(t => t.On);
-        return new PullView(rows, PhaseStarts(r.Events.OfType<TargetEvent>()), deaths, waymarks, tethers, wipe);
+        double? wipeAt = wipeDeaths.Count > 0 ? wipeDeaths.Min(d => d.T) : null;
+        return new PullView(rows, PhaseStarts(r.Events.OfType<TargetEvent>()), deaths, waymarks, tethers, wipe) { WipeAt = wipeAt };
     }
 
     /// <summary>

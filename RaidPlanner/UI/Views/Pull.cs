@@ -10,40 +10,39 @@ using static RaidPlanner.UI.Theme;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// A pull's own screen (the mock-ups' "A pull"): the header (the square back button, the eyebrow in
-/// mono capitals, the duty as a small callout, Delete outlined in danger red at the far right), its
-/// facts, the pull to its own scale (a tick a mechanic, its phases, a skull at each death), and what's
-/// in it: a row a mechanic (mono time on the rail, the mechanic drawn small in a square well, what
-/// it asks before what it is, "×12"), deaths as red rows. The footer is the basalt band with Send as
-/// the telegraph. The pull is read from its file on a worker, once.
+/// A pull's own screen (0.8.0, the mock-ups' plug-main "A pull"), under the tabs (the Pulls tab's): All pulls to go
+/// back, Save as file and Delete (asked first); the eyebrow (when, the duty), the pull's number as a callout with its
+/// outcome and length; the pull in a sentence; the pull to its own scale (its phases, a skull at each death); its
+/// upload (On your Raid Codex since 23:49 with Open in Review, or the send); and what happened: a row a mechanic
+/// (mono time on the rail, the mechanic drawn small in a square well, what it asks before what it is, "×12"), deaths
+/// as red rows with who died to what. The pull is read from its file on a worker, once.
 /// </summary>
 public sealed partial class MainWindow
 {
     /// <summary>The open pull's view: its file, and what it shows once read (or why not).</summary>
-    private sealed record PullState(string File, PullView? View, string? Problem, int Party);
+    private sealed record PullState(string File, PullView? View, string? Problem);
 
     private volatile PullState? pullView;
 
     private void LoadPull(RecordingInfo info)
     {
         if (pullView?.File == info.File) return;
-        pullView = new PullState(info.File, null, null, 0);
+        pullView = new PullState(info.File, null, null);
         var file = info.File;
-        // Its party is counted from this read: the Party fact never starts a second read of the same file meanwhile.
-        partyCounts.TryAdd(file, -1);
         _ = Task.Run(() =>
         {
             try
             {
                 var r = store.Read(info);
                 var view = PullView.Build(r);
-                partyCounts[file] = r.Party.Count;
-                if (pullView?.File == file) pullView = new PullState(file, view, null, r.Party.Count);
+                // Its facts come from this read too: the list never reads the same file again for them.
+                gists[file] = new GistState(PullGist.Of(r, view));
+                if (pullView?.File == file) pullView = new PullState(file, view, null);
             }
             catch (Exception ex)
             {
                 Services.Log.Warning(ex, "Raid Codex couldn't read a pull");
-                if (pullView?.File == file) pullView = new PullState(file, null, "Its file couldn't be read. Delete it, or look in the recordings folder.", 0);
+                if (pullView?.File == file) pullView = new PullState(file, null, "Its file couldn't be read. Delete it, or look in the recordings folder.");
             }
         });
     }
@@ -52,46 +51,113 @@ public sealed partial class MainWindow
     {
         LoadPull(info);
         Frame.BeginHeader();
-        var eyebrow = $"Pull {Math.Max(1, info.Pull)} · {Format.Day(info.RecordedAt, DateTimeOffset.Now)}";
-        if (ScreenHeader("Back", eyebrow, info.Duty, S(H), p =>
-            {
-                if (Kit.IconButton("##delete", p, Icon.Trash, "Delete this pull", Btn.Danger))
-                    Ask("Delete this pull?", info.SentId != null
-                            ? "It's gone from the plugin. The copy you sent stays in your Raid Codex."
-                            : "It's gone for good: it hasn't been sent to the Raid Codex.",
-                        "Delete", "Keep it", () =>
-                        {
-                            // Out of the list at once; its file's delete and the index's and marks' writes on a worker, never in a frame.
-                            _ = store.DeleteLater(info).ContinueWith(t => Services.Log.Error(t.Exception!, "Raid Codex couldn't delete a pull"),
-                                TaskContinuationOptions.OnlyOnFaulted);
-                            screen = Screen.Home;
-                            Notify($"Deleted pull {Math.Max(1, info.Pull)}", ToastKind.News, Icon.Trash);
-                        }, danger: true, yesIcon: Icon.Trash);
-            }))
-            screen = Screen.Home;
+        NavTabs();
+        Kit.Gap(10);
+        var row = Kit.At;
+        var w = Kit.Width;
+        if (Kit.Button("##pull-back", row, "All pulls", Btn.Quiet, BtnSize.Sm, Icon.ChevronLeft)) screen = Screen.Pulls;
+        const string delete = "Delete";
+        const string save = "Save as file";
+        var dw = Kit.ButtonWidth(delete, BtnSize.Sm, Icon.Trash, Btn.Quiet);
+        var sw = Kit.ButtonWidth(save, BtnSize.Sm, Icon.Download, Btn.Quiet);
+        if (Kit.Button("##pull-save", new Vector2(row.X + w - dw - S(6.4f) - sw, row.Y), save, Btn.Quiet, BtnSize.Sm, Icon.Download, 0, false,
+                "A file to import in the Raid Codex yourself (Import on its front page), or to share."))
+            SaveAs(info);
+        if (Kit.Button("##delete", new Vector2(row.X + w - dw, row.Y), delete, Btn.Quiet, BtnSize.Sm, Icon.Trash, 0, false, "Delete this pull"))
+            Ask("Delete this pull?", info.SentId != null
+                    ? "It's gone from the plugin. The copy on your Raid Codex stays there."
+                    : "It's gone for good: it isn't on your Raid Codex.",
+                "Delete", "Keep it", () =>
+                {
+                    // Out of the list at once; its file's delete and the index's and marks' writes on a worker, never in a frame.
+                    _ = store.DeleteLater(info).ContinueWith(t => Services.Log.Error(t.Exception!, "Raid Codex couldn't delete a pull"),
+                        TaskContinuationOptions.OnlyOnFaulted);
+                    screen = Screen.Pulls;
+                    Notify($"Deleted pull {Math.Max(1, info.Pull)}", ToastKind.News, Icon.Trash);
+                }, danger: true, yesIcon: Icon.Trash);
+        Kit.Reserve(row, w, S(HSm));
         Frame.EndHeader();
 
-        Frame.BeginBody("##pull", "pull-footer");
-        Kit.Facts(new[]
-        {
-            new Kit.Fact("Length", Format.Clock(info.Duration)),
-            new Kit.Fact("Ended", info.Outcome == Outcome.Wipe ? "Wipe" : info.Outcome == Outcome.Clear ? "Clear" : "Ended",
-                Color: info.Outcome == Outcome.Wipe ? Palette.Danger : info.Outcome == Outcome.Clear ? Palette.White : Palette.Muted, Sans: true),
-            new Kit.Fact("Mechanics", Format.Thousands(info.Mechanics)),
-            PartyFact(info),
-        });
+        Frame.BeginBody("##pull", null, 14);
+        var dl = Kit.Dl;
+        w = Kit.Width;
+        var ep = Kit.At;
+        Kit.Eyebrow(dl, ep, $"{Capital(Format.Day(info.RecordedAt, DateTimeOffset.Now))} · {info.Duty}", null, w);
+        Kit.Reserve(ep, w, Kit.EyebrowH);
+        Kit.Gap(10);
+
+        // PULL 12 [WIPE] ……… 6:31
+        var at = Kit.At;
+        var (tag, kind) = OutcomeTag(info.Outcome);
+        var length = Format.Clock(info.Duration);
+        var lengthW = Txt.Width(length, Face.MonoSemibold, 18);
+        var rowH = S(26);
+        var title = $"Pull {Math.Max(1, info.Pull)}";
+        var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12);
+        var line = Kit.CalloutLines(title, 22, room, 1)[0];
+        var tw = Txt.Line(dl, at, line, Face.Callout, 22, Palette.White, 26);
+        Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
+        Txt.LineRight(dl, at.X + w, at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
+        Kit.Reserve(at, w, rowH);
+        Kit.Gap(10);
+
         var state = pullView;
+        var before = Before(info);
+        var gist = GistOf(info, false);
+        Txt.Para(Runs(PullGist.Sentence(info.Outcome, info.Duration, gist, before is { } b ? (b.Pull, b.Duration) : null)), 20);
         if (state?.View is { } view)
         {
             Kit.Gap(14);
             DrawScale(view, info.Duration);
         }
+        Kit.Gap(14);
+        DrawPullUpload(info);
         DrawWhatsIn(state);
         Frame.EndBody();
+    }
 
-        Frame.BeginFooter("pull-footer");
-        DrawSend("##pull-", info, "It waits in the Raid Codex under From the game. Make it a plan there: a step for each mechanic, yours to edit.", grow: true);
-        Frame.EndFooter();
+    /// <summary>
+    /// The pull's upload: on your Raid Codex, a box with a tick, since when, and Open in Review as the telegraph (Send
+    /// another copy under it); else where Upload my logs stands with it, and the send as it's always been (link, send,
+    /// sending, failed).
+    /// </summary>
+    private void DrawPullUpload(RecordingInfo info)
+    {
+        sends.TryGetValue(info.File, out var s);
+        var now = store.Find(info.File) ?? info;
+        if (now.SentId is { } sentId && s is not { Result: null } && !(s?.Result is { Sent: false } r && SendFailure.Of(r) is { Fix: not SendFix.Stopped }))
+        {
+            Kit.BeginPanel("##pull-sent", 12, 14, 12, Palette.Slab, Palette.Line, Palette.RadiusMd + 2);
+            var at = Kit.At;
+            var w = Kit.Width;
+            var dl = Kit.Dl;
+            const string open = "Open in Review";
+            var bw = Kit.ButtonWidth(open, BtnSize.Sm, Icon.ExternalLink, Btn.Tele);
+            var h = S(HSm);
+            Kit.Tick(dl, new Vector2(at.X + S(8), at.Y + h / 2), 16);
+            var text = PullGist.SinceLine(now.SentAt ?? now.RecordedAt, DateTimeOffset.Now);
+            var tx = at.X + S(16) + S(10);
+            Txt.Line(dl, new Vector2(tx, at.Y), Txt.Fit(text, Face.Sans, 13, at.X + w - bw - S(12) - tx), Face.Sans, 13, Palette.Text, HSm);
+            if (Kit.Button("##pull-review", new Vector2(at.X + w - bw, at.Y), open, Btn.Tele, BtnSize.Sm, Icon.ExternalLink))
+                Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
+            Kit.Reserve(at, w, h);
+            Kit.EndPanel();
+            Kit.Gap(8);
+            var note = s?.Result is { Thinned: true } ? "Sent with fewer of the party's places: it was too big whole. " : string.Empty;
+            if (Txt.Para(new[] { new Run(note, Face.Sans, 12, Palette.Faint), new Run("Send another copy", Face.SansMedium, 12, Palette.White, "again") }, 17) == "again")
+                Send(info);
+            return;
+        }
+        if (s is not { Result: null } && UploadWaitLine(info) is { } waiting)
+        {
+            var at = Kit.At;
+            var w = Kit.Width;
+            Icons.Draw(Kit.Dl, Icon.Clock, new Vector2(at.X, at.Y + (S(19) - S(15)) / 2), S(15), Palette.Faint);
+            Txt.Line(Kit.Dl, new Vector2(at.X + S(23), at.Y), Txt.Fit(waiting, Face.Sans, 13, w - S(23)), Face.Sans, 13, Palette.Muted, 19);
+            Kit.Reserve(at, w, S(19));
+            Kit.Gap(10);
+        }
+        DrawSend("##pull-", info, "It waits in the Raid Codex under From the game. Make it a plan there: a step for each mechanic, yours to edit.", grow: true, withSave: false);
     }
 
     /// <summary>
@@ -125,7 +191,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, S(34));
     }
 
-    /// <summary>What's in it: its head, then the list (reading, failed or empty, the Boss says so), then the footnote.</summary>
+    /// <summary>What happened: its head, then the list (reading, failed or empty, the Boss says so).</summary>
     private void DrawWhatsIn(PullState? state)
     {
         Kit.Gap(22);
@@ -140,7 +206,7 @@ public sealed partial class MainWindow
             if (view.WipeDeaths > 0) extras.Add("the wipe");
             aside = extras.Count > 0 ? string.Join(" · ", extras) : null;
         }
-        Kit.Section("##whats-in", "What's in it", aside);
+        Kit.Section("##whats-in", "What happened", aside);
         Kit.Gap(10);
 
         if (view == null || view.Rows.Count == 0)
@@ -151,16 +217,12 @@ public sealed partial class MainWindow
             return;
         }
 
-        // The list in its slab, scrolling inside it; the footnote under it.
-        const string foot = "The Raid Codex makes a step of each moment something goes off, with the party where they stood, or in standard spots if you'd rather.";
-        var footH = Txt.Flow(Vector2.Zero, Kit.Width, new[] { Run.Note(foot) }, 19.5f, out _, draw: false);
+        // The list in its slab, scrolling inside it, filling what's left of the window.
         var rowH = S(42);
         var listH = rowH * view.Rows.Count + S(6) * 2;
-        var room = Frame.RoomLeft() - S(12) - footH;
+        var room = Frame.RoomLeft();
         var h = MathF.Max(MathF.Min(listH, room), MathF.Min(listH, rowH * 4 + S(12)));
         DrawRows(view, h);
-        Kit.Gap(12);
-        Txt.Note(foot);
     }
 
     /// <summary>The Boss (or the party running, while it's read), a small callout and a line, centred.</summary>

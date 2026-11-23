@@ -1018,30 +1018,57 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 560×800 at first (460×520 at the least), its header 16px down and 20 in, its body scrolling (16
 above, 18 below), a footer on the basalt band where a screen has one.
 
-- **Home** (`Views/Home.cs`): the header's state as a tag (`StateNow`): "Rec · pull 12 · 2:31"
-  ember with a beating dot while recording; "Waiting for the pull · Example Arena" in a duty that
-  records; "Following your plan · not recorded" (or "· recording starts next pull") while a pull is
-  only followed; "Recording is off"; "Not in a duty". On its right a quiet _Open the Raid Codex_
-  and the Settings button. While recording, the ember box: "Recording · pull 12 tonight" in ember and
-  "Started 23:38"; the duty as a small callout; the clock in Geist Mono 600 30px over a cast bar
-  running to the plan's length when you have a plan for the duty (named for its step: "Platforms:
-  draw-in · step 12 of your plan"; the length is its last cue's time) or to the longest pull kept
-  here; what's being recorded in mono (Casts, Markers, Tethers as each is put on, Places "8 ×2 / s", or Off);
-  _Stop now_ in the danger outline. A pull that wasn't kept says why after a _Not kept_ tag, for
-  three minutes. Then **Latest pull** (its age as the site says it): its number as a small callout,
-  the outcome as a tag, its length in mono, the duty under it when the header doesn't already say
-  it; the facts (Length, Ended, Mechanics, Party "8 places", read from the file once on a worker);
-  _What's in it →_; and the send (below). While recording the card is compact, with no telegraph
-  (nothing on Home is the one thing to do then): the facts, a sent line or how it went, and dense
-  _What's in it_, _Save as file_ and (unsent) _Send_. Then **Earlier pulls** ("Tonight · 10" when
-  they're all from this evening, "Today · 10", else "10 pulls"; _All 10 →_ past six): 50px rows, a
-  square well, "Pull 10" with its length in mono, how long ago (with the duty when it isn't the
-  latest's), the outcome's tag, a ready tick once sent, the chevron; pointed at, a faint fill and the
-  reticle. Before the first pull: the Boss asleep in a dashed ring, "Nothing pulled yet" and one
-  line, three steps numbered as waymarks (1 red, 2 yellow, 3 blue squares), _Link your account_ (the
-  telegraph, until linked) and _Open the Raid Codex_ outlined, and "Recording is off. Turn it on"
-  when it is.
-- **Sending** (`Views/Send.cs`, the latest pull and a pull's footer): not linked, _Link your account_
+- **The tabs** (0.8.0, `MainWindow.NavTabs`): _Home_ · _Pulls_ · _Settings_ along the top of every
+  screen but the setup guide, the ember cast bar under the one you're on (a pull is the Pulls tab's),
+  a hairline across the window under them; _Open the Raid Codex ↗_ quiet at their right (its icon
+  alone when the words don't fit, nothing when that doesn't either). They replace Home's old header
+  (the state tag, _Open the Raid Codex_, the Settings button) and the back buttons.
+- **Home** (`Views/Home.cs`; 0.8.0, the mock-ups' plug-main): between pulls, a _Not kept_ tag and why
+  for three minutes after a pull that wasn't kept, then the **status card** (`StatusNow`): a well and
+  "Ready for the next pull" (a pull has gone in this zone) or "Waiting for the pull" (none yet), with
+  "Example Arena · pull 13" under it (`FightRecorder.PullsHere` + 1); "Following your plan" while a
+  pull is only followed; "Recording is off" (with _Turn it on_); "Not recorded here" in a duty that
+  isn't recorded; "Not in a duty". Under it a **chip per main part** (`SetupGuide.ChipName`:
+  Recording, Uploading, Meter, "Plan: <the plan's name>" when you have one for the duty, Cooldowns,
+  Progress): a 6px dot green when on, faint when off, yellow when it's on but waits for your account;
+  each opens its Settings page (Recording, Meter, Plan window, Cooldowns; Uploading and Progress
+  Recording). Then **Latest pull**: its number as a small callout, the outcome's tag, its length in
+  mono; the duty and when, when the status card doesn't name it; the pull in a sentence in plain
+  words (`Model/PullGist.Sentence`: "Wiped at **Hello World 2**, P3. Three deaths, the first Velka
+  Moor to Latent Defect.", the mechanic in white; "Cleared in 9:41. No deaths."; before its file is
+  read, "Wiped after 6:31."); the top part opens the pull (the reticle when pointed at). Under it its
+  upload in a row (`DrawUploadLine`): a green tick and "Uploaded 2 minutes ago" with _Open in Review_;
+  "Waiting to upload" (or why it's held, stopped or refused, `UploadWaitLine`) with _Send now_;
+  "Kept on this PC" with _Link your account_; sending, the cast bar and a quiet _Stop_; failed, the
+  red box and its one button. Then **Tonight** (`Model/PullNights`: "Tonight · 12 pulls", "Last night",
+  "Friday night", a date; a night runs to 6:00): up to five of that night's earlier pulls as rows,
+  and _All pulls →_ to the Pulls tab. While a pull is recorded, the **ember card**: the beating dot
+  and "Recording pull 13" in ember mono capitals, _Stop and keep it_ in the danger outline (it ends
+  the pull here and keeps it); the duty and when it started; the clock in Geist Mono 600 30px and
+  what it runs to ("of 9:41 in your plan", the plan's last cue, `Model/PlanProgress.Length`; else "of
+  7:42, the longest here"; else "the first pull here"); the cast bar; "Step 7 of your plan
+  **Program Loop**" and on the right "next: Pantokrator in 0:18" (`PlanProgress.Next`: the next
+  step's first cue, else its written time). Under it chips for what's recorded ("312 casts · 40
+  markers · 6 tethers", "Places of 8 players" or "Places off", "Uploads when it ends" or "Kept on this
+  PC when it ends"), then the latest pull dimmed to one line ("The rest waits until the pull ends:
+  nothing here needs you while you fight."). Before the first pull: the status card, then the Boss
+  asleep, "Nothing pulled yet" and one line, three steps numbered as waymarks (1 red, 2 yellow, 3
+  blue squares), and _Link your account_ (the telegraph) until linked.
+- **A pull's facts** (`Model/PullGist`, `Views/Pulls.cs`): the phase it ended in (of the phases the
+  recording saw, `PullView.PhaseStarts`), the mechanic it ended at (the last before the wipe's first
+  death, `PullView.WipeAt`, else the end), its deaths before the wipe and the first of them (by name
+  when the recording has it, else the spot, and what killed them), the party kept. Read from the
+  pull's file on a worker, one file at a time, only for rows in view, and never while a pull is
+  recorded or followed (its read would cost the game a frame); a pull's own screen fills it from its
+  own read. Kept for the session.
+- **Pulls** (`Views/Pulls.cs`, 0.8.0): every kept pull, the newest first, by night (each its heading in
+  mono capitals: "Tonight · 12 pulls"), each night's rows in a slab (`Kit.PullListRow`): the pull's
+  number in mono, its length in mono with a _Best_ tag (each duty's fastest clear that night, else its
+  longest pull, `PullNights.Best`), how long ago and where it ended ("14 minutes ago · P3", or "at
+  Hello World"; the duty first when it isn't the night's), the outcome's tag, a green tick once it's on
+  your Raid Codex (else a faint "waiting" while Upload my logs will send it), a chevron; pointed at, a
+  faint fill and the reticle; pressed, the pull. A line on what's kept on top; none yet, the Boss asleep.
+- **Sending** (`Views/Send.cs`, a pull not yet on your Raid Codex; Home's latest pull has it in a row, above): not linked, _Link your account_
   is the telegraph and _Save as file_ outlined, "Link once, and each pull is a button away from being
   a plan."; linked, _Send to Raid Codex_ in the same place. Sending, it dims and holds still, a
   quiet _Stop_ beside it (it cancels the send; so does _Unlink_), and a cast bar "Sending pull 12 · 0.6 MB" runs under
@@ -1057,21 +1084,27 @@ above, 18 below), a footer on the basalt band where a screen has one.
   file_), anything else (_Try again_; the site's own words for players are said as it says them).
   Toasts: "Sent to your Raid Codex" (Open), "Couldn't send it" (Why: the pull's screen), "Saved …",
   "Couldn't save it there", "Deleted pull 9", "Linked to…", "Unlinked from…".
-- **A pull** (`Views/Pull.cs`): the 40px square back button, the eyebrow ("Pull 12 · tonight 23:42",
-  `Format.Day`), the duty as a small callout, Delete as an outlined icon button in danger red at the
-  far right (it asks first: "Delete this pull?", saying whether the site has a copy). The facts, then
-  the pull to its own scale (a 6px track, a tick a mechanic, the phases the recording saw, `P1`,
-  `P2`, from its target events by the recorder's rule, and a skull at each death), then **What's in
-  it** ("4 waymarks · 2 tethers · 2 deaths", and "the wipe"): its slab of 42px rows, scrolling
-  inside it and fading at its foot: the time in mono on a rail with a hollow dot, the mechanic drawn
-  small in a 30px square well as the board draws it (`Glyphs`: circle, donut, cone, line, cross,
-  stack, spread, tankbuster; a raidwide as rings; anything else a quiet ring), what it asks
-  (Dodge, Share, Apart, Tanks) before its name, "×12" in mono; deaths as red rows with the spot and
-  what hit them ("H2 died · Exaflare"; the wipe's own, a wiped pull's deaths within 6 seconds of its
-  last, left out: `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the
-  site keep; before the review it counted back from the recording's end, which runs on past the wipe). Reading it, the party in a row over a running cast bar; a file that won't read,
-  the Boss awake ("This pull won't open"); nothing in it, asleep ("Nothing went off"). The footnote
-  in muted (it's read); the footer has the send with _Send to Raid Codex_ filling the row.
+- **A pull** (`Views/Pull.cs`; 0.8.0, the mock-ups' "A pull"): under the tabs a row with _All pulls_
+  (back to the Pulls tab), _Save as file_ and _Delete_ (it asks first: "Delete this pull?", saying
+  whether your Raid Codex has a copy; deleted, the Pulls tab). The eyebrow ("Tonight 23:42 · The Omega
+  Protocol (Ultimate)", `Format.Day`), "Pull 12" as a callout at 22 with the outcome's tag and the
+  length in mono at the right; the pull in a sentence (as Home's, then how far it got against the
+  pull before it in the same duty that night: "2 seconds further than pull 11.", "1:12 short of pull
+  11."); the pull to its own scale (a 6px track, a tick a mechanic, the phases the recording saw, `P1`,
+  `P2`, from its target events by the recorder's rule, and a skull at each death). Its upload: on your
+  Raid Codex, a box with a tick, "On your Raid Codex since 23:49" (`PullGist.SinceLine`) and _Open in
+  Review_ as the telegraph, with _Send another copy_ under it; else where Upload my logs stands with
+  it, and the send (below) with _Send to Raid Codex_ filling the row. Then **What happened** ("4
+  waymarks · 2 tethers · 2 deaths", and "the wipe"): its slab of 42px rows filling what's left of the
+  window, scrolling inside it and fading at its foot: the time in mono on a rail with a hollow dot,
+  the mechanic drawn small in a 30px square well as the board draws it (`Glyphs`: circle, donut, cone,
+  line, cross, stack, spread, tankbuster; a raidwide as rings; anything else a quiet ring), what it
+  asks (Dodge, Share, Apart, Tanks) before its name, "×12" in mono; deaths as red rows with the job,
+  who (by name when the recording has it, else the spot) and what killed them ("Velka Moor died to
+  Latent Defect"; the wipe's own, a wiped pull's deaths within 6 seconds of its last, left out:
+  `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the site keep).
+  Reading it, the party in a row over a running cast bar; a file that won't read, the Boss awake
+  ("This pull won't open"); nothing in it, asleep ("Nothing went off").
 - **Settings** (`Views/Settings.cs`): the square back button, "Settings" as a small callout, the tabs
   _Recording_, _Plan window_, _Meter_, _Cooldowns_ (0.4.0), _Account_ over a hairline (dense, 32 tall
   at 13px, when the window is too narrow for them at 40). Each a slab of rows: the setting's
@@ -1098,6 +1131,49 @@ above, 18 below), a footer on the basalt band where a screen has one.
 - **The server info bar** (`Plugin.cs`): the game's own text: "● Rec 2:31" while recording, "Pull 3
   kept" for 10 seconds after; its tooltip says what a click does ("… Click to open the Raid Codex
   plugin."; it promised a send before 0.3.0). A click opens Home.
+
+## The setup guide (`UI/Views/Setup.cs`, `UI/Model/SetupGuide.cs`; since 0.8.0)
+
+A fresh install (no settings saved: `Configuration.Setup` Pending) opens it once in the main window;
+settings saved before 0.8.0 are an existing player's and never see it (`SetupState.Migrate`). It waits
+for the game: on the title screen the window isn't drawn while it's on the guide
+(`MainWindow.DrawConditions`). Finishing it, skipping it or closing the window on it makes it Done;
+Settings → Features can run it again (`ShowSetup`). Five steps, no tabs: at the top a segment a step
+(4px, ember up to the one you're on) with the steps' names under them (Welcome, Features, Account,
+Look, Done, the one you're on in white); at the foot, under a hairline, _Back_ (quiet) and the step's
+one button (the telegraph). Nothing in it reads a key: typing the token is the only keyboard use.
+
+1. **Welcome**: "First time here" in ember, "Welcome to Raid Codex", the lead, three lines with ember
+   wells (it records each pull by itself; every pull, again, on the site; your plan, step by step, in
+   the fight), and "About a minute. Everything here can be changed later in Settings, and nothing is
+   ever bound to a key." _Skip: keep the recommended setup_ (quiet: `FeaturePreset.Recommended`, Done,
+   Home) and _Set it up_.
+2. **Features**: "What should it do?"; _Start from_ Recommended · Everything · Recording only (a
+   segment applies its preset; none is picked when the switches are no preset, `Features.PresetOf`);
+   a card per main part (its well, ember when on; its name; "Needs an account" in yellow for Upload my
+   logs and Track my progress, "Account linked" in green once linked; its line; its switch). Each
+   switch changes the setting at once and saves (`Configuration.SetFeatures`; Upload my logs as its
+   own switch does, from now on: `LogUploader.SetOn`). "5 of 6 on" beside _Next_.
+3. **Account**: "Link your account" and which picks need it, by name (`SetupGuide.AccountLead`), or
+   that none does. Three steps on waymark squares: sign in on the site and open Settings › In-game
+   plugin (_Get a token ↗_, the site's page for it), copy the token, paste it here (the masked well
+   field and _Link_, the same linking as Settings → Account: `LinkToken`, a bad token said in red).
+   Linked, a ready tick, "Linked to your Raid Codex" and the token masked (the site tells the plugin
+   no account name). Then "What's shared, and with whom". While a pick needs an account and none is
+   linked, _Next_ waits (`SetupGuide.CanGoOn`) and _Do this later_ skips the step.
+4. **Look**: "Make it yours"; the meter's _Size_ (Compact · Detailed; Detailed on a fresh install,
+   `MeterCompact` false); three theme tiles (Ready Check, Readout, Grimoire: the theme's ground with
+   three bars in its colours, its name; the one picked edged in ember; picking sets `MeterTheme`),
+   "Three more themes in Settings › Damage meter."; **Where they go**, a picture of your screen with
+   a dashed box for each window that's on (Callouts in ember and Plan with Plan and callouts, Party
+   cooldowns, Meter), and _Arrange them on my screen_ (`StartArrange`: every overlay shown at once to
+   drag into place; "Arranging on your screen…" while it is), "Or later: Settings › Windows".
+5. **Done**: a green tick in a ring, "You're set", and a row per main part with an _On_ (green) or
+   _Off_ tag and a short note (`SetupGuide.DoneNote`: "Raids and trials · keeps the last 20",
+   "Linked · private to you", "Detailed · Ready Check · in duties", "Turn it on any time in Settings ›
+   Features"…). _Play a sample fight on the meter_ (the meter's sample; _Stop the sample fight_ while
+   it plays, waiting while a real fight is on) and _Show sample callouts_; "Type /raidcodex to open
+   this window again, or /raidcodex help for every command." _Finish_: Done, saved, Home.
 
 ## The meter's numbers (`Core/Meter/`, `Game/CombatMeter.cs`)
 
@@ -1783,20 +1859,21 @@ RaidPlanner/
               in the game (PlanService), summaries and the roster (Uploads), uploading every pull
               (LogUploader), the party (PartyMembers), your gear (GearReader), and the game's version
               and server time (GameClock)
-  UI/         the windows: MainWindow (Views/: Home, Pull, Send, Settings), PlanWindow and its board
+  UI/         the windows: MainWindow (Views/: Home, Pulls, Pull, Send, Settings, Setup), PlanWindow and its board
               (PlanBoard, BoardArt), MeterWindow (MeterWindow.Plate.cs: compact) and MeterDetailWindow,
               the compact meter's drawer in its themes (PlateMeter), the overlays (OverlayWindow:
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
-              Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, the themes' drawing:
-              PlateArt); Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
+              Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, Home's and the guide's
+              parts: HomeParts, the themes' drawing: PlateArt); Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
-              settings (Overlay),
-              /raidcodex's words (Commands), SVG
+              settings (Overlay), 0.8.0's main parts (Features), the setup guide's rules (SetupGuide),
+              a pull in a sentence (PullGist), pulls by night (PullNights), the plan's next step
+              (PlanProgress), /raidcodex's words (Commands), SVG
               paths, dashes), tested
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
               themes) and their OFL licences, embedded in the DLL (the licences beside it)

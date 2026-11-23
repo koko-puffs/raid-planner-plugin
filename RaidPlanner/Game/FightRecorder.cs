@@ -241,6 +241,9 @@ public sealed unsafe class FightRecorder : IDisposable
     /// <summary>The pull going on's number in this zone (recorded or followed), or 0.</summary>
     public int PullNumber => current?.Pull ?? 0;
 
+    /// <summary>The pulls begun in this zone since you came in (0.8.0: Home's "pull 13"; the next is one more).</summary>
+    public int PullsHere => pullInZone;
+
     /// <summary>A kept pull (on the framework thread, once it's written).</summary>
     public event Action<RecordingInfo>? Kept;
 
