@@ -1977,21 +1977,24 @@ entry).
 
 ## Release notes
 
-### 0.7.10 (not released yet)
+### 0.7.11 (not released yet)
 
 - **A cast is written once.** One whose start read a third of a second off was written again as a new cast (Ihuykatumu's
   Wing of Lightning: every helper's twice); while an enemy's cast of an action goes, it's that one.
+- **One hook that can't be turned on no longer keeps the others off** for the rest of the session.
+- **A pull with no attacks says more in /xllog:** the attacks' hook's state with the warning, and, when another program
+  had hooked the game's function for attacks before the plugin did, that it had (a likely cause).
+- **Diagnostics write each DoT and HoT tick message as sent** (`hot-dot`): recorded fights have had no ticks in their
+  combat block, so what the game sends for them needs seeing.
+
+### 0.7.10
 
 - **A cast points the way its caster faced.** The game leaves a cast's own facing at 0, so every recorded cast faced
   south, and the Raid Codex's replay drew a line or a cone that no hit followed pointing the wrong way. Casts now carry
   the caster's facing as they began.
 - **A pull with no attacks at all is said in /xllog.** Pulls made with 0.7.9 came through with no hits, damage or
   numbers (the game handed the plugin not one attack, though its other hooks worked); a pull of 30 s and more with none
-  now writes a warning to report, so it can be found, with the attacks' hook's state. /xllog also says when another
-  program had hooked the game's function for attacks before the plugin did, a likely cause.
-- **One hook that can't be turned on no longer keeps the others off** for the rest of the session.
-- **Diagnostics write each DoT and HoT tick message as sent** (`hot-dot`): recorded fights have had no ticks in their
-  combat block, so what the game sends for them needs seeing.
+  now writes a warning to report, so it can be found.
 
 ### 0.7.9
 
