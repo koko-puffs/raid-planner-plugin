@@ -86,8 +86,14 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Shown everywhere, not only in duties.</summary>
     public bool MeterEverywhere { get; set; }
 
-    /// <summary>Hidden out of combat (else folded to one line between pulls).</summary>
+    /// <summary>Hidden out of combat (else folded to one line between pulls), where it isn't kept open (<see cref="MeterOpenInDuties"/>).</summary>
     public bool MeterHideOutOfCombat { get; set; }
+
+    /// <summary>
+    /// In a duty it stays open between pulls, on the last pull (since 0.8.2; until then it folded to one line, or hid,
+    /// between pulls everywhere). Off, it folds or hides in duties as it does out of them.
+    /// </summary>
+    public bool MeterOpenInDuties { get; set; } = true;
 
     /// <summary>The number the meter ranks damage by and its bars run to: ENCDPS (the fight's time) or DPS (each player's own).</summary>
     public MeterRank MeterRank { get; set; } = MeterRank.EncDps;

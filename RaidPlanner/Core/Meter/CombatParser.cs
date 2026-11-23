@@ -416,7 +416,7 @@ public sealed class CombatParser
     }
 
     /// <summary>
-    /// A DoT or HoT tick (the game's actor control 23): on whom, the status (often 0), a heal or
+    /// A DoT or HoT tick (the game's actor control 1540 or 1541, since 0.8.2; 23 before): on whom, the status (often 0), a heal or
     /// damage, the amount, the source and its owner as the game said (0 none), and the target's HP.
     /// </summary>
     public void Tick(double t, uint target, uint status, bool heal, long amount, uint source, uint sourceOwner, long hp, long max)

@@ -262,9 +262,12 @@ public sealed partial class MeterWindow : Window
         if (!config.ShowMeter) return false;
         if (!config.MeterEverywhere && InDuty?.Invoke() != true) return false;
         var m = Source?.Invoke();
-        if (config.MeterHideOutOfCombat && m is { InEncounter: false, Waiting: false }) return false;
+        if (config.MeterHideOutOfCombat && !OpenBetweenPulls && m is { InEncounter: false, Waiting: false }) return false;
         return true;
     }
+
+    /// <summary>In a duty with Keep it open in duties on: between pulls it stays open on the last pull, neither folded nor hidden.</summary>
+    private bool OpenBetweenPulls => config.MeterOpenInDuties && InDuty?.Invoke() == true;
 
     public override void PreDraw()
     {
@@ -370,8 +373,9 @@ public sealed partial class MeterWindow : Window
             // Stopped, it says so (a kept fight can still be picked to look at).
             : m.Problem != null && !live && picked == null ? View.Stopped
             : shown == null && !m.Waiting ? View.Nothing
-            // Between pulls it folds to one line: the last pull's length and the party's number; a press opens it.
-            : !live && !m.Waiting && !unfolded && picked == null && Preview == null ? View.Folded
+            // Between pulls it folds to one line: the last pull's length and the party's number; a press opens it. Not in a
+            // duty with Keep it open in duties on (since 0.8.2): there the last pull stays up.
+            : !live && !m.Waiting && !unfolded && picked == null && Preview == null && !OpenBetweenPulls ? View.Folded
             : m.Waiting && picked == null ? View.Waiting
             : View.Fight;
         // Its theme's faces, compact or Detailed (the normal meter draws in the theme's faces too: DetailFonts.ForNormal).

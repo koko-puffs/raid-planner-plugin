@@ -25,9 +25,6 @@ internal sealed class Services
     /// <summary>Your equipped items (since 0.5.0: the recording's gear).</summary>
     [PluginService] internal static IGameInventory Inventory { get; private set; } = null!;
 
-    /// <summary>The numbers flying off the screen's characters: read for Diagnostics only (since 0.8.1), never changed.</summary>
-    [PluginService] internal static IFlyTextGui FlyText { get; private set; } = null!;
-
     /// <summary>The game's icons (the cooldown tracker's actions).</summary>
     [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
 }

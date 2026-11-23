@@ -180,6 +180,15 @@ public sealed partial class MainWindow
                 }
                 break;
             }
+            case SettingId.MeterOpenInDuties:
+                if (SwitchRow(i, "##meter-open-duties", n, l, config.MeterOpenInDuties,
+                        "In a duty the meter stays open between pulls, on the pull just done, so you can read it while you reset. Off, it folds to one line between pulls (or hides, "
+                        + "with Hide it out of combat on), as it does out of duties.", sub: sub, pad: 10, off: !config.ShowMeter))
+                {
+                    config.MeterOpenInDuties = !config.MeterOpenInDuties;
+                    config.Save();
+                }
+                break;
             case SettingId.MeterHide:
                 if (SwitchRow(i, "##meter-hide", n, l, config.MeterHideOutOfCombat, null, sub: sub, pad: 10, off: !config.ShowMeter))
                 {
@@ -626,7 +635,7 @@ public sealed partial class MainWindow
             case SettingId.Diagnostics:
                 if (SwitchRow(i, "##diagnostics", n, l, recorder.Diagnostics.On,
                         "While on, the raw numbers behind the readings not yet checked in the game (a cast stopped, a hit's bonus %, potions, raises, Weakness, the enmity list, the limit "
-                        + "break gauge, head signs, your recasts, DoT and HoT ticks and the numbers flying off characters) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
+                        + "break gauge, head signs, your recasts, DoT and HoT ticks) go to diagnostics-<date>.log in the recordings folder. It holds character names. Off, nothing is written. It stays as you leave it."))
                 {
                     recorder.Diagnostics.On = !recorder.Diagnostics.On;
                     config.Diagnostics = recorder.Diagnostics.On;

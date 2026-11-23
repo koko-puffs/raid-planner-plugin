@@ -466,6 +466,7 @@ public sealed partial class MainWindow
             case SettingId.ShowMeter: c.ShowMeter = d.ShowMeter; break;
             case SettingId.MeterWhere: c.MeterEverywhere = d.MeterEverywhere; break;
             case SettingId.MeterHide: c.MeterHideOutOfCombat = d.MeterHideOutOfCombat; break;
+            case SettingId.MeterOpenInDuties: c.MeterOpenInDuties = d.MeterOpenInDuties; break;
             case SettingId.MeterSize: c.MeterCompact = d.MeterCompact; break;
             case SettingId.MeterTheme: c.MeterTheme = d.MeterTheme; break;
             case SettingId.MeterRoles: c.MeterRoleColours = d.MeterRoleColours; break;

@@ -68,7 +68,7 @@ public class SettingsIndexTests
     {
         var meter = SettingsIndex.Sections(SettingsTab.Meter);
         Assert.Equal(new[] { "When it shows", "How it looks", "The numbers" }, meter.Select(s => s.Title));
-        Assert.Equal(new[] { SettingId.ShowMeter, SettingId.MeterWhere, SettingId.MeterHide }, meter[0].Rows.Select(r => r.Id));
+        Assert.Equal(new[] { SettingId.ShowMeter, SettingId.MeterWhere, SettingId.MeterOpenInDuties, SettingId.MeterHide }, meter[0].Rows.Select(r => r.Id));
         Assert.DoesNotContain(meter.SelectMany(s => s.Rows), r => r.More);
         var windows = SettingsIndex.Sections(SettingsTab.Windows).Select(s => s.Title).ToList();
         Assert.Equal(new[] { "Size", "Arrange", "Damage meter", "Plan window", "Callouts", "Party cooldowns" }, windows);

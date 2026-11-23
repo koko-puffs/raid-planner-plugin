@@ -43,7 +43,16 @@ public sealed unsafe class GameHooks : IDisposable
     /// <summary>The actor-control category of a head marker (the game's "target icon").</summary>
     private const uint HeadMarker = 34;
 
-    /// <summary>The actor-control category of a DoT's or HoT's tick (the game's "HP floating text").</summary>
+    /// <summary>
+    /// The actor-control categories of a HoT's tick (0x604) and a DoT's (0x605): on the one it lands on, the status (0 in
+    /// every tick read), the amount, the source, and (a DoT's) 0xFFFFFFFF. Read in the game (0.8.1's diagnostics, a
+    /// White Mage's Dia on dungeon trash and the boss, Regen on herself, each every 3 s, the heals as the numbers shown).
+    /// </summary>
+    private const uint HotTick = 1540;
+
+    private const uint DotTick = 1541;
+
+    /// <summary>The older actor-control category of a tick (the game's "HP floating text"; its second argument the kind): read since 0.3.0, never seen carrying a DoT or HoT.</summary>
     private const uint HotDot = 23;
 
     /// <summary>A tick's kind (the category's second argument): damage, or a heal.</summary>
@@ -59,9 +68,6 @@ public sealed unsafe class GameHooks : IDisposable
 
     /// <summary>An action, not an item or a mount (the effect's action type).</summary>
     private const byte ActionTypeAction = 1;
-
-    /// <summary>Where the game's ids for enemies and other non-players start (players' are 0x10…).</summary>
-    private const uint EnemyIds = 0x40000000;
 
     /// <summary>The id the game gives objects that exist only on your screen.</summary>
     private const uint InvalidId = 0xE0000000;
@@ -176,17 +182,6 @@ public sealed unsafe class GameHooks : IDisposable
         {
             missing.Add("head markers and damage-over-time ticks");
             Services.Log.Error(ex, "Raid Codex couldn't hook actor control");
-        }
-        try
-        {
-            // Diagnostics only: each number the game shows flying off a character (a DoT's tick shows as one), to tell a
-            // tick the game got some other way than an actor-control message (since 0.8.1). Read, never changed.
-            Services.FlyText.FlyTextCreated += OnFlyText;
-            flyTextOn = true;
-        }
-        catch (Exception ex)
-        {
-            Services.Log.Warning(ex, "Raid Codex couldn't watch the flying numbers (Diagnostics only)");
         }
         try
         {
@@ -476,18 +471,17 @@ public sealed unsafe class GameHooks : IDisposable
             // A cast stopped, as sent ([verify] arg2 the action type, arg3 the action, arg4 1 when interrupted).
             if (category == CancelCast && diag.Room())
                 diag.Write("cancel-cast", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
-            // A DoT's or HoT's tick as sent (since 0.7.10): a 0.7.8 recording of a 7-minute fight with three jobs' DoTs up had
-            // not one tick row, so what (if anything) comes as category 23 wants seeing ([verify] the arguments' order).
-            if (category == HotDot && diag.Room())
-                diag.Write("hot-dot", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
-            // Every other category about the party or an enemy, as sent (since 0.8.1): a White Mage's Dia on a striking
-            // dummy and Regen came as no category-23 message at all (only another player's Lucid Dreaming did, kind 11 for
-            // MP), so where the ticks do come wants seeing.
-            else if (category is not (CancelCast or HeadMarker) && (entityId is >= EnemyIds and < InvalidId || recorder.Combat.IsParty(entityId)) && diag.Room())
-                diag.Write("actor-control", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} cat {category} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6} {arg7} {arg8} target {(ulong)targetId:X}");
+            // A DoT's or HoT's tick as sent (since 0.7.10; categories 1540 and 1541 since 0.8.2), for checking.
+            if (category is HotDot or HotTick or DotTick && diag.Room())
+                diag.Write("hot-dot", $"actor {entityId:X8} {(recorder.Combat.IsParty(entityId) ? "party" : "other")} cat {category} args {arg1} {arg2} {arg3} {arg4} {arg5} {arg6}");
             // A head marker: its icon, and ([verify], BossMod's reading) whom it points at.
             if (category == HeadMarker) recorder.OnMarker(entityId, arg1, arg2);
-            else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4, arg5);
+            // A DoT's or HoT's tick (since 0.8.2, read in the game: a White Mage's Dia and Regen in a dungeon): on the one it
+            // lands on, its status (0 so far), the amount and the source.
+            else if (category is HotTick or DotTick) OnTick(entityId, arg1, category == HotTick, arg2, arg3);
+            // The older form (category 23, its second argument the kind): none of the game's DoTs or HoTs came this way in
+            // the logs read (only MP from Lucid Dreaming, kind 11, left out); still read should one come.
+            else if (category == HotDot && arg2 is TickDamage or TickHeal) OnTick(entityId, arg1, arg2 == TickHeal, arg3, arg4 < 0x100 && arg5 >= 0x100 ? arg5 : arg4);
             // A cast stopped: only an action's ([verify] that arg4 == 1 is "interrupted").
             else if (category == CancelCast && arg2 == ActionTypeAction && arg3 != 0) recorder.OnCancel(entityId, arg3, arg4 == 1);
         }
@@ -501,18 +495,11 @@ public sealed unsafe class GameHooks : IDisposable
         }
     }
 
-    /// <summary>
-    /// A DoT's or HoT's tick: the target, the status (often 0), a heal or damage, the amount and the
-    /// source. The arguments' order is FFXIVClientStructs' <c>StatusManager.ProcessHotDot(target,
-    /// statusId, tickMode, value, sourceEntityId, damageType)</c>; should the source and the damage
-    /// type ever come the other way round (a small number where an entity id should be), they're
-    /// taken that way. [verify in game]
-    /// </summary>
-    private void OnTick(uint target, uint status, bool heal, uint amount, uint arg4, uint arg5)
+    /// <summary>A DoT's or HoT's tick: the one it lands on, the status (often 0), a heal or damage, the amount and the source.</summary>
+    private void OnTick(uint target, uint status, bool heal, uint amount, uint source)
     {
         var parser = recorder.Combat;
         if (!parser.Listening) return;
-        var source = arg4 < 0x100 && arg5 >= 0x100 ? arg5 : arg4;
         if (source == InvalidId) source = 0;
         long hp = -1, max = -1;
         if (heal || parser.IsParty(target))
@@ -602,37 +589,9 @@ public sealed unsafe class GameHooks : IDisposable
     }
 
     /// <summary>Every hook let go of, each whatever happens to the others (one left in the game would call into an unloaded plugin).</summary>
-    private bool flyTextOn;
-
-    /// <summary>A number flying off a character, for Diagnostics (`fly-text`): its kind, its values and its words, as the game made it.</summary>
-    private void OnFlyText(ref Dalamud.Game.Gui.FlyText.FlyTextKind kind, ref int val1, ref int val2, ref Dalamud.Game.Text.SeStringHandling.SeString text1,
-        ref Dalamud.Game.Text.SeStringHandling.SeString text2, ref uint color, ref uint icon, ref uint damageTypeIcon, ref float yOffset, ref bool handled)
-    {
-        try
-        {
-            if (!diag.Room()) return;
-            diag.Write("fly-text", $"kind {kind} values {val1} {val2} icon {icon} damage-icon {damageTypeIcon} text {text1?.TextValue} | {text2?.TextValue}");
-        }
-        catch (Exception ex)
-        {
-            Failed(ex, "Raid Codex couldn't read a flying number");
-        }
-    }
-
     public void Dispose()
     {
         enabled = false;
-        if (flyTextOn)
-        {
-            try
-            {
-                Services.FlyText.FlyTextCreated -= OnFlyText;
-            }
-            catch (Exception ex)
-            {
-                Services.Log.Warning(ex, "Raid Codex couldn't stop watching the flying numbers");
-            }
-        }
         Release(effects);
         Release(control);
         Release(mapEffects);

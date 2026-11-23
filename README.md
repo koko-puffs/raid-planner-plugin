@@ -88,7 +88,7 @@ shows what most people change; the rest fold under one "N more" row.
   public, as on FF Logs, unless you make them private), _Track my progress_ (on: how far each pull got,
   who died to what, the boss's HP left and each spot's numbers, no names). More: smoother replays, the
   server info bar, the recordings folder.
-- **Damage meter**: when it shows, its size (Detailed, or Compact) and theme with a live preview, role
+- **Damage meter**: when it shows (it stays open between pulls in duties, or folds to a line), its size (Detailed, or Compact) and theme with a live preview, role
   colours, ENCDPS or DPS, names or jobs only, a sample fight; more: which way it grows, its head and
   order, the limit break gauge, its background, when a fight ends, kept fights, pace, decorations, whole
   numbers, pets and the limit break's row.

@@ -466,18 +466,20 @@ The kinds:
   taken as two-handed, each item's place and row (`hq`), and the attributes read.
 - `cancel-cast`: actor control 15 as sent: the actor, party or not, its arguments 1–6 (2 the action type,
   3 the action, 4 interrupted?).
-- `hot-dot` (since 0.7.10): actor control 23 as sent, whatever its second argument: the actor, party or not, its
+- `hot-dot` (since 0.7.10): actor control 23 (since 0.8.2 also 1540 and 1541, the ticks) as sent, whatever its second argument: the actor, party or not, its
   arguments 1–6 (as read: 1 the status, 2 the kind, 3 damage or 4 a heal, 3 the amount, 4 or 5 the source). A 0.7.8
   recording of a 7-minute fight with three jobs' DoTs up had no `tick` rows at all. A 0.8.0 log of a White Mage on a
   housing ward's striking dummy (Dia ticking for most of a minute, Regen) had none for the dummy or the White Mage
   either: the ticks don't come as this message there. The only ones were another player's Lucid Dreaming, every 3 s:
   `args 0 11 550 <id> 0 0`, so the layout read is right (no status, kind 11 MP gained, 550, a source), and kind 11
   isn't a heal (it's left out).
-- `actor-control` (since 0.8.1): every other actor-control category about the party or an enemy (an id from
-  0x40000000), as sent: the category, arguments 1–8 and the target. To see which message the ticks do come in.
-- `fly-text` (since 0.8.1): each number the game shows flying off a character (`IFlyTextGui.FlyTextCreated`, read
-  and never changed): its kind (a DoT's tick is `AutoAttackOrDot`), values, icons and words. A tick that flies with
-  no message above it came some other way than the plugin listens.
+  0.8.1 wrote every other actor-control category about the party or an enemy (`actor-control`) and each number
+  flying off a character (`fly-text`); its log of a White Mage in a dungeon (Holminster Switch) showed where the ticks
+  come: **actor control 1541 for a DoT's** (on the enemy, every 3 s while Dia was on it: `args 0 10017 <the White
+  Mage's id> 4294967295`) and **1540 for a HoT's** (on the one healed: Regen's `args 0 36328 <her id> 0`, the heals the
+  same as the numbers shown): the status (0 in every one), the amount, the source. Since 0.8.2 those are read as the
+  ticks (`GameHooks.HotTick`, `DotTick`), 23 still too should one come; this line writes all three categories as sent
+  (`cat`), and the two 0.8.1 lines are gone.
 - `party-hit`: each of the party's damage effects (autos left out): action, caster, target, the effect's
   type, Param0, Param1, the bonus % (Param2, signed), Param3, Param4, the value.
 - `enemy-hit`: an enemy's hit on a party member: every effect on them as sent `[type p0 p1 p2 p3 p4
@@ -1458,8 +1460,10 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   sample fight, below); stopped (`IMeterSource.Problem`), the
   Boss awake, "The meter has stopped" and why (`MeterView.StoppedLine`; a kept fight can still be
   picked); in combat before the first hit, "0:00" with "Waiting for the first hit" and the party with
-  dashes; between pulls it folds to one line (the last fight's length and tag, "Pull 12 · party
-  163,188", a chevron that opens it again), or hides with _Hide out of combat_. A new pull shows itself, whatever was picked before it.
+  dashes; between pulls in a duty it stays open on the pull just done (since 0.8.2, _Keep it open in duties_,
+  `MeterOpenInDuties`, on at first); out of duties, or with that off, it folds to one line between pulls (the last
+  fight's length and tag, "Pull 12 · party 163,188", a chevron that opens it again), or hides with _Hide out of
+  combat_. A new pull shows itself, whatever was picked before it.
   Pressing a row opens the meter opened up on that player; a death, on its recap.
 - **Events** (0.4.0; `IMeterSource.Events`, the session's newest 200 a fight): the fight's events as a
   feed, the newest where the top player goes (at the top highest first, at the bottom lowest first; _Order_), a 23px row each: the time in mono
@@ -1755,7 +1759,8 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   says how its numbers are worked out (Events: casts are GCDs, an interrupt is credited to whoever's
   interrupt hit the cast in the second before, time dead leaves out the wipe).
 - **Settings → Damage meter** (0.8.0; `/raidcodex meter settings` opens it). **When it shows**: _Show the meter_
-  (`/raidcodex meter` too) with _Where_ (In duties, Everywhere) and _Hide it out of combat_ under it. **How it
+  (`/raidcodex meter` too) with _Where_ (In duties, Everywhere), _Keep it open in duties_ (since 0.8.2) and _Hide it
+  out of combat_ under it. **How it
   looks**, one slab: _Size_ (Compact, Detailed: `MeterCompact`, Detailed a fresh install's since 0.8.0; the
   meter's own menu has it too), _Theme_ (the six as tiles in three columns, two when narrow: a swatch of each
   one's ground with two bars in its roles' colours and its name under it, the one picked edged in ember, where it
@@ -2203,6 +2208,14 @@ entry).
 ## Release notes
 
 ### 0.8.2 (not released yet)
+
+- **DoT and HoT ticks are recorded and on the meter**: 0.8.1's diagnostics showed the game sends them as two messages
+  the plugin didn't read (a DoT's on the enemy, a HoT's on the one healed, each with its source), so pulls and the
+  meter had none of their damage or healing. They're read now, each credited to whoever put it on.
+- **The meter stays open between pulls in duties** (_Keep it open in duties_, Settings → Damage meter, on at first):
+  the pull just done stays up while you reset. Off, it folds to one line between pulls as before (or hides, with
+  _Hide it out of combat_). Out of duties it folds as before.
+- Diagnostics no longer write every actor-control message or the flying numbers (0.8.1's, which found the ticks).
 
 - **The meter's column heads are gone** (ENCDPS and %, HPS and Over, Taken and %): the rows start under the tabs,
   and the meter is 14px shorter.

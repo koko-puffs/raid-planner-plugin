@@ -54,6 +54,9 @@ namespace RaidPlanner.UI.Model
         ShowMeter,
         MeterWhere,
         MeterHide,
+
+        /// <summary>0.8.2: the meter stays open between pulls in duties.</summary>
+        MeterOpenInDuties,
         MeterSize,
         MeterTheme,
         MeterRoles,
@@ -217,7 +220,8 @@ namespace RaidPlanner.UI.Model
             // The meter.
             new(SettingId.ShowMeter, Met, "When it shows", "Show the meter", "Its own window, over the game. /raidcodex meter too."),
             new(SettingId.MeterWhere, Met, "When it shows", "Where", "Everywhere includes the open world and dungeons.", Sub: true),
-            new(SettingId.MeterHide, Met, "When it shows", "Hide it out of combat", "Otherwise it folds to one line between pulls.", Sub: true),
+            new(SettingId.MeterOpenInDuties, Met, "When it shows", "Keep it open in duties", "Between pulls it shows the last one. Off, it folds to a line.", Sub: true),
+            new(SettingId.MeterHide, Met, "When it shows", "Hide it out of combat", "Where it isn't kept open. Otherwise it folds to a line between pulls.", Sub: true),
             new(SettingId.MeterSize, Met, "How it looks", "Size", "Compact: the top eight on plates. Detailed: tabs, pace and columns."),
             new(SettingId.MeterTheme, Met, "How it looks", "Theme", "Both meters' and the opened-up window's look."),
             new(SettingId.MeterRoles, Met, "How it looks", "Role colours", "The bars' and job icons' colours: the theme's, or the game's."),
