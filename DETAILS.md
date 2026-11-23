@@ -1970,8 +1970,14 @@ entry).
 
 ## Release notes
 
-### 0.7.9 (not released yet)
+### 0.7.10 (not released yet; 0.7.9 was never released, its change is here)
 
+- **A cast points the way its caster faced.** The game leaves a cast's own facing at 0, so every recorded cast faced
+  south, and the Raid Codex's replay drew a line or a cone that no hit followed pointing the wrong way. Casts now carry
+  the caster's facing as they began.
+- **A pull with no attacks at all is said in /xllog.** Pulls made with 0.7.9 came through with no hits, damage or
+  numbers (the game handed the plugin not one attack, though its other hooks worked); a pull of 30 s and more with none
+  now writes a warning to report, so it can be found.
 - **No full garbage collection stops the game during a pull.** Every plugin shares one memory heap; when it's big (other
   plugins' files: 3.2 GB in one report) a full collection can stop the game for a second, whoever set it off. While a
   pull goes the plugin now asks the runtime to do those in the background, and sets it back after. A collection a plugin

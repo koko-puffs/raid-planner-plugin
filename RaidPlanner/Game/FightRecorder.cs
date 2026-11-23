@@ -66,6 +66,9 @@ public sealed unsafe class FightRecorder : IDisposable
     private readonly string version;
     private readonly Stopwatch session = new();
     private double pullStart;
+
+    /// <summary>The hook's count of attacks as the pull began (<see cref="GameHooks.EffectsSeen"/>).</summary>
+    private long effectsAtStart;
     private double pullEnd = double.NaN;
     private readonly Dictionary<int, (uint Action, double Start)> casting = new();
     private readonly Dictionary<int, (uint Action, double Start)> partyCasting = new();
@@ -599,6 +602,7 @@ public sealed unsafe class FightRecorder : IDisposable
         nextWaymarks = 0;
         stopAsked = false;
         pullStart = Now;
+        effectsAtStart = hooks.EffectsSeen;
         pullEnd = double.NaN;
         // What the party did in the 30 seconds before, and the countdown (a pull only followed keeps nothing).
         if (!follow)
@@ -660,6 +664,12 @@ public sealed unsafe class FightRecorder : IDisposable
         var b = current;
         var follow = followOnly;
         if (b != null) pullEnd = Now;
+        // A pull of half a minute and more with not one attack handed over: the game stopped giving them to the plugin
+        // (its hook in place, nothing through it), so the pull has no hits, no damage and no numbers. Said, not guessed at.
+        if (b != null && !follow && Now - pullStart >= 30 && hooks.EffectsSeen == effectsAtStart)
+            Services.Log.Warning(hooks.Problem is { } why
+                ? $"Raid Codex: this pull was recorded without a single attack ({why})"
+                : "Raid Codex: not one attack came through to the plugin this pull, so it has no hits, damage or numbers. Please report it with this log.");
         current = null;
         QuietCollections.PullEnded();
         followOnly = false;
@@ -948,7 +958,9 @@ public sealed unsafe class FightRecorder : IDisposable
         var target = cast->TargetId.ObjectId is var tid and not 0 and not 0xE0000000 ? b.Who(tid) : 0;
         var loc = cast->TargetLocation;
         var aimed = loc.X != 0 || loc.Z != 0;
-        b.Cast(Math.Max(0, start), id, cast->ActionId, cast->TotalCastTime, npc.Position.X, npc.Position.Z, cast->Rotation, target,
+        // The caster's own facing as the cast began (since 0.7.10): the cast's own `Rotation` the game leaves at 0, so
+        // until then every cast faced south, and a line or cone with no hit after it was drawn pointing the wrong way.
+        b.Cast(Math.Max(0, start), id, cast->ActionId, cast->TotalCastTime, npc.Position.X, npc.Position.Z, npc.Rotation, target,
             aimed ? loc.X : null, aimed ? loc.Z : null, cast->Interruptible);
         if (Diagnostics.Room())
             Diagnostics.Write("enemy-cast", $"actor {npc.EntityId:X8} action {cast->ActionId} cast {cast->TotalCastTime:0.00} interruptible {cast->Interruptible} target {cast->TargetId.ObjectId:X8}");

@@ -211,6 +211,12 @@ public sealed unsafe class GameHooks : IDisposable
 
     public string? Problem { get; }
 
+    /// <summary>
+    /// How many attacks the game has handed the hook (every one, before anything is read from it): the recorder says in
+    /// /xllog when a whole pull went by with none (since 0.7.10, after pulls came through 0.7.9 without a single hit).
+    /// </summary>
+    public long EffectsSeen { get; private set; }
+
     /// <summary>The hooks on (a pull recorded or followed, or the meter on) or off; only a change does anything.</summary>
     public void Set(bool on)
     {
@@ -240,6 +246,7 @@ public sealed unsafe class GameHooks : IDisposable
         ActionEffectHandler.TargetEffects* targetEffects, GameObjectId* targetEntityIds)
     {
         effects!.Original(casterEntityId, casterPtr, targetPos, header, targetEffects, targetEntityIds);
+        EffectsSeen++;
         var started = Stalls.Start();
         try
         {
