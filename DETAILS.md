@@ -2164,9 +2164,32 @@ entry).
 
 ### 0.8.0 (not released yet)
 
-- **A setup guide on a fresh install**, **tabs along the top of the window**, **Settings by what you want to do**, and
-  **Arrange windows**: the mock-ups (kokos-tools' canvas "Raid Codex plugin: setup guide, windows and settings").
+The plugin's windows made easier to use (the mock-ups: kokos-tools' canvas "Raid Codex plugin: setup guide, windows
+and settings").
+
+- **A setup guide on a fresh install** (above, The setup guide): five steps, about a minute. Welcome; what it should
+  do (one switch for each main part, with Recommended, Everything and Recording only to start from); link your
+  account (when a part you picked needs one); how the meter looks and where the windows go; and what's on, with a
+  sample fight and sample callouts to try. Skip keeps the recommended setup. Existing players never get it: Settings
+  → Features runs it again.
+- **Tabs along the top of the window**: Home · Pulls · Settings. **Home** says what's on (a chip for each main part,
+  opening its settings), the latest pull in a sentence ("Wiped at Hello World 2, P3. Three deaths…") with Open in
+  Review, and tonight's pulls; while a pull is recorded, its clock and where you are in your plan, and nothing else
+  that needs you. **Pulls** lists every kept pull by night. **A pull** reads as a sentence and a strip of the fight,
+  with its upload and what happened.
+- **Settings by what you want to do**: Features, Recording and uploads, Damage meter, Plan and callouts, Party
+  cooldowns, Windows, Account and privacy, Advanced, in a sidebar (a menu on a narrow window), with _Find a setting_.
+  Each page shows what most people change; the rest fold under one "N more" row. The meter and the callouts have a
+  live preview beside their settings, and each page can be reset. Every setting is still there, some under plainer
+  names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). Opening Settings on
+  a narrow window widens it once for the sidebar.
+- **Arrange windows** (Settings → Windows, the setup guide, `/raidcodex arrange`): every window that's on shown at
+  once on your screen, with a sample in it, to drag into place; a window picked has its options beside it (which way
+  it grows, click-through, background). _Done_ locks them where they are, _Cancel_ puts everything back, _Reset
+  places_ moves them to where they first go. The main window steps aside while you arrange.
 - **The meter is Detailed on a fresh install** (it was compact since 0.7.0); saved settings keep theirs.
+- **Uploaded logs are said to be public**, as on FF Logs, wherever the plugin speaks of them (the guide included):
+  you can make yours private on the site.
 
 ### 0.7.11
 
