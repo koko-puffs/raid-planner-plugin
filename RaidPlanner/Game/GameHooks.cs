@@ -151,8 +151,13 @@ public sealed unsafe class GameHooks : IDisposable
         var missing = new List<string>();
         try
         {
-            effects = Services.GameInterop.HookFromAddress<ActionEffectHandler.Delegates.Receive>(
-                (nint)ActionEffectHandler.MemberFunctionPointers.Receive, OnEffect);
+            effectsAt = (nint)ActionEffectHandler.MemberFunctionPointers.Receive;
+            effects = Services.GameInterop.HookFromAddress<ActionEffectHandler.Delegates.Receive>(effectsAt, OnEffect);
+            // Dalamud follows a jump it finds at the function (one put there by something that isn't Dalamud: another program's
+            // hook) and hooks where it leads. Said, since 0.7.10: when that other hook doesn't hand the game's call on, or is
+            // taken away, the plugin hears no attacks at all (pulls with no hits, no damage, no numbers).
+            if (effects.Address != effectsAt)
+                Services.Log.Warning($"Raid Codex: the game's function for attacks ({effectsAt:X}) already jumps elsewhere ({effects.Address:X}), so something else hooked it first; if pulls come with no hits or damage, that is likely why");
         }
         catch (Exception ex)
         {
@@ -217,24 +222,53 @@ public sealed unsafe class GameHooks : IDisposable
     /// </summary>
     public long EffectsSeen { get; private set; }
 
+    /// <summary>Where FFXIVClientStructs says the game's function for attacks is (0 when it couldn't say).</summary>
+    private readonly nint effectsAt;
+
+    /// <summary>
+    /// The attacks' hook as it is now, in words for /xllog (since 0.7.10, with a pull that had none): made or not, on or not,
+    /// where it was put against where the game's function is, and how many attacks it has had since the plugin loaded.
+    /// </summary>
+    public string EffectsState()
+    {
+        if (effects == null) return "its hook couldn't be made";
+        bool on;
+        try
+        {
+            on = effects.IsEnabled;
+        }
+        catch (Exception)
+        {
+            on = false;
+        }
+        var where = effects.Address == effectsAt ? $"at {effectsAt:X}" : $"at {effects.Address:X}, the game's function at {effectsAt:X} jumping there";
+        return $"its hook {(on ? "on" : "off")} {where}, {EffectsSeen} attacks since the plugin loaded";
+    }
+
     /// <summary>The hooks on (a pull recorded or followed, or the meter on) or off; only a change does anything.</summary>
     public void Set(bool on)
     {
         if (on == enabled) return;
         enabled = on;
-        if (on)
+        // Each on its own (since 0.7.10): before, one that threw left those after it as they were for the session, as this
+        // isn't asked again until the wish changes.
+        Turn(effects, on);
+        Turn(control, on);
+        Turn(mapEffects, on);
+        foreach (var h in batched) Turn(h, on);
+    }
+
+    private void Turn<T>(Hook<T>? hook, bool on) where T : Delegate
+    {
+        if (hook == null) return;
+        try
         {
-            effects?.Enable();
-            control?.Enable();
-            mapEffects?.Enable();
-            foreach (var h in batched) h.Enable();
+            if (on) hook.Enable();
+            else hook.Disable();
         }
-        else
+        catch (Exception ex)
         {
-            effects?.Disable();
-            control?.Disable();
-            mapEffects?.Disable();
-            foreach (var h in batched) h.Disable();
+            Failed(ex, on ? "Raid Codex couldn't turn a hook on" : "Raid Codex couldn't turn a hook off");
         }
     }
 

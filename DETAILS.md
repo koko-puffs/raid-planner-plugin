@@ -183,7 +183,11 @@ own function first and changes nothing):
   risk.
 
 A hook that can't be made (the game changed under the plugin) is left out, the rest still
-records, and Settings → Recording says what's missing.
+records, and Settings → Recording says what's missing. Since 0.7.10 each hook is turned on and off on its own (one that
+throws no longer leaves the others as they were), /xllog says when the game's function for attacks already jumped
+somewhere else as its hook was made (another program's hook was there first: Dalamud hooks where the jump leads, so if
+that other hook doesn't hand the game's call on, no attack reaches the plugin), and a pull of 30 s and more in which the
+attacks' hook had none says so, with the hook's state (made, on, where, how many attacks since loading).
 
 Enemies are every combatant battle NPC seen, and since 0.7.5 every helper too: the game's invisible
 actors (BNpcBase 9020 and their kin) that cast nearly every real AoE, a battle NPC of sub-kind 11
@@ -1977,7 +1981,9 @@ entry).
   the caster's facing as they began.
 - **A pull with no attacks at all is said in /xllog.** Pulls made with 0.7.9 came through with no hits, damage or
   numbers (the game handed the plugin not one attack, though its other hooks worked); a pull of 30 s and more with none
-  now writes a warning to report, so it can be found.
+  now writes a warning to report, so it can be found, with the attacks' hook's state. /xllog also says when another
+  program had hooked the game's function for attacks before the plugin did, a likely cause.
+- **One hook that can't be turned on no longer keeps the others off** for the rest of the session.
 
 ### 0.7.9
 

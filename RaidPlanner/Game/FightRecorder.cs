@@ -669,7 +669,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (b != null && !follow && Now - pullStart >= 30 && hooks.EffectsSeen == effectsAtStart)
             Services.Log.Warning(hooks.Problem is { } why
                 ? $"Raid Codex: this pull was recorded without a single attack ({why})"
-                : "Raid Codex: not one attack came through to the plugin this pull, so it has no hits, damage or numbers. Please report it with this log.");
+                : $"Raid Codex: not one attack came through to the plugin this pull ({hooks.EffectsState()}), so it has no hits, damage or numbers. Please report it with this log.");
         current = null;
         QuietCollections.PullEnded();
         followOnly = false;
