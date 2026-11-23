@@ -243,7 +243,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>How many seconds before a step its sound plays.</summary>
     public int CalloutSoundLead { get; set; } = 3;
 
-    // How big the windows are (0.8.0; Settings → Windows → Size, /raidcodex size).
+    // How big the windows are (0.8.1; Settings → Windows → Size, /raidcodex size).
 
     /// <summary>
     /// Every window's size, on top of Dalamud's own scale (<see cref="UI.Model.WindowSize"/>): 0 fits the screen (bigger on
@@ -252,7 +252,7 @@ public sealed class Configuration : IPluginConfiguration
     public int WindowSize { get; set; } = UI.Model.WindowSize.Fit;
 
     /// <summary>
-    /// Screen px per CSS px the windows were last drawn at (Dalamud's scale times the plugin's; 0 before 0.8.0, when it
+    /// Screen px per CSS px the windows were last drawn at (Dalamud's scale times the plugin's; 0 before 0.8.1, when it
     /// was Dalamud's alone): the sizes ImGui remembers from then are at it, so the windows it sizes (the main window, the
     /// plan window, the meter) are grown or shrunk from it, and fitting the screen builds the fonts at it first.
     /// </summary>

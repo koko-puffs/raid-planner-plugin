@@ -4,7 +4,7 @@ using System.Globalization;
 namespace RaidPlanner.UI.Model;
 
 /// <summary>
-/// How big the plugin's windows are drawn (since 0.8.0; Settings → Windows → Size): every window, its words, its
+/// How big the plugin's windows are drawn (since 0.8.1; Settings → Windows → Size): every window, its words, its
 /// icons and its spacing together, on top of Dalamud's own scale (its Global Font Scale). Fit to my screen (the
 /// default) makes them bigger on a screen taller than 1440 px, as tall as the screen is over 1440 (150% on 4K, 200%
 /// at 2880), unless Dalamud's own scale already is that big; else a size you pick, 80% to 200% of Dalamud's. Pure,

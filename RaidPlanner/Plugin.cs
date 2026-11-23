@@ -327,7 +327,7 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     /// <summary>
-    /// Screen px per CSS px the windows were drawn at when the plugin last ran: Dalamud's scale alone before 0.8.0 (or if
+    /// Screen px per CSS px the windows were drawn at when the plugin last ran: Dalamud's scale alone before 0.8.1 (or if
     /// the file says something odd).
     /// </summary>
     private float WindowScaleWas()

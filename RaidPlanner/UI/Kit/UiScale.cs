@@ -7,7 +7,7 @@ using Dalamud.Interface.Windowing;
 namespace RaidPlanner.UI;
 
 /// <summary>
-/// The plugin's own scale, on top of Dalamud's (since 0.8.0; Settings → Windows → Size, <see cref="Model.WindowSize"/>):
+/// The plugin's own scale, on top of Dalamud's (since 0.8.1; Settings → Windows → Size, <see cref="Model.WindowSize"/>):
 /// <see cref="Theme.S"/> draws every size at it, the fonts are built at it (<see cref="Fonts.Follow"/>), and the windows
 /// are given their sizes at it (<see cref="Theme.Units(Vector2)"/>). It moves when the fonts have been built at a new one,
 /// so the words and the windows move together.

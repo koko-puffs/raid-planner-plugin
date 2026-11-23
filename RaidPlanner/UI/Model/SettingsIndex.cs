@@ -118,10 +118,10 @@ namespace RaidPlanner.UI.Model
 
         // The rest.
 
-        /// <summary>0.8.0: the windows fit the screen (Settings → Windows → Size).</summary>
+        /// <summary>0.8.1: the windows fit the screen (Settings → Windows → Size).</summary>
         WindowFit,
 
-        /// <summary>0.8.0: the windows' size picked (80–200%), while they don't fit the screen.</summary>
+        /// <summary>0.8.1: the windows' size picked (80–200%), while they don't fit the screen.</summary>
         WindowScale,
         Arrange,
         Account,

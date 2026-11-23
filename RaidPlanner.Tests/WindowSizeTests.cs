@@ -4,7 +4,7 @@ using Xunit;
 
 namespace RaidPlanner.Tests;
 
-/// <summary>How big the windows are (0.8.0, Settings → Windows → Size): fitting the screen, a size picked, /raidcodex size.</summary>
+/// <summary>How big the windows are (0.8.1, Settings → Windows → Size): fitting the screen, a size picked, /raidcodex size.</summary>
 public class WindowSizeTests
 {
     [Theory]

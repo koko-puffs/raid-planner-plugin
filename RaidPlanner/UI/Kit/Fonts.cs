@@ -11,7 +11,7 @@ namespace RaidPlanner.UI;
 
 /// <summary>
 /// The faces at the sizes the windows use, loaded through Dalamud's font atlas (so they follow
-/// Dalamud's global scale and rebuild with it), times the plugin's own scale (since 0.8.0, Settings →
+/// Dalamud's global scale and rebuild with it), times the plugin's own scale (since 0.8.1, Settings →
 /// Windows → Size: <see cref="UiScale"/>; a new one builds a whole new set, drawn with once it's all
 /// built, <see cref="Follow"/>). Every (face, size) is a font in the atlas (30 on
 /// most clients, some 20,000 glyphs, a few million pixels at 100%), so the set is fixed, and a size

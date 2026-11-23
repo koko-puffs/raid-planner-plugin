@@ -245,11 +245,11 @@ public sealed partial class MainWindow : Window, IDisposable
 
     /// <summary>
     /// Its size the first time it opens (CSS px): wide enough for Settings' sidebar and its pages side by side, the meter's
-    /// preview beside its settings (since 0.8.0; it was 560 × 800).
+    /// preview beside its settings (since 0.8.1; it was 560 × 800).
     /// </summary>
     private static readonly Vector2 FirstSize = new(1040, 880);
 
-    /// <summary>Its smallest and largest size (CSS px): never narrower than it first opens (since 0.8.0; it was 460 wide), as far as the screen allows.</summary>
+    /// <summary>Its smallest and largest size (CSS px): never narrower than it first opens (since 0.8.1; it was 460 wide), as far as the screen allows.</summary>
     private static readonly CssLimits Limits = new(new Vector2(1040, 520), new Vector2(2400, 2400));
 
     /// <summary>Grows or shrinks it with the windows' size (Settings → Windows → Size).</summary>

@@ -1002,7 +1002,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   error and warning boxes, the Boss (`Kit/Boss.cs`: the site's enemy shield and face from
   board/enemyArt.ts, flattened and cut into triangles once, `Model/Polygon`, shaded per vertex; asleep
   with lids and z's, awake, tilted).
-- **Size** (since 0.8.0; `Kit/UiScale.cs`, `Model/WindowSize.cs`; Settings → Windows → Size, `/raidcodex size`):
+- **Size** (since 0.8.1; `Kit/UiScale.cs`, `Model/WindowSize.cs`; Settings → Windows → Size, `/raidcodex size`):
   every size is drawn at Dalamud's global scale times the plugin's own (`Theme.S`, `Theme.Scale`), so the
   windows, their words, icons and spacing grow and shrink together. _Fit to my screen_ (on at first,
   `Configuration.WindowSize` 0) makes them as big as the screen is tall over 1440px (in tens of %: 150% on 4K,
@@ -1018,7 +1018,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   ratio, from the size they were last drawn at, kept on the screen (`ScaleFollower`); their smallest sizes are kept
   to 95% of the screen's width and 90% of its height (`CssLimits.Within`). The overlays and the meter, sized by the
   plugin every frame, follow by themselves (their saved widths and heights are CSS px). The whole scale drawn at is
-  kept (`Configuration.WindowScaleWas`; before 0.8.0, Dalamud's alone): ImGui's remembered sizes are at it, so until
+  kept (`Configuration.WindowScaleWas`; before 0.8.1, Dalamud's alone): ImGui's remembered sizes are at it, so until
   a window has been drawn its limits are at it (not clamped by the new scale's) and the follower then grows it, and
   the meter reads its first width at it; fitting starts the fonts at it (the screen isn't known before the first
   frame). A minimised game (a screen under 200px tall) keeps the size it has. The title bars stay Dalamud's own size
@@ -1036,7 +1036,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 
 ## The main window (`UI/MainWindow.cs`, `UI/Views/`)
 
-1040×880 at first and 1040×520 at the least (since 0.8.0; 560×800 and 460×520 before), the least kept to 95% of the screen's width and 90% of its height, the first size too, its header 16px down and 20 in, its body scrolling (16
+1040×880 at first and 1040×520 at the least (since 0.8.1; 560×800 and 460×520 before), the least kept to 95% of the screen's width and 90% of its height, the first size too, its header 16px down and 20 in, its body scrolling (16
 above, 18 below), a footer on the basalt band where a screen has one.
 
 - **The tabs** (0.8.0, `MainWindow.NavTabs`): _Home_ · _Pulls_ · _Settings_ along the top of every
@@ -1128,7 +1128,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
   ("This pull won't open"); nothing in it, asleep ("Nothing went off").
 - **Settings** (`Views/Settings.cs`, its rows in `Views/SettingsRows.cs`; 0.8.0): under the window's tabs (Home,
   Pulls, Settings). The window is never narrower than 1040 (above), so the sidebar is always there unless the screen
-  can't fit that (it was widened to 820 the first time Settings showed, before the window was made wider). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
+  can't fit that (in 0.8.0 it was widened to 820 the first time Settings showed). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
   setting_ (the 40px well field with the search icon; a quiet × beside it clears it), then the eight pages with
   their icons (the one you're on lit, its icon ember, its words 600): _Features_, _Recording and uploads_,
   _Damage meter_, _Plan and callouts_, _Party cooldowns_, _Windows_, _Account and privacy_, _Advanced_; at its
@@ -1169,7 +1169,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
     replays_ (dimmed while places aren't kept), _Show it in the server info bar_, _Recordings folder_ · Open.
     A hook the game hides is said in an amber warning box (here and on Advanced).
   - **Damage meter**, **Plan and callouts**, **Party cooldowns**: below (The meter's windows, The overlays).
-  - **Windows**: first **Size** (since 0.8.0; above, The windows' look, Size): _Fit to my screen_ (a switch, on)
+  - **Windows**: first **Size** (since 0.8.1; above, The windows' look, Size): _Fit to my screen_ (a switch, on)
     and under it _Window size_, a stepper from 80% to 200% in tens, dimmed while the windows fit the screen (it
     shows what fitting gives then: "Fitting your screen. Turn that off to pick."; turning fitting off starts the
     stepper there). Then a box saying _Arrange windows_ shows every window at once to drag each into place, with the
@@ -2031,7 +2031,7 @@ Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the pa
 `unlock` gives it the mouse back (and shows it), `preview` (or `sample`) shows or stops its sample,
 `settings` opens Settings on its tab (Cooldowns, Plan window). Since 0.8.0 `/raidcodex arrange` (or `arrange
 windows`) starts Arrange windows (above): every window that's on shown to drag into place, Done, Cancel and Reset
-places on its toolbar (while it's on, nothing new). Since 0.8.0 `/raidcodex size` says how big the windows are;
+places on its toolbar (while it's on, nothing new). Since 0.8.1 `/raidcodex size` says how big the windows are;
 `/raidcodex size fit` (or `auto`) fits them to the screen and `/raidcodex size 150` (or `150%`) makes them that size,
 80 to 200 in tens (`WindowSize.Parse`; above, The windows' look, Size): the way back if a size makes Settings hard to
 reach.
@@ -2194,7 +2194,15 @@ entry).
 
 ## Release notes
 
-### 0.8.0 (not released yet)
+### 0.8.1 (not released yet)
+
+- **Windows sized for your screen** (Settings → Windows → Size, `/raidcodex size`): on a screen taller than 1440 px
+  every window, its words, icons and spacing are bigger, as much as the screen is taller (150% on 4K), unless
+  Dalamud's own scale already does it; or pick a size from 80% to 200%. Open windows grow or shrink with it.
+- **The main window is wider**: 1040 at first and at the least (it was 560, and 460 at the least), as far as the
+  screen allows, so Settings' sidebar and the meter's preview always have room; Settings no longer widens it.
+
+### 0.8.0
 
 The plugin's windows made easier to use (the mock-ups: kokos-tools' canvas "Raid Codex plugin: setup guide, windows
 and settings").
@@ -2213,15 +2221,12 @@ and settings").
   cooldowns, Windows, Account and privacy, Advanced, in a sidebar (a menu on a narrow window), with _Find a setting_.
   Each page shows what most people change; the rest fold under one "N more" row. The meter and the callouts have a
   live preview beside their settings, and each page can be reset. Every setting is still there, some under plainer
-  names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). The window is wider,
-  1040 at first and at the least (as far as the screen allows), so Settings' sidebar and the previews have room.
+  names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). Opening Settings on
+  a narrow window widens it for the sidebar (once each time the window opens).
 - **Arrange windows** (Settings → Windows, the setup guide, `/raidcodex arrange`): every window that's on shown at
   once on your screen, with a sample in it, to drag into place; a window picked has its options beside it (which way
   it grows, click-through, background). _Done_ locks them where they are, _Cancel_ puts everything back, _Reset
   places_ moves them to where they first go. The main window steps aside while you arrange.
-- **Windows sized for your screen** (Settings → Windows → Size, `/raidcodex size`): on a screen taller than 1440 px
-  every window, its words, icons and spacing are bigger, as much as the screen is taller (150% on 4K), unless
-  Dalamud's own scale already does it; or pick a size from 80% to 200%. Open windows grow or shrink with it.
 - **The meter is Detailed on a fresh install** (it was compact since 0.7.0); saved settings keep theirs.
 - **Uploaded logs are said to be public**, as on FF Logs, wherever the plugin speaks of them (the guide included):
   you can make yours private on the site.
