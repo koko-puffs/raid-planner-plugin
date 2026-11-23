@@ -1032,7 +1032,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
 
 ## The main window (`UI/MainWindow.cs`, `UI/Views/`)
 
-560×800 at first (460×520 at the least), its header 16px down and 20 in, its body scrolling (16
+1040×880 at first and 1040×520 at the least (since 0.8.0; 560×800 and 460×520 before), the least kept to 95% of the screen's width and 90% of its height, the first size too, its header 16px down and 20 in, its body scrolling (16
 above, 18 below), a footer on the basalt band where a screen has one.
 
 - **The tabs** (0.8.0, `MainWindow.NavTabs`): _Home_ · _Pulls_ · _Settings_ along the top of every
@@ -1123,8 +1123,8 @@ above, 18 below), a footer on the basalt band where a screen has one.
   Reading it, the party in a row over a running cast bar; a file that won't read, the Boss awake
   ("This pull won't open"); nothing in it, asleep ("Nothing went off").
 - **Settings** (`Views/Settings.cs`, its rows in `Views/SettingsRows.cs`; 0.8.0): under the window's tabs (Home,
-  Pulls, Settings). The first time Settings shows after the window opens, a narrower window is widened to 820 (as
-  far as the screen allows; through `Size` for one frame, as Dalamud sizes it after PreDraw). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
+  Pulls, Settings). The window is never narrower than 1040 (above), so the sidebar is always there unless the screen
+  can't fit that (it was widened to 820 the first time Settings showed, before the window was made wider). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
   setting_ (the 40px well field with the search icon; a quiet × beside it clears it), then the eight pages with
   their icons (the one you're on lit, its icon ember, its words 600): _Features_, _Recording and uploads_,
   _Damage meter_, _Plan and callouts_, _Party cooldowns_, _Windows_, _Account and privacy_, _Advanced_; at its
@@ -2209,8 +2209,8 @@ and settings").
   cooldowns, Windows, Account and privacy, Advanced, in a sidebar (a menu on a narrow window), with _Find a setting_.
   Each page shows what most people change; the rest fold under one "N more" row. The meter and the callouts have a
   live preview beside their settings, and each page can be reset. Every setting is still there, some under plainer
-  names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). Opening Settings on
-  a narrow window widens it for the sidebar (once each time the window opens).
+  names (_Record fights by themselves_ is _Record my pulls_, _In every duty_ is _Which duties_). The window is wider,
+  1040 at first and at the least (as far as the screen allows), so Settings' sidebar and the previews have room.
 - **Arrange windows** (Settings → Windows, the setup guide, `/raidcodex arrange`): every window that's on shown at
   once on your screen, with a sample in it, to drag into place; a window picked has its options beside it (which way
   it grows, click-through, background). _Done_ locks them where they are, _Cancel_ puts everything back, _Reset

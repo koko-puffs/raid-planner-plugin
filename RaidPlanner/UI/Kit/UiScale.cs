@@ -84,6 +84,29 @@ public sealed class CssLimits
     public Vector2 Min { get; }
     public Vector2 Max { get; }
 
+    /// <summary>How much of the screen's width a window's smallest size may take at most (<see cref="Within"/>).</summary>
+    public const float ScreenShare = 0.95f;
+
+    private (float Factor, Vector2 Screen) withinAt = (-1, default);
+    private WindowSizeConstraints within;
+
+    /// <summary>
+    /// For <see cref="Window.SizeConstraints"/>, the smallest size kept to 95% of the screen's width and 90% of its height
+    /// (screen px; zero: not known), so a big window at a big size never needs more than the screen has.
+    /// </summary>
+    public WindowSizeConstraints Within(Vector2 screen)
+    {
+        var f = UiScale.Factor;
+        if (withinAt.Factor == f && withinAt.Screen == screen) return within;
+        withinAt = (f, screen);
+        var min = Min * f;
+        var units = ImGuiHelpers.GlobalScale;
+        if (units > 0 && screen.X > 0) min.X = System.MathF.Min(min.X, screen.X * ScreenShare / units);
+        if (units > 0 && screen.Y > 0) min.Y = System.MathF.Min(min.Y, screen.Y * 0.9f / units);
+        within = new WindowSizeConstraints { MinimumSize = min, MaximumSize = Vector2.Max(Max * f, min) };
+        return within;
+    }
+
     /// <summary>For <see cref="Window.SizeConstraints"/>.</summary>
     public WindowSizeConstraints Now
     {
