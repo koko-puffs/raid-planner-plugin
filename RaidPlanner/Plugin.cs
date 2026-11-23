@@ -144,7 +144,19 @@ public sealed class Plugin : IDalamudPlugin
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
             // Arrange windows (0.8.0): Settings → Windows and the setup guide start it; /raidcodex arrange too.
-            window.StartArrange = arrangeWindow.Start;
+            // The main window steps aside while the windows are arranged (it would cover them), and comes back after.
+            var mainAside = false;
+            window.StartArrange = () =>
+            {
+                mainAside = window.IsOpen;
+                window.IsOpen = false;
+                arrangeWindow.Start();
+            };
+            arrangeWindow.Ended = () =>
+            {
+                if (mainAside) window.IsOpen = true;
+                mainAside = false;
+            };
             window.Arranging = () => ArrangeMode.On;
             planWindow.OpenSettings = window.ShowAccount;
             // A fresh install: the setup guide opens once (0.8.0); it's Done when finished or skipped.

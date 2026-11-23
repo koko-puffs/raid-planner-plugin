@@ -57,50 +57,50 @@ Record the fights you're in, then make them into plans on
 
 ## Using it
 
+The first time, a short **setup guide** opens: pick what you want on (recording, uploads, the meter, your plan
+and callouts, the party's cooldowns, your progress), link your account, choose how the meter looks and
+place the windows. You can run it again from Settings → Features.
+
 1. Go into a duty and fight. The server info bar shows **● Rec 2:31** while a pull is recorded.
-2. `/raidcodex`: the latest pull is at the top. **Send to Raid Codex** (link your account first:
-   Settings → Account, with a token from the site's Settings → Raid Codex → In-game plugin), or
-   **Save as file**.
+2. `/raidcodex`: **Home** says what's on and shows the latest pull in a sentence, with **Open in Review**;
+   **Pulls** lists every pull kept. A pull goes to your Raid Codex as it ends once your account is linked
+   (Settings → Account and privacy, with a token from the site's Settings → Raid Codex → In-game plugin), or
+   **Send to Raid Codex** / **Save as file** on the pull.
 3. On the site: _From the game_ → **Make a plan**. Pick where the party goes (where they stood,
    standard spots, or nowhere), check the arena, choose the steps, and it opens in the editor.
 
-In a duty you've made a plan for, its window opens by itself. Move it where you like and lock it
-there; its list button picks any of your plans.
+In a duty you've made a plan for, its window opens by itself. **Arrange windows** (Settings → Windows, or
+`/raidcodex arrange`) shows every window at once to drag into place, then locks them.
 
 `/raidcodex settings` opens Settings; `/raidcodex help` lists every command in chat. Each works
-with `/rc` in place of `/raidcodex`.
+with `/rc` in place of `/raidcodex`. Nothing is ever bound to a key.
 
 ### Settings
 
-- **Record fights by themselves**: on. Off, nothing is recorded (an open plan window still follows
-  the pull, without keeping it).
-- **In every duty**: off. On, dungeons and field operations are recorded too (never the Occult
-  Crescent).
-- **Record where the party stands**: on. Off, only the enemies and their attacks are kept, for
-  working out your own strats. _Smoother replays_ (on) keeps their places four times a second.
-- **Keep the last** 20 pulls (5 to 100). Past that, the oldest sent ones go first; pulls still to
-  be uploaded are held (up to 200).
-- **Upload my logs**: on (once linked). Every pull goes whole to your logs on the Raid Codex as it
-  ends. _Upload my older pulls_ sends the ones kept from before; _Who sees your logs_ opens the
-  site's Settings → Your logs, where you can make yours private.
-- **Track my progress**: on. How far each pull got, who died to what, the boss's HP left and each
-  spot's damage, healing and fails (spots and jobs, no names).
-- **Show it in the server info bar**: on.
-- **Diagnostics**: off until you turn it on; it stays as you leave it. On, what it reads from the game goes
-  to `diagnostics-<date>.log` in the recordings folder, for checking it; the file holds character names.
-- **Plan window**: _Show my plan in duties_ (on), _Lock it where it is_, _Say each step in chat_ (on),
-  _Share my step with the site_ (off, so Present can follow), and _Send my party to my roster_, which
-  sends your party's names to your own account, only when you press it. _On-screen callouts_ (on): how far ahead, how many, a sound before
-  each step (off; one of the game's own), and where and how the window sits.
-- **Meter**: _Show the meter_ (on, in duties or everywhere, folded or hidden out of combat), ENCDPS or
-  DPS, names or jobs only, lock and click-through, which way it grows (down, or up with its clock and
-  buttons at the foot), compact (on) and its theme with a live preview, role colours (the theme's or
-  the game's), whole numbers, decorations, its background, a sample fight to
-  see it mid-fight, when a fight ends, how many pulls it keeps, what pace compares with, and where
-  the limit break gauge goes (head, foot or off).
-- **Cooldowns**: _Show the tracker_ (off), in duties or everywhere, yours too, those ready hidden or
-  not, the limit break gauge, which cooldowns (by kind, each on or off), and where and how it sits
-  (lock, click-through, grows, compact, background, a sample).
+Settings has a page for each thing you might want to change, and _Find a setting_ at the top. Each page
+shows what most people change; the rest fold under one "N more" row.
+
+- **Features**: one switch for each main part, what each is doing now, and the setup guide again.
+- **Recording and uploads**: _Record my pulls_ (on), in raids and trials or every duty, _Record where the
+  party stands_ (on; off keeps only the enemies and their attacks), _Keep the last_ 20 pulls (5 to 100;
+  the oldest sent go first, pulls still to upload are held up to 200), _Upload my logs_ (on, once linked)
+  with _Upload my older pulls_ and _Who sees my logs_ (the site's Settings → Your logs: your logs are
+  public, as on FF Logs, unless you make them private), _Track my progress_ (on: how far each pull got,
+  who died to what, the boss's HP left and each spot's numbers, no names). More: smoother replays, the
+  server info bar, the recordings folder.
+- **Damage meter**: when it shows, its size (Detailed, or Compact) and theme with a live preview, role
+  colours, ENCDPS or DPS, names or jobs only, a sample fight; more: which way it grows, its head and
+  order, the limit break gauge, its background, when a fight ends, kept fights, pace, decorations, whole
+  numbers, pets and the limit break's row.
+- **Plan and callouts**: _Show my plan in duties_, the plan for this duty, _Say each step in chat_, the
+  on-screen callouts (how far ahead, how many, a sound before each step) with a preview, _Share my step
+  with the site_ (off) and _Send my party to my roster_ (only when you press it).
+- **Party cooldowns**: the tracker (off), in duties or everywhere, yours too, and which cooldowns by kind.
+- **Windows**: _Arrange windows_, and for each window: show it, lock it, click-through, which way it grows,
+  its background.
+- **Account and privacy**: link or unlink your account, who sees your logs, and what goes to the site.
+- **Advanced**: _Diagnostics_ (off; what it reads from the game goes to `diagnostics-<date>.log` in the
+  recordings folder, with character names), kept fights, the setup guide.
 
 ## Building it
 

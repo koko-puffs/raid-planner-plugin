@@ -61,6 +61,9 @@ public sealed class ArrangeWindow : Window
     /// <summary>Starts the meter's sample fight (set by the plugin): false when it couldn't (a real fight is on).</summary>
     public Func<bool>? StartSample { get; set; }
 
+    /// <summary>Arrange windows has ended (Done or Cancel; set by the plugin: the main window comes back if it stepped aside).</summary>
+    public Action? Ended { get; set; }
+
     private static ArrangeSession Session => ArrangeMode.Session;
 
     // ---------------------------------------------------------------------------------------------
@@ -212,6 +215,7 @@ public sealed class ArrangeWindow : Window
         config.Save();
         IsOpen = false;
         Panel.IsOpen = false;
+        Ended?.Invoke();
     }
 
     /// <summary>A window's place and options now.</summary>

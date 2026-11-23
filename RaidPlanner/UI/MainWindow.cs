@@ -140,7 +140,7 @@ public sealed partial class MainWindow : Window, IDisposable
             config.Setup = Model.SetupState.Done;
             config.Save();
         }
-        settingsTab = SettingsTab.Recording;
+        settingsTab = SettingsTab.Features;
         Dismiss();
     }
 
@@ -191,10 +191,33 @@ public sealed partial class MainWindow : Window, IDisposable
             if (screenH > 0 && scale > 0 && Size is { } size && size.Y * scale > screenH * 0.9f)
                 Size = new Vector2(size.X, MathF.Max(520, screenH * 0.9f / scale));
         }
+        // Settings' sidebar needs about 700px beside its pages: opening Settings on a narrower window widens it once
+        // (to 820, as far as the screen allows); leaving and coming back doesn't, so a width you chose stays.
+        if (screen == Screen.Settings && !settingsWidened)
+        {
+            settingsWidened = true;
+            var scale = Dalamud.Interface.Utility.ImGuiHelpers.GlobalScale;
+            var screenW = ImGui.GetMainViewport().Size.X;
+            if (scale > 0 && lastSize.X > 0 && lastSize.X < SettingsWide * scale && screenW > 0)
+            {
+                var w = MathF.Min(SettingsWide * scale, screenW * 0.9f);
+                if (w > lastSize.X) ImGui.SetNextWindowSize(new Vector2(w, lastSize.Y), ImGuiCond.Always);
+            }
+        }
+        else if (screen != Screen.Settings) settingsWidened = false;
         Theme.PushFrame();
     }
 
     private bool firstSizeFitted;
+
+    /// <summary>The window's width for Settings with its sidebar (CSS px).</summary>
+    private const float SettingsWide = 820;
+
+    /// <summary>Settings has been widened since it was opened.</summary>
+    private bool settingsWidened;
+
+    /// <summary>The window's size as last drawn (screen px).</summary>
+    private Vector2 lastSize;
 
     public override void PostDraw()
     {
@@ -216,6 +239,7 @@ public sealed partial class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        lastSize = ImGui.GetWindowSize();
         Kit.ResetFrame();
         Frame.ResetFrame();
         Theme.PushInside();
