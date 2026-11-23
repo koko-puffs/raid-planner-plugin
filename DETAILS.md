@@ -466,6 +466,9 @@ The kinds:
   taken as two-handed, each item's place and row (`hq`), and the attributes read.
 - `cancel-cast`: actor control 15 as sent: the actor, party or not, its arguments 1–6 (2 the action type,
   3 the action, 4 interrupted?).
+- `hot-dot` (since 0.7.10): actor control 23 as sent, whatever its second argument: the actor, party or not, its
+  arguments 1–6 (as read: 1 the status, 2 the kind, 3 damage or 4 a heal, 3 the amount, 4 or 5 the source). A 0.7.8
+  recording of a 7-minute fight with three jobs' DoTs up had no `tick` rows at all.
 - `party-hit`: each of the party's damage effects (autos left out): action, caster, target, the effect's
   type, Param0, Param1, the bonus % (Param2, signed), Param3, Param4, the value.
 - `enemy-hit`: an enemy's hit on a party member: every effect on them as sent `[type p0 p1 p2 p3 p4
@@ -1984,6 +1987,8 @@ entry).
   now writes a warning to report, so it can be found, with the attacks' hook's state. /xllog also says when another
   program had hooked the game's function for attacks before the plugin did, a likely cause.
 - **One hook that can't be turned on no longer keeps the others off** for the rest of the session.
+- **Diagnostics write each DoT and HoT tick message as sent** (`hot-dot`): recorded fights have had no ticks in their
+  combat block, so what the game sends for them needs seeing.
 
 ### 0.7.9
 
