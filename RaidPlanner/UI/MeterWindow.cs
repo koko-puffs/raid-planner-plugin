@@ -27,7 +27,8 @@ namespace RaidPlanner.UI;
 /// combat it folds to one line (as it shrinks to the Boss before any fight, or when the meter has stopped).
 /// It stays put at its anchor as it does: its top edge growing down, its bottom edge growing up. Its head sits
 /// at the top or the bottom and its rows read highest or lowest first, apart from that (<see cref="MeterArrange"/>,
-/// since 0.7.4). Its numbers come from <see cref="IMeterSource"/> only.
+/// since 0.7.4). Its numbers come from <see cref="IMeterSource"/> only. While Arrange windows has it
+/// (<see cref="ArrangeMode"/>) it shows wherever you are, unlocked, under its arranging head with a dashed outline.
 /// </summary>
 public sealed partial class MeterWindow : Window
 {
@@ -229,13 +230,35 @@ public sealed partial class MeterWindow : Window
     /// </summary>
     private MeterArrange Arr => config.MeterArrangeNow();
 
+    /// <summary>Arrange windows is on and the meter takes part: shown, unlocked, with its arranging head and outline (<see cref="ArrangeMode"/>).</summary>
+    private bool Arranging => ArrangeMode.Shows(ArrangePart.Meter);
+
+    /// <summary>Locked as Settings says, except while it's arranged.</summary>
+    private bool Locked => config.MeterLocked && !Arranging;
+
+    /// <summary>Reset places was pressed (Arrange windows): put at its first place once its size is known.</summary>
+    private bool resetWanted;
+
+    /// <summary>Reset places (Arrange windows): back to its first place (<see cref="ArrangeLayout.MeterFirst"/>) at its next frame.</summary>
+    public void ResetPlace() => resetWanted = true;
+
+    /// <summary>Its width now (CSS px; the normal meter's, which you can size: compact's is its theme's).</summary>
+    public float WidthCss => widthCss;
+
+    /// <summary>Cancel in Arrange windows: the normal meter's width put back (it's ImGui's, not a setting).</summary>
+    public void PutWidth(float css)
+    {
+        if (css > 0) widthCss = css;
+    }
+
     /// <summary>Its head at the bottom edge (the foot at the top), whichever way it grows.</summary>
     private bool HeadBottom => config.MeterHead == MeterHead.Bottom;
 
     /// <summary>Shown when wanted, in a duty (or everywhere), and not hidden out of combat.</summary>
     public override bool DrawConditions()
     {
-        if (Preview != null) return true;
+        // Arranged it shows wherever you are (in its sample when one could start).
+        if (Preview != null || Arranging) return true;
         if (!config.ShowMeter) return false;
         if (!config.MeterEverywhere && InDuty?.Invoke() != true) return false;
         var m = Source?.Invoke();
@@ -295,7 +318,10 @@ public sealed partial class MeterWindow : Window
             {
                 try
                 {
+                    var arranging = Arranging;
+                    if (arranging) ArrangeMode.Head(ArrangePart.Meter);
                     DrawInside();
+                    if (arranging) ArrangeMode.Outline(ArrangePart.Meter);
                 }
                 finally
                 {
@@ -362,19 +388,21 @@ public sealed partial class MeterWindow : Window
     private void Arrange()
     {
         if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) heldOnMe = false;
-        held = heldOnMe && !config.MeterLocked;
+        held = heldOnMe && !Locked;
         if (!held) Commit();
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
-        if (config.MeterLocked)
+        // Arranged: its own head in place of the title bar (and no ×), movable (and sizable, the normal meter).
+        if (Arranging) Flags |= ImGuiWindowFlags.NoTitleBar;
+        if (Locked)
         {
             // Locked: no title bar, no moving or sizing; click-through, the mouse goes to the game.
             Flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
             if (config.MeterClickThrough) Flags |= ImGuiWindowFlags.NoInputs;
         }
         // Compact is never resized by hand; the normal meter isn't while the mouse is over its buttons (a press there is theirs).
-        if (!MeterLayout.Resizable(config.MeterCompact, config.MeterLocked) || guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
+        if (!MeterLayout.Resizable(config.MeterCompact, Locked) || guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = ImGuiHelpers.GlobalScale;
-        var chrome = config.MeterLocked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         if (config.MeterCompact)
         {
             ArrangePlate(scale, chrome);
@@ -422,6 +450,14 @@ public sealed partial class MeterWindow : Window
     /// <summary>Places the window from its anchor for this size (screen px), kept on the screen; not while held, nor before its height is known.</summary>
     private void PlaceAt(float width, float height)
     {
+        if (resetWanted && !float.IsNaN(height))
+        {
+            // Reset places: its anchor as it would be at its first place, for its size now.
+            resetWanted = false;
+            var screen = ImGui.GetMainViewport().WorkPos;
+            SetAnchor(ArrangeLayout.MeterFirst(screen, new Vector2(width, height), config.MeterGrows));
+            config.Save();
+        }
         if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows || held || float.IsNaN(height)) return;
         var vp = ImGui.GetMainViewport();
         var otherScreens = (ImGui.GetIO().ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0;
@@ -479,13 +515,13 @@ public sealed partial class MeterWindow : Window
     {
         var pos = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
-        if (!config.MeterLocked)
+        if (!Locked)
         {
             var t = ImGui.GetCursorStartPos().Y;
             if (t > 0) titleH = t;
         }
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-            heldOnMe = !config.MeterLocked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
+            heldOnMe = !Locked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
         // The mouse on it, or on one of its menus (a tab picked there mustn't move the head either): its height is held.
         // Click-through (no inputs) it never is: the mouse is the game's.
         if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup)

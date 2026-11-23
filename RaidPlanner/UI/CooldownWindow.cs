@@ -38,7 +38,7 @@ public sealed class CooldownWindow : OverlayWindow
     private readonly Dictionary<(uint Member, string Key), (int Seconds, int Charges, string Time, string? Count)> words = new();
 
     public CooldownWindow(Configuration config, Fonts fonts, PartyCooldowns? game)
-        : base("Cooldowns###RaidPlannerCooldowns", config, fonts, () => config.Cooldowns, 250, new Vector2(0.14f, 0.32f)) => this.game = game;
+        : base("Cooldowns###RaidPlannerCooldowns", config, fonts, () => config.Cooldowns, 250, new Vector2(0.14f, 0.32f), ArrangePart.Cooldowns) => this.game = game;
 
     /// <summary>In a duty (shown only there unless Everywhere).</summary>
     public Func<bool>? InDuty { get; set; }

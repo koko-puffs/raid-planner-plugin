@@ -52,6 +52,7 @@ public static class CommandWords
         ("cooldowns", "shows or hides the party cooldown tracker"),
         ("callouts", "shows or hides the on-screen callouts"),
         ("cooldowns / callouts unlock, preview, settings", "gives it the mouse back, shows its sample, opens its settings"),
+        ("arrange", "shows every window that's on, to drag where you want (Done locks them)"),
         ("help", "this list"),
     ];
 

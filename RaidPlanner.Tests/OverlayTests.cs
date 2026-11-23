@@ -525,6 +525,8 @@ public class CommandWordsTests
     [InlineData("Callout  settings", "callouts settings")]
     [InlineData("meter  unlock", "meter unlock")]
     [InlineData("send  last", "send last")]
+    [InlineData("  Arrange  ", "arrange")]
+    [InlineData("ARRANGE windows", "arrange windows")]
     [InlineData("", "")]
     [InlineData("   ", "")]
     [InlineData(null, "")]
@@ -566,7 +568,7 @@ public class CommandWordsTests
         Assert.Equal(CommandWords.Help.Length + 1, lines.Length);
         Assert.Equal("/raidcodex: opens or closes the window", lines[1]);
         foreach (var words in new[] { "settings", "stop", "send last", "plan", "next / prev", "meter", "meter unlock", "meter big",
-                     "meter preview", "meter settings", "cooldowns", "callouts", "help" })
+                     "meter preview", "meter settings", "cooldowns", "callouts", "arrange", "help" })
             Assert.Contains(lines, l => l.StartsWith($"/raidcodex {words}: "));
         Assert.Contains("help", CommandWords.Normalize("HELP"));
     }

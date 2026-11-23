@@ -58,7 +58,7 @@ public sealed partial class MeterWindow
     {
         WantFonts(fonts, config.MeterTheme);
         Configure(plate, config);
-        plate.Locked = config.MeterLocked;
+        plate.Locked = Locked;
         plate.ClickThrough = config.MeterClickThrough;
         plate.PreviewOn = Preview != null;
         if (shown != null) plate.Update(shown, m, MeterLayout.Known(config.MeterTab), config.MeterRank, config.MeterWholeNumbers, Now());
@@ -114,7 +114,7 @@ public sealed partial class MeterWindow
         var t = PlateTheme;
         var e = shown;
         plate.FootNote = DateTime.UtcNow - copiedAt < CopiedFor ? "copied"
-            : config.MeterLocked && config.MeterClickThrough ? "click-through"
+            : Locked && config.MeterClickThrough ? "click-through"
             : null;
         plate.Pips = config.MeterGauge != GaugePlace.Off ? Bars(m) : null;
         plate.PipsTip = null;
@@ -175,10 +175,10 @@ public sealed partial class MeterWindow
 
         if (input.Lock)
         {
-            config.MeterLocked = !config.MeterLocked;
+            config.MeterLocked = !Locked;
             config.Save();
         }
-        if (input.Preview) Preview = null;
+        if (input.Preview && !Arranging) Preview = null;
         if (input.Menu) ImGui.OpenPopup(PlateMenu);
         if (!oneLine) DrawPlateMenu(m, input.MenuLeft, e != null);
         if (e == null) return;

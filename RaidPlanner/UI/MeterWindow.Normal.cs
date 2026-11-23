@@ -131,7 +131,7 @@ public sealed partial class MeterWindow
         var lx = right - ls;
         lx -= guard.ShiftLeft(new Vector2(lx, cy - ls / 2), new Vector2(lx + ls, cy + ls / 2));
         guard.Keep(new Vector2(lx, cy - ls / 2), new Vector2(lx + ls, cy + ls / 2));
-        var locked = config.MeterLocked;
+        var locked = Locked;
         var icon = !locked ? Icon.LockOpen : config.MeterClickThrough ? Icon.MousePointer : Icon.Lock;
         if (ThemeSkin.IconButton(dl, ink, "##meter-lock", new Vector2(lx, cy - ls / 2), ls, icon, locked,
                 locked ? "Locked where it is. Press to move and size it again." : "Lock it where it is"))
@@ -269,7 +269,8 @@ public sealed partial class MeterWindow
         var (clicked, hovered, _) = Kit.Hit("##meter-preview", pos, new Vector2(w, S(18)));
         ThemeSkin.Tag(dl, t, NI, lineTop, h, "Preview", NF.Small, t.Accent);
         if (hovered) Kit.Tooltip("A sample fight with made-up numbers. Press to stop it; a real fight stops it too.");
-        if (clicked) Preview = null;
+        // While it's arranged the sample stays (Done or Cancel stops it).
+        if (clicked && !Arranging) Preview = null;
     }
 
     /// <summary>The Preview tag in the foot, its right edge at <paramref name="right"/> (moved in out of the bottom-right grip's reach when the foot is at the bottom).</summary>
@@ -505,7 +506,7 @@ public sealed partial class MeterWindow
         else
         {
             var right = DateTime.UtcNow - copiedAt < CopiedFor ? "copied to the clipboard"
-                : config.MeterLocked && config.MeterClickThrough ? "click-through"
+                : Locked && config.MeterClickThrough ? "click-through"
                 : ended ? said.KeptAs
                 : tab switch
                 {

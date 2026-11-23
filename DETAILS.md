@@ -1764,6 +1764,63 @@ says one ("You: Reprisal −3 s").
   (_See it_: the meter's sample party, each cooldown used now and then), _Where_, _Yours too_, _Hide
   those ready_, _Limit break gauge_, then the kinds.
 
+## Arrange windows (`UI/ArrangeWindow.cs`, `UI/ArrangeMode.cs`, `UI/Model/ArrangeWindows.cs`; since 0.8.0)
+
+One mode that shows every overlay at once on the game's screen to drag into place, in place of unlocking,
+moving and locking each from its own settings. Settings → Windows and the setup guide start it (the main
+window's `StartArrange`; `Arranging` says whether it's on), and so does `/raidcodex arrange`. Its state is
+`ArrangeSession` (tested): on or off, the windows taking part, the one picked, each one's place as the mode
+started (`WindowPlace`) and the samples it started. The windows read it through `ArrangeMode` (one session).
+
+**Who takes part** (`ArrangeParts.Taking`): each window that's turned on: the meter with _Show the meter_
+on; the plan window with _Show my plan in duties_ on, or open now; the callouts and the cooldown tracker with
+their _Show_ on. With none on, the toolbar says so (Settings → Features turns them on) and has only Cancel and
+Done to press. Each shows even out of a duty, with something in it: the meter its sample fight (unless a real
+fight is on: then what it shows now), the callouts and the tracker their samples, the plan window as it is (its
+plan, or empty), opened if it was closed. Their _Preview_ tags can't be pressed meanwhile (the sample stays).
+
+**A window taking part** is unlocked whatever its lock says (`Locked` reads its setting and the mode: the
+setting isn't changed until Done), never click-through, has no title bar (so no ×) but its arranging head
+(`ArrangeMode.Head`: 26px across its top, the move icon and its name, "Meter", "Plan", "Callouts", "Party
+cooldowns", on the head's own dark ground washed white at 6%, ember at 18% when picked; nothing in it takes the
+mouse, so a drag there moves the window), and a 1.5px dashed outline round it (`ArrangeMode.Outline`, the dashes
+of `Dashes`, worked out again only when it moves or changes size: white at 55%, ember when picked). The head is
+its chrome as the title bar was (the meter's and the overlays' heights are their content's and the head's), so
+they're kept at their anchors as ever (`MeterLayout.Place`), and moved and sized as when unlocked: their anchor and
+width (the normal meter's height you give it) are saved as you let go, as always. The plan window is ImGui's to
+place and size, as ever. A press anywhere in a window picks it (`ArrangeSession.Pick`); the first taking part is
+picked at first.
+
+**The toolbar** (`ArrangeWindow`, its own window): near the bottom of the screen, centred, its foot 28px up
+(`ArrangeLayout.Toolbar`); raised near-solid with a white hairline at 20%, 14px corners and a faked shadow;
+"Arranging windows" and "Drag them where you want. They lock when you're done." and three buttons:
+
+- **Reset places** (quiet): each window to its first place, the mode going on: the callouts and the tracker
+  where `OverlayLayout.FirstAnchor` puts them before they're ever moved; the meter at ImGui's first place for a
+  window (60px in from the screen's top-left corner, `ArrangeLayout.MeterFirst`; the meter never set one itself);
+  the plan window at the right of the screen, 60px in, centred down it (`ArrangeLayout.PlanFirst`; its ImGui first
+  place is the meter's), its size kept. Each is placed at its next frame, for its size then, as the corner its
+  Grows keeps.
+- **Cancel** (outline): every window's place, size, lock, click-through, Grows and background put back as the mode
+  found them (`WindowPlace.PutBack` for the overlays; the meter's settings, its anchor, the height you gave it and
+  its width, which is ImGui's: `MeterWindow.PutWidth`; the plan window's lock, and its place and size as last
+  drawn before, or as first drawn when the mode opened it: `PlanWindow.PutAt`). A window never placed before goes
+  back to never placed (the meter to its first place). The plugin unloading mid-way cancels too.
+- **Done** (the telegraph): each window kept where it is (already saved as it moved) and locked (its _Lock it
+  where it is_, the meter's `MeterLocked`, the plan window's `PlanWindowLocked`).
+
+Done and Cancel end the mode: the samples it started stop (the meter's sample fight, the callouts' and the
+tracker's samples) and the plan window it opened closes; samples already on before it stay. The toolbar and the
+panel take no focus as they appear, can't be moved, make no sounds and ignore Escape (no keys: every action is a
+button or the command).
+
+**The options panel** (`ArrangePanel`, its own window, 250 wide, 24px in from the screen's top-right corner): the
+picked window's name, then its few options, the very settings Settings has for it: **Grows** (Down, Up: the
+edge that stays put), **Click-through** (once it's locked) and **Background** (its percentage, and a slider; the
+meter keeps 20% at least, as Settings does; saved once the knob is let go). The meter's are `MeterGrows`,
+`MeterClickThrough` and `MeterBackground`; the overlays' their `OverlaySettings`. The plan window has none of them:
+it says to drag its edges to size it.
+
 ## Layout
 
 ```
@@ -1788,14 +1845,15 @@ RaidPlanner/
               the compact meter's drawer in its themes (PlateMeter), the overlays (OverlayWindow:
               CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
               Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, the themes' drawing:
-              PlateArt); Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
+              PlateArt); Arrange windows (ArrangeWindow: the toolbar and ArrangePanel; ArrangeMode: what the
+              windows read, their head and outline); Model/ (the faces: Faces; the meter's themes' token tables: MeterTheme; compact's
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
-              settings (Overlay),
+              settings (Overlay), Arrange windows' state, places and layout (ArrangeWindows),
               /raidcodex's words (Commands), SVG
               paths, dashes), tested
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
@@ -1817,7 +1875,9 @@ What follows `/raidcodex` is read in lower case with runs of spaces as one (`Com
 Since 0.4.0: `/raidcodex cooldowns` (or `cds`, `cooldown`) shows or hides the party cooldown tracker and
 `/raidcodex callouts` the on-screen callouts (each says in chat where it will show); after either,
 `unlock` gives it the mouse back (and shows it), `preview` (or `sample`) shows or stops its sample,
-`settings` opens Settings on its tab (Cooldowns, Plan window).
+`settings` opens Settings on its tab (Cooldowns, Plan window). Since 0.8.0 `/raidcodex arrange` (or `arrange
+windows`) starts Arrange windows (above): every window that's on shown to drag into place, Done, Cancel and Reset
+places on its toolbar (while it's on, nothing new).
 
 Since 0.5.1 the command is `/raidcodex` and `/raidplan` (from when the plugin was Raid Planner) still
 works; since 0.7.4 `/rc` does too. All three are registered and each does the same

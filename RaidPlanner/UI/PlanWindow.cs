@@ -99,11 +99,56 @@ public sealed class PlanWindow : Window
     /// <summary>Opens Settings on Account (set by the plugin), for Link your account.</summary>
     public Action? OpenSettings { get; set; }
 
+    /// <summary>Arrange windows is on and the plan window takes part: unlocked, with its arranging head and outline (<see cref="ArrangeMode"/>).</summary>
+    private static bool Arranging => ArrangeMode.Shows(ArrangePart.Plan);
+
+    /// <summary>Locked as its setting says, except while it's arranged.</summary>
+    private bool Locked => config.PlanWindowLocked && !Arranging;
+
+    /// <summary>Where and how big ImGui drew it last (screen px); null before it's been drawn.</summary>
+    public (Vector2 Pos, Vector2 Size)? Drawn { get; private set; }
+
+    /// <summary>A place and size to put it at before it's next drawn (screen px; Arrange windows' Cancel and Reset places).</summary>
+    private (Vector2 Pos, Vector2? Size)? putAt;
+
+    /// <summary>The frame after one it was sized at: its size is ImGui's again (as you leave it).</summary>
+    private bool sizedOnce;
+
+    /// <summary>Puts it here at its next frame (screen px), and this size when given.</summary>
+    public void PutAt(Vector2 pos, Vector2? size) => putAt = (pos, size);
+
+    /// <summary>Reset places (Arrange windows): at the right of the screen, centred down it (<see cref="ArrangeLayout.PlanFirst"/>), its size kept.</summary>
+    public void ResetPlace()
+    {
+        var vp = ImGui.GetMainViewport();
+        var size = Drawn?.Size ?? new Vector2(340, 520) * ImGuiHelpers.GlobalScale;
+        putAt = (ArrangeLayout.PlanFirst(vp.WorkPos, vp.WorkPos + vp.WorkSize, size), null);
+    }
+
     public override void PreDraw()
     {
+        if (sizedOnce)
+        {
+            sizedOnce = false;
+            SizeCondition = ImGuiCond.FirstUseEver;
+        }
+        if (putAt is { } put)
+        {
+            putAt = null;
+            ImGui.SetNextWindowPos(put.Pos, ImGuiCond.Always);
+            if (put.Size is { } size && size.X > 0 && size.Y > 0)
+            {
+                // Dalamud sets the size after this, from Size (CSS px), so it's given there for one frame.
+                Size = size / ImGuiHelpers.GlobalScale;
+                SizeCondition = ImGuiCond.Always;
+                sizedOnce = true;
+            }
+        }
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing;
+        // Arranged: its own head in place of the title bar (and no ×).
+        if (Arranging) Flags |= ImGuiWindowFlags.NoTitleBar;
         // Locked: Dalamud's own moving and resizing are off too.
-        if (config.PlanWindowLocked) Flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
+        if (Locked) Flags |= ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
         // Not resizable while the mouse is over one of its buttons: a press there is theirs.
         else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         Theme.PushFrame();
@@ -126,8 +171,12 @@ public sealed class PlanWindow : Window
             {
                 try
                 {
+                    Drawn = (ImGui.GetWindowPos(), ImGui.GetWindowSize());
+                    var arranging = Arranging;
+                    if (arranging) ArrangeMode.Head(ArrangePart.Plan);
                     Frame.Window();
                     DrawInside();
+                    if (arranging) ArrangeMode.Outline(ArrangePart.Plan);
                 }
                 finally
                 {
@@ -491,7 +540,7 @@ public sealed class PlanWindow : Window
             x += S(HSm) + S(6.4f);
         }
         if (!lockButton) return;
-        var locked = config.PlanWindowLocked;
+        var locked = Locked;
         if (Kit.IconButton("##rp-lock", new Vector2(x, pos.Y), locked ? Icon.Lock : Icon.LockOpen,
                 locked ? "Locked where it is. Press to move and resize it again." : "Lock it where it is", locked ? Btn.Ember : Btn.Quiet, BtnSize.Sm))
         {

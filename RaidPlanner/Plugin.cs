@@ -19,7 +19,8 @@ namespace RaidPlanner;
 /// become plans, and shows your plans in the game. /raidcodex opens the window; /raidcodex stop ends
 /// the pull being recorded; /raidcodex settings opens Settings; /raidcodex plan shows the plan
 /// window, /raidcodex next and prev move its step; /raidcodex send last sends the newest pull;
-/// /raidcodex cooldowns shows the party cooldown tracker, /raidcodex callouts the on-screen callouts.
+/// /raidcodex cooldowns shows the party cooldown tracker, /raidcodex callouts the on-screen callouts;
+/// /raidcodex arrange shows every window to drag into place.
 /// /raidplan (its name before 0.5.1) still does all of it.
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
@@ -60,6 +61,9 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>The on-screen callouts (0.4.0).</summary>
     private readonly CalloutWindow calloutWindow;
+
+    /// <summary>Arrange windows (0.8.0): its toolbar (with Done, Cancel, Reset places) and its options panel.</summary>
+    private readonly ArrangeWindow arrangeWindow;
 
     private IDtrBarEntry? bar;
 
@@ -112,12 +116,16 @@ public sealed class Plugin : IDalamudPlugin
             cooldowns = new PartyCooldowns(data, recorder);
             cooldownWindow = new CooldownWindow(config, fonts, cooldowns);
             calloutWindow = new CalloutWindow(config, fonts, plans);
+            arrangeWindow = new ArrangeWindow(config, fonts, meterWindow, planWindow, calloutWindow, cooldownWindow);
             windows.AddWindow(window);
             windows.AddWindow(planWindow);
             windows.AddWindow(meterWindow);
             windows.AddWindow(meterDetail);
             windows.AddWindow(cooldownWindow);
             windows.AddWindow(calloutWindow);
+            // Last: drawn over the overlays it arranges.
+            windows.AddWindow(arrangeWindow);
+            windows.AddWindow(arrangeWindow.Panel);
             // The tracker listens to the recorder's parser and keeps its hooks on while it's shown.
             recorder.HooksWanted = () => cooldowns.WantsHooks;
             cooldownWindow.InDuty = () => recorder.DutyHere != null;
@@ -135,6 +143,9 @@ public sealed class Plugin : IDalamudPlugin
             window.PlaySound = calloutWindow.Play;
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
+            // Arrange windows (0.8.0): Settings → Windows and the setup guide start it; /raidcodex arrange too.
+            window.StartArrange = arrangeWindow.Start;
+            window.Arranging = () => ArrangeMode.On;
             planWindow.OpenSettings = window.ShowAccount;
             // A fresh install: the setup guide opens once (0.8.0); it's Done when finished or skipped.
             if (UI.Model.SetupState.Due(config.Setup)) window.ShowSetup();
@@ -145,6 +156,7 @@ public sealed class Plugin : IDalamudPlugin
             meterWindow.OpenDetail = (tab, fight, member, death) => meterDetail.Show(tab, fight, member, death);
             meterWindow.OpenSettings = window.ShowMeterSettings;
             meterWindow.StartSample = StartSample;
+            arrangeWindow.StartSample = StartSample;
             meterDetail.Source = meterSource;
             // Back to the small meter: it follows Show the meter (OnUpdate), so that's turned on too, or it would close again next frame.
             meterDetail.ShowSmall = () =>
@@ -279,6 +291,11 @@ public sealed class Plugin : IDalamudPlugin
             case "callouts settings":
                 window.ShowSettingsOn(SettingsTab.Plans);
                 break;
+            case "arrange":
+            case "arrange windows":
+                // Every window that's on, shown to drag into place (Done locks them; again while on, nothing new).
+                arrangeWindow.Start();
+                break;
             default:
                 window.Toggle();
                 break;
@@ -409,6 +426,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        // Unloaded while arranging: every window put back as the mode found it.
+        if (arrangeWindow != null) Safely(arrangeWindow.Cancel);
         Safely(() => Services.Framework.Update -= OnUpdate);
         Safely(() => Services.PluginInterface.UiBuilder.Draw -= DrawWindows);
         if (window != null)

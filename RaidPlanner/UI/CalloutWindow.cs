@@ -35,7 +35,7 @@ public sealed class CalloutWindow : OverlayWindow
     private readonly Dictionary<int, (int Seconds, string Text)> countdowns = new();
 
     public CalloutWindow(Configuration config, Fonts fonts, PlanService? plans)
-        : base("Callouts###RaidPlannerCallouts", config, fonts, () => config.CalloutOverlay, 460, new Vector2(0.5f, 0.2f)) => this.plans = plans;
+        : base("Callouts###RaidPlannerCallouts", config, fonts, () => config.CalloutOverlay, 460, new Vector2(0.5f, 0.2f), ArrangePart.Callouts) => this.plans = plans;
 
     protected override string What => "Raid Codex's callouts couldn't draw";
 

@@ -17,7 +17,8 @@ namespace RaidPlanner.UI;
 /// once you let go. Its own buttons (the Preview tag) are kept out of the reach of its resizing edges
 /// and corners, and while the mouse is over one it isn't resizable that frame (<see cref="ResizeGuard"/>).
 /// It never takes focus, makes no sounds and ignores Escape. Drawing catches what goes wrong and logs
-/// it now and then.
+/// it now and then. While Arrange windows has it (<see cref="ArrangeMode"/>) it's unlocked whatever its
+/// setting says, its arranging head in place of the title bar and a dashed outline round it.
 /// </summary>
 public abstract class OverlayWindow : Window
 {
@@ -44,11 +45,18 @@ public abstract class OverlayWindow : Window
 
     private static readonly WindowSizeConstraints Sizes = new() { MinimumSize = new Vector2(180, 20), MaximumSize = new Vector2(1200, 1400) };
 
+    /// <summary>Which window it is in Arrange windows.</summary>
+    private readonly ArrangePart part;
+
+    /// <summary>Reset places was pressed (Arrange windows): put at its first place before it's next drawn.</summary>
+    private bool resetWanted;
+
     /// <param name="firstWidth">Its width until you give it one (CSS px).</param>
     /// <param name="firstAt">Where it goes before you move it: across the screen and down it (0–1).</param>
-    protected OverlayWindow(string name, Configuration config, Fonts fonts, Func<OverlaySettings> settings, float firstWidth, Vector2 firstAt)
+    protected OverlayWindow(string name, Configuration config, Fonts fonts, Func<OverlaySettings> settings, float firstWidth, Vector2 firstAt, ArrangePart part)
         : base(name)
     {
+        this.part = part;
         Config = config;
         Fonts = fonts;
         this.settings = settings;
@@ -64,6 +72,15 @@ public abstract class OverlayWindow : Window
     public bool WantedOpen => Settings.Show || Previewing;
 
     protected OverlaySettings Settings => settings();
+
+    /// <summary>Arrange windows is on and this window takes part: shown unlocked with its arranging head and outline (<see cref="ArrangeMode"/>).</summary>
+    protected bool Arranging => ArrangeMode.Shows(part);
+
+    /// <summary>Locked as its setting says, except while it's arranged.</summary>
+    private bool Locked => Settings.Locked && !Arranging;
+
+    /// <summary>Reset places (Arrange windows): back to where it first goes (<see cref="OverlayLayout.FirstAnchor"/>) at its next frame.</summary>
+    public void ResetPlace() => resetWanted = true;
 
     /// <summary>A sample is shown (under a Preview tag) instead of the real thing.</summary>
     public bool Previewing { get; set; }
@@ -129,7 +146,7 @@ public abstract class OverlayWindow : Window
     {
         var s = Settings;
         if (!ImGui.IsMouseDown(ImGuiMouseButton.Left)) heldOnMe = false;
-        held = heldOnMe && !s.Locked;
+        held = heldOnMe && !Locked;
         if (!held && dirty)
         {
             dirty = false;
@@ -137,7 +154,9 @@ public abstract class OverlayWindow : Window
         }
         Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoFocusOnAppearing
             | ImGuiWindowFlags.NoNav;
-        if (s.Locked)
+        // Arranged: its own head in place of the title bar (and no ×), movable and sizable.
+        if (Arranging) Flags |= ImGuiWindowFlags.NoTitleBar;
+        if (Locked)
         {
             Flags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoBringToFrontOnFocus;
             if (s.ClickThrough) Flags |= ImGuiWindowFlags.NoInputs;
@@ -145,7 +164,7 @@ public abstract class OverlayWindow : Window
         // Not resizable while the mouse is over one of its buttons: a press there is theirs.
         else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = ImGuiHelpers.GlobalScale;
-        var chrome = s.Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
         contentH = MathF.Max(S(8), S(Measure(WidthCss)));
         if (held)
         {
@@ -156,6 +175,14 @@ public abstract class OverlayWindow : Window
         Size = new Vector2(WidthCss, height / scale);
         SizeCondition = ImGuiCond.Always;
         var vp = ImGui.GetMainViewport();
+        if (resetWanted)
+        {
+            // Reset places: its first anchor for its size now, as the corner its Grows keeps.
+            resetWanted = false;
+            var first = OverlayLayout.FirstAnchor(vp.WorkPos, vp.WorkPos + vp.WorkSize, WidthCss * scale, height, firstAt.X, firstAt.Y, s.Grows);
+            SetAnchor(s, first);
+            Config.Save();
+        }
         if (!s.Anchored || s.AnchorFor != s.Grows)
         {
             if (!s.Anchored)
@@ -177,13 +204,13 @@ public abstract class OverlayWindow : Window
         var s = Settings;
         var pos = ImGui.GetWindowPos();
         var size = ImGui.GetWindowSize();
-        if (!s.Locked)
+        if (!Locked)
         {
             var t = ImGui.GetCursorStartPos().Y;
             if (t > 0) titleH = t;
         }
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-            heldOnMe = !s.Locked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
+            heldOnMe = !Locked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
         if (!s.Anchored || s.AnchorFor != s.Grows)
         {
             SetAnchor(s, MeterLayout.Corner(pos, size, s.Grows));
@@ -222,7 +249,9 @@ public abstract class OverlayWindow : Window
             {
                 try
                 {
-                    Frame.Window(!Settings.Locked);
+                    var arranging = Arranging;
+                    if (arranging) ArrangeMode.Head(part);
+                    Frame.Window(!Locked);
                     var top = ImGui.GetCursorScreenPos();
                     var w = ImGui.GetWindowWidth();
                     var bottom = ImGui.GetWindowPos().Y + ImGui.GetWindowHeight();
@@ -237,6 +266,7 @@ public abstract class OverlayWindow : Window
                     }
                     ImGui.SetCursorScreenPos(top);
                     ImGui.Dummy(new Vector2(w, MathF.Max(1, bottom - top.Y)));
+                    if (arranging) ArrangeMode.Outline(part);
                 }
                 finally
                 {
@@ -275,7 +305,8 @@ public abstract class OverlayWindow : Window
         var w = Kit.TagWidth("Preview", TagKind.Plain);
         pos.X -= guard.ShiftLeft(pos, pos + new Vector2(w, S(18)));
         guard.Keep(pos, pos + new Vector2(w, S(18)));
-        var (clicked, hovered, _) = Kit.Hit(id, pos, new Vector2(w, S(18)));
+        // While it's arranged the sample stays (Done or Cancel stops it): the tag isn't pressable.
+        var (clicked, hovered, _) = Kit.Hit(id, pos, new Vector2(w, S(18)), Arranging);
         Kit.Tag(dl, pos, "Preview", TagKind.Plain, 18);
         if (hovered) Kit.Tooltip("A sample with made-up numbers. Press to stop it.");
         if (clicked) Previewing = false;
