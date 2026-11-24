@@ -483,7 +483,7 @@ public static class CooldownView
         var how = line.Exact ? "the game's own timer"
             : !line.Seen ? "not used since the tracker began watching, so taken to be ready"
             : line.Learned ? $"a {Format.Clock(line.Recast)} recast learned from their own uses"
-            : $"the game's base recast ({Format.Clock(line.Recast)}) from their last use: an estimate until they use it twice";
+            : $"the recast at their level ({Format.Clock(line.Recast)}) from their last use: an estimate until they use it twice";
         var tip = $"{line.Action.Name} · {who}. {char.ToUpperInvariant(how[0])}{how[1..]}.";
         return line.Planned is { } p ? $"{tip} {PlannedUses.Tip(p.Use)}" : tip;
     }
