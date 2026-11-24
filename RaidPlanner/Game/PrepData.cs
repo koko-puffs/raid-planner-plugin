@@ -22,10 +22,10 @@ public enum PrepItem
 /// </summary>
 public sealed class PrepData
 {
-    /// <summary>The Status sheet's Well Fed (food) and Medicated (a tincture) rows, as long known [verify: the ids].</summary>
+    /// <summary>The Status sheet's Well Fed (food) and Medicated (a tincture) rows (checked on the sheet: 48 is Well Fed, 49 Medicated).</summary>
     public const uint WellFedId = 48, MedicatedId = 49;
 
-    /// <summary>The ItemUICategory sheet's Medicine and Meal rows [verify: the rows].</summary>
+    /// <summary>The ItemUICategory sheet's Medicine and Meal rows (checked on the sheet: 44 is Medicine, 46 Meal).</summary>
     private const uint MedicineCategory = 44, MealCategory = 46;
 
     private readonly Lazy<(Dictionary<uint, int> Mitigation, HashSet<uint> WellFed)> lists = new(Read);
@@ -54,7 +54,8 @@ public sealed class PrepData
 
     /// <summary>
     /// What an item is (by its Item sheet row, its quality taken off): a meal (the Meal category), a tincture (a Medicine whose
-    /// use gives Medicated: not a potion or an elixir) [verify: the item action's first value is the status it gives], or neither.
+    /// use gives Medicated: not a potion or an elixir; the item action's first value is the status it gives, 49 on a tincture's and 48 on a meal's, as the
+    /// sheets have it), or neither.
     /// </summary>
     public PrepItem Item(uint row)
     {
