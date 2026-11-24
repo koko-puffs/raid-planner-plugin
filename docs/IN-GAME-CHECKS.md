@@ -98,6 +98,9 @@ the plugin names each tick after the caster's latest DoT on the target.
 - A synced duty (a lower-level trial): recast times with traits at the synced level (`own-recast`).
 - Actions with charges (Oblation, Divine Benison, Tetragrammaton): "1/2" and the time to the next charge.
 - Ninja's Dokumori (replaces Mug) and other level-replaced actions.
+- Since 0.9.0, the others' at level 100 (as a tank, so it isn't learned from yours): a healer's Swiftcast should come
+  back after 40 s, a machinist's Tactician, a bard's Troubadour and a dancer's Shield Samba after 90 s, from their
+  first use; in a duty synced under 94 (Swiftcast) or 88 (the others), the sheet's 60 and 120.
 
 ## 12. Client language and the windows
 
