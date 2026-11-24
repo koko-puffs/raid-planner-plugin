@@ -241,17 +241,14 @@ public sealed partial class MainWindow
             var t = replayT;
 
             // The step's words, on one line whatever their length.
-            var step = m.Steps.Count > 0 ? m.Steps[ReplayLanes.StepAt(m.Steps, t)] : null;
-            var title = step != null ? PlanJson.WithoutPhase(step.Name) : "Pull";
+            var (title, caps, prefix) = StepWords(m, ReplayLanes.StepAt(m.Steps, t));
             var px = title.Length > 23 ? 13 : title.Length > 19 ? 16 : title.Length > 15 ? 17 : 22;
-            var caps = Txt.CalloutCaps(title);
             var fitted = Txt.Fit(caps, Face.Callout, px, w);
             Txt.Line(dl, new Vector2(x0, y), fitted, Face.Callout, px, Palette.White, 26);
             if (!ReferenceEquals(fitted, caps) && Kit.Pointed(new Vector2(x0, y), new Vector2(x0 + w, y + S(26)))) Kit.Tooltip(title);
             y += S(26) + S(2);
             var sx = x0;
-            if (step != null && step.Name.StartsWith('P') && step.Name.IndexOf(" · ", StringComparison.Ordinal) is var dot and > 1)
-                sx += Txt.Line(dl, new Vector2(sx, y), step.Name[..(dot + 3)], Face.Sans, 13, Palette.Muted, 19);
+            if (prefix.Length > 0) sx += Txt.Line(dl, new Vector2(sx, y), prefix, Face.Sans, 13, Palette.Muted, 19);
             sx += Txt.Line(dl, new Vector2(sx, y), PullAtWords(info), Face.Sans, 13, Palette.Muted, 19);
             Txt.Line(dl, new Vector2(sx, y), ReplayText.Clock(t), Face.Mono, 13, Palette.Muted, 19);
             y += S(19) + S(12);
@@ -294,6 +291,22 @@ public sealed partial class MainWindow
             if (Frame.Open.Count > 0) Frame.Open.Pop();
             ImGui.EndChild();
         }
+    }
+
+    private (ReplayModel? Model, int Step, string Title, string Caps, string Prefix) stepWords;
+
+    /// <summary>A step's words for the panel, made once a step: its name (without "P2 · "), in the callout's capitals, and its phase ("P2 · ").</summary>
+    private (string Title, string Caps, string Prefix) StepWords(ReplayModel m, int step)
+    {
+        if (!ReferenceEquals(stepWords.Model, m) || stepWords.Step != step)
+        {
+            var name = step < m.Steps.Count ? m.Steps[step].Name : "Pull";
+            var title = PlanJson.WithoutPhase(name);
+            var dot = name.IndexOf(" · ", StringComparison.Ordinal);
+            var prefix = name.StartsWith('P') && dot > 1 ? name[..(dot + 3)] : string.Empty;
+            stepWords = (m, step, title, Txt.CalloutCaps(title), prefix);
+        }
+        return (stepWords.Title, stepWords.Caps, stepWords.Prefix);
     }
 
     private string? pullAtFor;

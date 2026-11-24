@@ -1137,6 +1137,86 @@ above, 18 below), a footer on the basalt band where a screen has one.
   `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the site keep).
   Reading it, the party in a row over a running cast bar; a file that won't read, the Boss awake
   ("This pull won't open"); nothing in it, asleep ("Nothing went off").
+- **A pull's Replay** (`Views/Replay.cs`, `UI/ReplayBoard.cs`, `Model/Replay/`; 0.9.0): a _Summary · Replay_ switch at the
+  right of the pull's title row (with _Open on the Raid Codex_ beside it while Replay is shown, once the pull is there).
+  Replay is the site's Review › Replay as it stands on 23 November 2026 (docs/tools/raid-codex/review-replay.md in
+  kokos-tools), played back in the window, filling what's left of it: the board on the left, the moment down the
+  right, the transport along the bottom. Nothing plays by itself; Play does, at 1× (the site has no speed control any
+  more, so neither does this). No key does anything: Play, the step buttons, pressing or dragging along the lanes, the
+  tiles and _Just before_ are all pressed.
+  - **Worked out once** (`ReplayModel.Build`, on a worker as the switch is first picked, from the pull's file): the
+    track (`ReplayTrack`, the site's `model/replay.ts`): everyone's places, facing and HP as sampled (2 or 4 a second;
+    0.7.4's turns sampled in between for a boss or an add), eased between samples (`At`, facing the shorter way round;
+    someone is away across a gap of more than 3 s); the enemies' casts with their shapes, a cast seen twice taken as
+    one, stopped ones ended where they stopped; their hits (`Loose`: no cast of their action ending a second before to
+    2.5 s after, and not an auto); head markers (a limit cut's number from the game's icons 79–86, a turn's way round
+    from BossMod's rotate icons) and the mechanic each led to (`LinkMarkers`, the site's rule: the first spread, stack,
+    buster or line stack on the one marked before their next marker, within 12 s, a limit cut's 30; or a circle where
+    they stood that hit at most two; or a single-target buster with its own cast); tethers as spans, waymarks, head
+    signs, each enemy's target, the party's ground effects (Sacred Soil 15 s, Asylum 24, …), deaths and raises, the
+    fight's statuses as spans, and the rotations (`ReplayRotations`, the site's `rotation.ts`: three or more landings
+    from one spot turned the same way by about the same step, a cast its caster turned through, a rotate marker).
+    Facing as the site fixes it: a cast whose caster didn't turn points where its own hit went (plugin 0.2.1 on);
+    through plugin 0.7.9, whose casts all faced south, the caster's frames, its last turn, the facings of the same
+    action's casters beside it, or straight across the arena (`AcrossArena`). The arena (`ReplayArena.Guess`, the
+    site's `guessArena` without its encounter data): where the bosses (else the party) mostly stood, snapped to 100,
+    100 within 15 yalms, its size how far the party and the mechanics went (20 to 80 across), square when people stood
+    in its corners; a plan of yours for the duty (the one open, its arena with a centre: a real arena's polygons) is
+    used in its place. Shapes from the game's data (`ReplayShapes.FromGame`: cast types 1–13, a cone's angle from its
+    omen's `fanNNN`, the site's few fixes for Seiryu); the site also reads a mechanic's role from BossMod's encounter
+    data, which the plugin hasn't, so a circle put on players is told a stack or a spread from who its hits landed on
+    (`InferRoles`, the timeline's rule). The steps (`ReplayLanes.StepsOf`, as the site's plan made from a pull has
+    them): "Pull" at 0, then a step each time something goes off on the plugin's timeline, mechanics within 1.5 s
+    sharing one, never more than 8 s nor across a phase, "P2 · " in a later phase; the last runs on for the steps'
+    usual length (8 to 30 s). The bosses' buffs, the party's debuff waves and each member's own (`ReplayStatuses`), the
+    cards, the deaths and the events for _Just before_ (`LogOf`) are made then too.
+  - **A moment** (`ReplayScene.At`, the site's `replay.ts`): its lists are kept and filled again, so playing allocates
+    nothing. Each cast's telegraph (`castObjects`' rules: a stack, spread, buster or tower on whom it's on and
+    following them, a line stack from its caster, a knockback a ring as far as it reaches or a side push across its
+    rectangle, a gaze, circles, cones, donuts, lines, crosses and charges where they began and aimed, turning with a
+    caster that turns; none for a raidwide) built by brightness only (30% as it begins to full as it goes off, 0.45 s
+    and gone; one stopped goes as it stops; full from the start with reduced motion); a loose hit's shape as it lands;
+    a linked marker drawn as its mechanic on the one marked until it goes off; a rotation's arrow round the one
+    turning (clockwise orange, anticlockwise blue). Who's dead, raised (1.6 s) or hit (0.4 s), whom each enemy is on,
+    head markers' badges (the latest on each for 5 s; one drawn as its mechanic keeps a badge only for a limit cut's
+    number or a turn), and the fight's statuses on each (`FightStatusesAt`: a member's debuffs, category 2, or for a
+    recording from before 0.4 everything but the party's own by name; an enemy's own buffs; nameless "Status 2273"
+    left out; the soonest gone first; a number above 16 a parameter, not stacks).
+  - **The board** (`ReplayBoard`): the arena and the waymarks as the plan board draws them; the party's ground effects
+    as faint green floors with their names; the telegraphs in the board's kinds and the site's palette; tethers; the
+    enemies (a boss's hitbox ring, facing and name; an add's shield), their HP a white ring and a dashed line to whom
+    each is on; head signs over the head; the party as their spots' colours with the game's job icon on each, their
+    HP a ring (green, amber under half, red under a quarter), a red ring and × on the dead, a green ring as someone's
+    raised, a red flash as a hit lands; each member's debuffs as the game's icons beside their token (two and "+2",
+    a white ring round each for the time left, none that every living member has at once), an enemy's buffs in a row
+    over it; head markers as a small disc over the head in their kind's colour (spread, stack, buster, limit cut's
+    number, target, a turn's arrow, a plain pointer for one not known). Viewing as someone (their tile) fades the
+    rest. Played to its end it says how the pull ended over the board's foot for 2.6 s ("Wiped 6:31 · Pull 12 · at
+    Knockback Wave · the boss at 38%").
+  - **The moment** (down the right, 332 px): the step in the callout's voice on one line (smaller past 15, 19 and 23
+    letters, then "…"), "P2 · Pull 12 at 2:51"; a card for each boss (and each add with buffs of its own; one a
+    name), its HP, its own buffs (three and "+2") and what it's casting under a thin cast bar (the time left, "Went
+    off", "Interrupted" in green, "Stopped"; on whom; "can be interrupted"; "+1" for more), "Not casting", dimmed and
+    "Away" while none of its actors is there; with two cards or more, _Other casts_ for the helpers' and adds'. The
+    party as tiles, two a row (tanks, healers, DPS): job icon, name, HP %, an HP bar with their barrier after it (the
+    combat block's `res`, plugin 0.4), the fight's debuffs with the seconds each has left under its icon (as many as
+    fit, "+N" in the last slot), dead a skull and when; pressing one views as them; a death played past washes it red.
+    Then _Just before_, folded at first (the latest thing faint beside it): the last six things that happened (a
+    phase beginning, deaths, raises, interrupts, an interruptible cast that went off, a hit on half the party or a
+    buster, the fight's debuffs and the bosses' buffs going on, head markers by their meaning or the mechanic they
+    led to), each pressed going to 1.5 s before it. Nothing in it changes size as the pull plays.
+  - **The transport** (along the bottom, the site's direction A): the step before (to the start of the step you're
+    in first), Play (round, 56 px, the telegraph; Pause while playing), the step after; then one frame of lanes with
+    their names in a gutter: the phases with the moment on an ember tag riding over the play head ("2:48 5 · Name",
+    held inside the row at its ends); the steps as 56 px blocks, number and (75 px wide or more) name, the played ones
+    warm, the moment's ember-edged and filling like a cast bar, a death a red line through them, hatched past where
+    the pull ended; the bosses' buffs (blue, a debuff red; at most two rows) and the party's debuffs (a bar each time
+    one went round, "×2", a numbered family one wave, "First to Fourth in Line"; at most three rows), packed where
+    they're drawn (`ReplayLanes.Pack`: a bar on the first row clear of the last, at least its icon wide; with no row
+    left, joined to the bar free soonest, its icons side by side, four and "+n"); the ruler every 30 s (further
+    apart when narrow) with a red skull at each death, rung once as it's played past; the play head, white. A lane
+    with nothing is left out, and the dock is as tall as its lanes. Its small button at the gutter's top fills the
+    window with the lanes (every status its own row, a lane for each member, scrolling) and back.
 - **Settings** (`Views/Settings.cs`, its rows in `Views/SettingsRows.cs`; 0.8.0): under the window's tabs (Home,
   Pulls, Settings). The window is never narrower than 1040 (above), so the sidebar is always there unless the screen
   can't fit that (in 0.8.0 it was widened to 820 the first time Settings showed). From 700px wide a **sidebar** (220 wide, on the slab, a hairline at its right): _Find a
@@ -2039,7 +2119,8 @@ RaidPlanner/
               pages, rows, search and the Features cards' tags (SettingsIndex), 0.8.0's main parts (Features), the setup guide's rules (SetupGuide), a pull in a sentence
               (PullGist), pulls by night (PullNights), the plan's next step (PlanProgress),
               /raidcodex's words (Commands), SVG
-              paths, dashes), tested
+              paths, dashes; Replay/: a pull's track, shapes, arena, rotations, moments, statuses, lanes and steps,
+              and the whole of it: ReplayModel), tested; Replay's board (ReplayBoard) and view (Views/Replay.cs)
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
               themes) and their OFL licences, embedded in the DLL (the licences beside it)
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
@@ -2223,6 +2304,14 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### 0.9.0 (not released yet)
+
+- **Replay a pull in the window**: a pull's page has _Summary · Replay_. Replay plays the pull back as the Raid Codex
+  does: the arena with the party by job, the enemies, their mechanics as they're cast and land, tethers, markers,
+  waymarks, HP and deaths; down the right each boss's HP and cast, the party's HP, barriers and debuffs, and what
+  just happened; along the bottom Play and the pull's steps, the bosses' buffs, the party's debuffs and the deaths,
+  pressed or dragged to go anywhere in it, and grown to fill the window.
 
 ### 0.8.3 (not released yet)
 
