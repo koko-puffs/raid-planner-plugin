@@ -187,6 +187,7 @@ public sealed class PlanWindow : Window
                 try
                 {
                     Drawn = (ImGui.GetWindowPos(), ImGui.GetWindowSize());
+                    KeepPlace(Drawn.Value.Pos, Drawn.Value.Size);
                     var arranging = Arranging;
                     if (arranging) ArrangeMode.Head(ArrangePart.Plan);
                     Frame.Window();
@@ -211,6 +212,26 @@ public sealed class PlanWindow : Window
         {
             Theme.Pop();
         }
+    }
+
+    /// <summary>Its place changed and isn't saved yet (saved once the mouse is let go).</summary>
+    private bool placeDirty;
+
+    /// <summary>
+    /// Its place and size kept in the settings as drawn (0.9.0: a profile's Window places gives it its own, and puts it
+    /// back with <see cref="PutAt"/>), saved once you let go of it rather than every frame of a drag.
+    /// </summary>
+    private void KeepPlace(Vector2 pos, Vector2 size)
+    {
+        static bool Moved(float a, float b) => MathF.Abs(a - b) > 0.5f;
+        if (!config.PlanPlaced || Moved(config.PlanPlaceX, pos.X) || Moved(config.PlanPlaceY, pos.Y) || Moved(config.PlanPlaceW, size.X) || Moved(config.PlanPlaceH, size.Y))
+        {
+            (config.PlanPlaceX, config.PlanPlaceY, config.PlanPlaceW, config.PlanPlaceH, config.PlanPlaced) = (pos.X, pos.Y, size.X, size.Y, true);
+            placeDirty = true;
+        }
+        if (!placeDirty || ImGui.IsMouseDown(ImGuiMouseButton.Left)) return;
+        placeDirty = false;
+        config.Save();
     }
 
     /// <summary>The smallest window (240 × 300) draws a smaller callout and board, and says the notes are there.</summary>

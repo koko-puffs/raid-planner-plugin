@@ -121,3 +121,15 @@ the plugin names each tick after the caster's latest DoT on the target.
   recap says "a tank buster" or "a raid-wide", lists what was up (Reprisal on the boss too) and, for a tank, what
   wasn't. Statuses are found by their English names: check one each on a non-English client.
 - A wipe with _Recap deaths of: Everyone_: one line each, newest on top; Open in the meter opens the right death.
+
+## 14. Settings profiles (0.9.0)
+
+- Make a profile for each kind and go into one of each: an ultimate, a savage raid, an extreme and an unreal trial, a
+  criterion dungeon (normal and Savage), a variant dungeon (it should count as a dungeon), an alliance raid, the
+  Chaotic alliance raid (Savage), a normal raid and a normal trial (Normal raids), a dungeon, a deep dungeon, Eureka
+  or Bozja or the Occult Crescent (Open world), a PvP match (Other duties). Home's chip says which profile is in
+  effect. The kind is read from ContentType, HighEndDuty, the English name and the alliance roulette (`DutyKinds.Of`).
+- The notice going in, its Undo (your usual settings until you leave), "Back to your usual settings" going out.
+- Window places: Arrange windows in a duty with a profile that keeps its own, then leave: every window back where it
+  was, the plan window too. Reload the plugin, and close the game, in such a duty: your usual places and settings
+  are back after, and the profile's again in the duty.

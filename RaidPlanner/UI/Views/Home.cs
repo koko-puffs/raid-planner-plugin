@@ -170,6 +170,14 @@ public sealed partial class MainWindow
                 Later(() => OpenSettings(tab));
             }
         }
+        // 0.9.0: the settings profile in effect here, if one is.
+        if (ProfileLayer.Active(config) is { } profile)
+        {
+            var label = Txt.Fit("Profile: " + profile.Name, Face.SansMedium, 12, w - Kit.ChipWidth(string.Empty, Icon.Layers));
+            if (Kit.Chip("##chip-profile", wrap.Next(Kit.ChipWidth(label, Icon.Layers), Kit.ChipH), label, Palette.Ember, true, Icon.Layers,
+                    $"The {ProfileItems.Title(profile)} is in effect here. Opens Profiles."))
+                Later(() => OpenSettings(SettingsTab.Profiles));
+        }
         wrap.End();
         Kit.Gap(12);
         var np = Kit.At;

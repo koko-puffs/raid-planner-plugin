@@ -33,7 +33,7 @@ public class SettingsIndexTests
     public void Pages_start_with_features_and_each_has_its_own_title_and_line()
     {
         Assert.Equal(SettingsTab.Features, SettingsIndex.Pages[0]);
-        Assert.Equal(8, SettingsIndex.Pages.Count);
+        Assert.Equal(9, SettingsIndex.Pages.Count);
         Assert.Equal(SettingsIndex.Pages.Count, SettingsIndex.Pages.Select(SettingsIndex.Title).Distinct().Count());
         Assert.All(SettingsIndex.Pages, p => Assert.False(string.IsNullOrWhiteSpace(SettingsIndex.Lead(p))));
         Assert.Equal("Damage meter", SettingsIndex.Title(SettingsTab.Meter));

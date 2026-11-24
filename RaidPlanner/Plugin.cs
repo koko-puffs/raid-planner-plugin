@@ -71,6 +71,14 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Arrange windows (0.8.0): its toolbar (with Done, Cancel, Reset places) and its options panel.</summary>
     private readonly ArrangeWindow arrangeWindow;
 
+    /// <summary>The game's own data (duties, actions…), read once each.</summary>
+    private readonly GameData data;
+
+    /// <summary>Settings profiles (0.9.0): the one for the duty you're in put in effect, and the notice as it is.</summary>
+    private readonly ProfileSwitcher profileSwitcher;
+
+    private readonly ProfileNotice profileNotice;
+
     private IDtrBarEntry? bar;
 
     /// <summary>The last pull kept, shown in the bar for a moment ("Pull 3 kept").</summary>
@@ -87,6 +95,10 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.Create<Services>();
         // A fresh install's settings start with the setup guide due (0.8.0); saved ones are an existing player's.
         config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration { Setup = UI.Model.SetupState.Pending };
+        // 0.9.0: a settings profile left in effect (the game closed or the plugin reloaded in a duty): your usual settings
+        // back before anything reads them; the duty you're in puts it in again (FollowProfiles).
+        var profileWasOn = UI.Model.ProfileLayer.Recover(config, config);
+        if (profileWasOn) config.Save();
         // Settings saved by 0.5.x (version 1): Upload my logs on, from now (0.6.0); a new one starts from now too. Before 0.7.0: the meter compact.
         if (config.Migrate(DateTimeOffset.Now)) config.Save();
         try
@@ -105,7 +117,7 @@ public sealed class Plugin : IDalamudPlugin
                     Services.Log.Error(ex, "Raid Codex couldn't read its recordings");
                 }
             });
-            var data = new GameData();
+            data = new GameData();
             recorder = new FightRecorder(config, data, store, version);
             recorder.Kept += OnKept;
             meter = new CombatMeter(config, data, recorder);
@@ -160,6 +172,17 @@ public sealed class Plugin : IDalamudPlugin
             // Last: drawn over the overlays it arranges.
             windows.AddWindow(arrangeWindow);
             windows.AddWindow(arrangeWindow.Panel);
+            // Settings profiles (0.9.0): switched as you go in and out of duties; the notice's Undo keeps your usual settings there.
+            profileSwitcher = new ProfileSwitcher(config, config);
+            profileNotice = new ProfileNotice(fonts);
+            windows.AddWindow(profileNotice);
+            profileNotice.Undo = () =>
+            {
+                if (profileSwitcher.Undo() is { } undone) ProfileSwitched(undone);
+            };
+            window.DutyKindHere = () => profileSwitcher.Kind;
+            // The plan window where the settings say (ImGui remembers it where a profile may have had it as the game closed).
+            PutPlanBack();
             // The tracker listens to the recorder's parser and keeps its hooks on while it's shown.
             recorder.HooksWanted = () => cooldowns.WantsHooks;
             cooldownWindow.InDuty = () => recorder.DutyHere != null;
@@ -477,9 +500,73 @@ public sealed class Plugin : IDalamudPlugin
         PlanService.Print($"Sending {info.Name}…");
     }
 
+    /// <summary>The profiles haven't been asked yet since the plugin loaded: a profile put in effect then is put back silently (a reload in a duty).</summary>
+    private bool profilesFirst = true;
+
+    private DateTime profilesFailedAt;
+
+    /// <summary>
+    /// Each frame: the kind of duty you're in (<see cref="DutyKinds.Of"/>, from the game's data), and the profile it
+    /// wants put in effect, or your usual settings back (<see cref="ProfileSwitcher"/>); not while Arrange windows is on
+    /// (its Cancel puts back what it found) nor before you're logged in.
+    /// </summary>
+    private void FollowProfiles()
+    {
+        try
+        {
+            var wait = ArrangeMode.On || !Services.ClientState.IsLoggedIn;
+            var territory = Services.ClientState.TerritoryType;
+            var change = profileSwitcher.Update(territory, DutyKindOf(territory), wait);
+            var silent = profilesFirst;
+            if (!wait) profilesFirst = false;
+            if (change == null) return;
+            ProfileSwitched(change);
+            if (silent) return;
+            if (change.Entered is { } p)
+            {
+                if (ProfileItems.Chips(p).Count > 0) profileNotice.Show(ProfileItems.Summary(p), true);
+            }
+            else if (change.Left is { } left && ProfileItems.Chips(left).Count > 0) profileNotice.Show("Back to your usual settings", false);
+        }
+        catch (Exception ex)
+        {
+            if (DateTime.UtcNow - profilesFailedAt < TimeSpan.FromSeconds(30)) return;
+            profilesFailedAt = DateTime.UtcNow;
+            Services.Log.Error(ex, "Raid Codex couldn't switch its settings profile");
+        }
+    }
+
+    /// <summary>
+    /// The kind of duty a zone is: a duty from the Duty Finder by its data; somewhere else, the open world, unless you're
+    /// in a duty all the same (a quest's: other duties).
+    /// </summary>
+    private DutyKind DutyKindOf(uint territory)
+    {
+        var facts = data.Facts(territory);
+        if (facts is { ContentType: > 0 }) return DutyKinds.Of(facts);
+        var inDuty = Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty]
+            || Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty56]
+            || Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.BoundByDuty95];
+        return inDuty ? DutyKinds.Of(facts ?? new DutyFacts(0, false, false, string.Empty)) : DutyKind.OpenWorld;
+    }
+
+    /// <summary>A profile came into effect or went: the settings saved, and the plan window put where they say (its place isn't ImGui's then).</summary>
+    private void ProfileSwitched(ProfileChange change)
+    {
+        config.Save();
+        if (change.Places) PutPlanBack();
+    }
+
+    private void PutPlanBack()
+    {
+        if (config.PlanPlaced && config.PlanPlaceW > 0 && config.PlanPlaceH > 0)
+            planWindow.PutAt(new System.Numerics.Vector2(config.PlanPlaceX, config.PlanPlaceY), new System.Numerics.Vector2(config.PlanPlaceW, config.PlanPlaceH));
+    }
+
     /// <summary>The server info bar: "● Rec 2:31" while a pull is recorded, "Pull 3 kept" for a moment after.</summary>
     private void OnUpdate(IFramework framework)
     {
+        FollowProfiles();
         // A real fight ends the sample at once: its numbers are never shown with the real ones.
         if (meterWindow.Preview != null && RealFightOn) meterWindow.Preview = null;
         // The meter's window follows Settings' Show the meter (and /raidcodex meter), or a sample.
@@ -552,6 +639,13 @@ public sealed class Plugin : IDalamudPlugin
     {
         // Unloaded while arranging: every window put back as the mode found it.
         if (arrangeWindow != null) Safely(arrangeWindow.Cancel);
+        // A settings profile in effect goes out (kept in it), your usual settings saved: the file is never left with a
+        // profile's values as yours (an older version reading it would keep them). Loading again in the duty puts it back.
+        if (profileSwitcher != null)
+            Safely(() =>
+            {
+                if (ProfileLayer.Deactivate(config, config)) config.Save();
+            });
         Safely(() => Services.Framework.Update -= OnUpdate);
         Safely(() => Services.PluginInterface.UiBuilder.Draw -= DrawWindows);
         if (window != null)

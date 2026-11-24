@@ -59,6 +59,20 @@ public sealed partial class MainWindow
         var sub = e.Sub && !found;
         var n = e.Name;
         var l = e.Line;
+        // 0.9.0: a row the settings profile in effect sets says so under it (SetRow).
+        rowProfileNote = ProfileNoteFor(e.Id);
+        try
+        {
+            DrawRowControl(e, i, found, sub, n, l);
+        }
+        finally
+        {
+            rowProfileNote = null;
+        }
+    }
+
+    private void DrawRowControl(SettingEntry e, int i, bool found, bool sub, string n, string l)
+    {
         switch (e.Id)
         {
             // ---- Recording and uploads.
@@ -830,7 +844,8 @@ public sealed partial class MainWindow
             SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
             noteH = S(2) + Txt.Flow(Vector2.Zero, wordsW, SetNote, 17.4f, out _, draw: false);
         }
-        var whyText = linkFirst ? "Link your account first: " : why;
+        var profileWhy = !linkFirst && why == null ? rowProfileNote : null;
+        var whyText = linkFirst ? "Link your account first: " : why ?? profileWhy;
         var whyH = whyText != null ? S(2) + S(17.4f) : 0;
         var wordsH = nameH + noteH + whyH;
         var h = S(pad) * 2 + MathF.Max(wordsH, controlH);
@@ -848,7 +863,7 @@ public sealed partial class MainWindow
         {
             // The reason stays bright (`.set .why`), its link underlined.
             var wy = top + nameH + noteH + S(2);
-            var ww = Txt.Line(dl, new Vector2(x, wy), Txt.Fit(whyText, Face.Sans, 12, wordsW), Face.Sans, 12, Palette.Text, 17.4f);
+            var ww = Txt.Line(dl, new Vector2(x, wy), Txt.Fit(whyText, Face.Sans, 12, wordsW), Face.Sans, 12, profileWhy != null ? Palette.EmberHi : Palette.Text, 17.4f);
             if (linkFirst && Kit.Link($"##why{name}{index}", new Vector2(x + ww, wy + (S(17.4f) - Txt.Natural(Face.SansMedium, 12)) / 2), "Account", null, 12))
                 GoToPage(SettingsTab.Account);
         }

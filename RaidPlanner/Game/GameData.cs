@@ -292,6 +292,35 @@ public sealed class GameData
         return fight;
     }
 
+    private readonly Dictionary<uint, UI.Model.DutyFacts?> facts = new();
+
+    /// <summary>
+    /// What a settings profile's duty kind is read from (0.9.0, <see cref="UI.Model.DutyKinds.Of"/>): the zone's duty's
+    /// ContentType row, its HighEndDuty flag, whether it's an alliance's (the alliance roulette's, or three parties), its
+    /// name in English, and the zone's intended use. Null for a zone that isn't a duty from the Duty Finder (its
+    /// ContentType 0 when it's in a duty all the same: <i>other duties</i>).
+    /// </summary>
+    public UI.Model.DutyFacts? Facts(uint territory)
+    {
+        if (facts.TryGetValue(territory, out var known)) return known;
+        UI.Model.DutyFacts? info = null;
+        if (Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t))
+        {
+            var use = t.TerritoryIntendedUse.RowId;
+            info = new UI.Model.DutyFacts(0, false, false, string.Empty, use);
+            if (t.ContentFinderCondition.RowId != 0 && t.ContentFinderCondition.ValueNullable is { } cfc)
+            {
+                var english = Services.Data.GetExcelSheet<ContentFinderCondition>(ClientLanguage.English).TryGetRow(cfc.RowId, out var en)
+                    ? en.Name.ExtractText()
+                    : cfc.Name.ExtractText();
+                var alliance = cfc.AllianceRoulette || cfc.ContentMemberType.ValueNullable is { PartyCount: >= 3 };
+                info = new UI.Model.DutyFacts(cfc.ContentType.RowId, cfc.HighEndDuty, alliance, english, use);
+            }
+        }
+        facts[territory] = info;
+        return info;
+    }
+
     /// <summary>
     /// The field operations' open zones, by the TerritoryType sheet's TerritoryIntendedUse: Eureka (41),
     /// the Bozjan Southern Front and Zadnor (48), Occult Crescent's South and North Horn (61). Many
