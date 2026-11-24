@@ -647,6 +647,13 @@ public sealed partial class MainWindow
                     Later(ShowSetup);
                 break;
 
+            // 0.9.0: the ready check card's and the death recap's (UI/Views/SettingsPrep.cs).
+            case SettingId.ReadyCheckShow or SettingId.ReadyCheckSample or SettingId.ReadyCheckLock or SettingId.ReadyCheckClickThrough or SettingId.ReadyCheckGrows
+                or SettingId.ReadyCheckBackground or SettingId.DeathRecapShow or SettingId.DeathRecapWho or SettingId.DeathRecapSample or SettingId.DeathRecapLock
+                or SettingId.DeathRecapClickThrough or SettingId.DeathRecapGrows or SettingId.DeathRecapBackground:
+                DrawPrepRow(e, i, sub);
+                break;
+
             // Rows drawn in a page's own panel: a search's answer opens the page.
             default:
                 GoRow(i, e);

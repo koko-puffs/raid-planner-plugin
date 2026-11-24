@@ -76,7 +76,16 @@ public sealed unsafe class CombatMeter : IDisposable
     private static bool InDuty =>
         Services.Condition[ConditionFlag.BoundByDuty] || Services.Condition[ConditionFlag.BoundByDuty56] || Services.Condition[ConditionFlag.BoundByDuty95];
 
-    private bool Wanted => config.ShowMeter && (config.MeterEverywhere || InDuty) && Session.Problem == null;
+    private bool Wanted => (config.ShowMeter || AlsoWanted?.Invoke() == true) && (config.MeterEverywhere || InDuty) && Session.Problem == null;
+
+    /// <summary>
+    /// Since 0.9.0: something else reads the meter's numbers with the meter's window off (the death recap, set by the plugin): it
+    /// listens all the same, where the meter would (in duties, or everywhere).
+    /// </summary>
+    public Func<bool>? AlsoWanted { get; set; }
+
+    /// <summary>Since 0.9.0: which statuses are the death recap's mitigations (set by the plugin); null, none are read.</summary>
+    public PrepData? Prep { get; set; }
 
     private void OnWiped(Dalamud.Game.DutyState.IDutyStateEventArgs _) => Guarded(() => Session.Said(Core.Outcome.Wipe));
 
@@ -180,15 +189,15 @@ public sealed unsafe class CombatMeter : IDisposable
         {
             if (m.EntityId is 0 or InvalidId || count >= party.Length) continue;
             var (name, job, role) = Who(m.EntityId, m.ClassJob, m.Name);
-            var weak = Weakness(m.EntityId, Session.InEncounter);
+            var (weak, mits, read) = Statuses(m.EntityId, Session.InEncounter);
             anyInCombat |= m.InCombat;
-            party[count++] = new PartyState(m.EntityId, name, job, role, m.Hp, m.MaxHp, m.InCombat, m.IsYou, weak);
+            party[count++] = new PartyState(m.EntityId, name, job, role, m.Hp, m.MaxHp, m.InCombat, m.IsYou, weak, mits, read);
         }
         if (count == 0)
         {
             var (name, job, role) = Who(me.EntityId, me.ClassJob.RowId, null);
-            var weak = Weakness(me.EntityId, Session.InEncounter);
-            party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true, weak);
+            var (weak, mits, read) = Statuses(me.EntityId, Session.InEncounter);
+            party[count++] = new PartyState(me.EntityId, name, job, role, me.CurrentHp, me.MaxHp, anyInCombat, true, weak, mits, read);
         }
         ReadGauge();
         var t = recorder.Now;
@@ -250,20 +259,41 @@ public sealed unsafe class CombatMeter : IDisposable
         return (name, job, role);
     }
 
-    /// <summary>During an encounter, Weakness (1) or Brink of Death (2) on a party member, from their status list (0 when they aren't near).</summary>
-    private byte Weakness(uint entityId, bool statuses)
+    /// <summary>
+    /// During an encounter, from a party member's status list: Weakness (1) or Brink of Death (2) on them, and (since 0.9.0, for the
+    /// death recap) the mitigations on them as a <see cref="Mitigations"/> mask; nothing read when they aren't near.
+    /// </summary>
+    private (byte Weakness, ulong Mitigation, bool Read) Statuses(uint entityId, bool statuses)
     {
-        if (!statuses) return 0;
+        if (!statuses) return (0, 0, false);
         var manager = CharacterManager.Instance();
-        if (manager == null) return 0;
+        if (manager == null) return (0, 0, false);
         var bc = manager->LookupBattleCharaByEntityId(entityId);
-        if (bc == null) return 0;
+        if (bc == null) return (0, 0, false);
         byte weak = 0;
+        ulong mits = 0;
+        var prep = Prep;
         var list = bc->StatusManager.Status;
         for (var i = 0; i < list.Length; i++)
-            if (list[i].StatusId != 0 && data.Kinds.Weakness(list[i].StatusId) is var w and > 0)
-                weak = (byte)Math.Max(weak, w);
-        return weak;
+        {
+            var id = list[i].StatusId;
+            if (id == 0) continue;
+            if (data.Kinds.Weakness(id) is var w and > 0) weak = (byte)Math.Max(weak, w);
+            if (prep != null) mits |= Mitigations.Bit(prep.MitigationIndex(id));
+        }
+        return (weak, mits, prep != null);
+    }
+
+    /// <summary>Since 0.9.0: the party's mitigations on an enemy (Reprisal, Addle, Feint, Dismantle), from its status list.</summary>
+    private ulong EnemyMitigation(BattleChara* bc)
+    {
+        if (Prep is not { } prep || bc == null) return 0;
+        ulong mits = 0;
+        var list = bc->StatusManager.Status;
+        for (var i = 0; i < list.Length; i++)
+            if (list[i].StatusId != 0)
+                mits |= Mitigations.Bit(prep.MitigationIndex(list[i].StatusId));
+        return mits & Mitigations.OnEnemy;
     }
 
     private string Place(uint territory)
@@ -284,6 +314,7 @@ public sealed unsafe class CombatMeter : IDisposable
         var all = InDuty && !data.IsFieldZone(Services.ClientState.TerritoryType);
         var t = recorder.Now;
         var biggest = 0u;
+        ulong onEnemies = 0;
         bosses.Clear();
         foreach (var obj in Services.Objects)
         {
@@ -295,6 +326,7 @@ public sealed unsafe class CombatMeter : IDisposable
             if (!targetable) continue;
             // Its cast (since 0.4.0), and, for the bosses below, whom it's on.
             var bc = (BattleChara*)npc.Address;
+            onEnemies |= EnemyMitigation(bc);
             var cast = bc == null ? null : bc->GetCastInfo();
             uint castAt = 0;
             if (cast != null && cast->IsCasting && cast->ActionType == 1 && cast->ActionId != 0)
@@ -306,6 +338,7 @@ public sealed unsafe class CombatMeter : IDisposable
             bosses.Add((npc.EntityId, npc.MaxHp, (uint)npc.TargetObjectId, castAt));
         }
         Session.EndTargets();
+        Session.EnemyMitigation(onEnemies);
         // The bosses (as the recording sorts them: half the biggest's HP or more): whom each is on.
         foreach (var (id, hp, on, castAt) in bosses)
             if ((ulong)hp * 2 >= biggest)

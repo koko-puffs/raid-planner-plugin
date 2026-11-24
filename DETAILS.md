@@ -1187,8 +1187,8 @@ above, 18 below), a footer on the basalt band where a screen has one.
     button (`StartArrange`; "Arranging…" while it's on); then a section each for the **Damage meter** (_Show the
     meter_, _Lock it where it is_ with _Click-through when locked_ under it, _Grows_, _Background_), the **Plan
     window** (_Show my plan in duties_, _Lock it where it is_, _The plan window_ · Show or Hide), the
-    **Callouts** and the **Party cooldowns** (each: its Show, _Lock it where it is_, _Click-through when
-    locked_, _Grows_, _Background_).
+    **Callouts**, the **Party cooldowns** and (since 0.9.0) the **Ready check** and the **Death recap** (each: its
+    Show, _Lock it where it is_, _Click-through when locked_, _Grows_, _Background_).
   - **Account and privacy**: **Your account**: linked, a ready tick, a green _Linked_ tag and the token masked
     in mono, _Unlink_ dense; not linked, the instructions, the 40px well field (the token in mono, masked) with
     _Link_ as the telegraph, a bad token said in red with an icon under it, and _Get a token_; _The Raid
@@ -1337,7 +1337,9 @@ them while down [verify that the raiser is its source], else the last raise used
 healers' limit break 3 on everyone down then), **Time dead** (each death
 not the wipe's to when they were up, or the encounter's end), **Interrupts** (an enemy's cast the game
 said was interrupted, credited as the recording credits it: `CastWatch`). Each death carries when they
-were up again and who raised them, and whether Weakness or Brink of Death was on them. And the
+were up again and who raised them, and whether Weakness or Brink of Death was on them; since 0.9.0 also the
+mitigations up as the killing blow landed, whether a tank buster or a raid-wide killed them, and the phase (the
+death recap's: see The ready check card and the death recap). And the
 encounter's **events** (`IMeterSource.Events`, the newest 200, oldest first; their text has names, so it
 stays in the game): deaths (the wipe's said so), raises, interrupts, interruptible casts that went off (a
 quarter second past their end with no word of them stopping), stuns, sleeps, binds, heavies and silences
@@ -1373,9 +1375,11 @@ zone, the recorder's pull, the party (`PartyMembers`', since 0.5.0 a cross-world
 names read once each and kept only in the plugin; HP from the party list, or a cross-world member's
 character when near; in combat from the game's own look-up) and whether anyone's in combat. Since 0.4.0 also
 each frame the limit break gauge (`LimitBreakController`) and, during an encounter, which party members
-carry Weakness or Brink of Death (their status lists); four times a second with the targetability, the
+carry Weakness or Brink of Death (their status lists; since 0.9.0 with the death recap's mitigations on them:
+`CombatMeter.Statuses`); four times a second with the targetability, the
 enemies' casts (and whether they can be interrupted) and the bosses' targets (the enemies with half the
-biggest's max HP or more; whether they're casting at that one); and every cast the game says stopped
+biggest's max HP or more; whether they're casting at that one; since 0.9.0 the party's Reprisal, Addle, Feint and
+Dismantle on any of them); and every cast the game says stopped
 (`FightRecorder.CastStopped`, recorded pull or not). Reading the game costs little: no allocation per message on the hot path (a test reads an eight-target action twenty
 thousand times and allocates nothing), the object table only four times a second during an encounter.
 
@@ -1770,7 +1774,8 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   size, as the meter draws it, from the same drawer (`PlateMeter`, not interactive; following Head, Order and the
   gauge), and _Play a sample fight_ under it (_Stop the sample_ while it's on; dimmed while a real fight is on,
   "After this fight"). **The numbers**: _What it ranks by_ (ENCDPS, DPS, with what each counts) and _Show_ (Names,
-  Jobs only). Then "12 more": _Grows_ (Down, Up: "The edge that stays put as it grows"; since 0.7.4 three small
+  Jobs only). **Death recap** (since 0.9.0): _Show a death recap_, _Recap deaths of_ (Me, Everyone: Me at first) under
+  it, _See it_ · Show a sample (a made-up wipe's three deaths). Then "12 more": _Grows_ (Down, Up: "The edge that stays put as it grows"; since 0.7.4 three small
   choices in place of 0.7.3's one, which flipped the head and the order with it), _Head_ (Top, Bottom) and _Order_
   (Highest first, Lowest first), both meters'; _Limit break gauge_ (Head, Foot, Off; 0.4.0; compact's pips are in its
   head, or none with Off); _Background_ (a slider with its value in mono, 20% to 100%, as the meter draws it; a theme
@@ -1933,7 +1938,8 @@ says one ("You: Reprisal −3 s").
   smaller with _Smaller callouts_; made-up steps and "You: Rampart, Reprisal") and _Show sample callouts_ under it
   (made-up steps a few seconds apart, counting down and starting again every 50 seconds; _Stop the sample_ while
   on). **With your static**: _Share my step with the site_ and _Send my party to my roster_ (both waiting for a
-  link; the roster's result under the slab as a sent line or a red box). Then "3 more": _How early the sound
+  link; the roster's result under the slab as a sent line or a red box). **Ready checks** (since 0.9.0): _Show at
+  ready checks_ (on) and _See it_ · Show a sample. Then "3 more": _How early the sound
   plays_ (1 to 10 s), _Smaller callouts_ (the callouts' Compact), _The callouts' background_ (0 to 100%, 45% at
   first; on Windows too). The callouts' and the plan window's _Lock it where it is_, the callouts' _Click-through
   when locked_ and _Grows_ are on Windows.
@@ -1943,6 +1949,91 @@ says one ("You: Reprisal −3 s").
   a switch for each of its cooldowns (its name over its jobs). Then "3 more": _Hide those ready_, _Limit break
   gauge_, _Smaller rows_ (the tracker's Compact). Its _Lock it where it is_, _Click-through when locked_, _Grows_ and
   _Background_ are on Windows.
+
+## The ready check card and the death recap (`UI/ReadyCheckWindow.cs`, `UI/DeathRecapWindow.cs`, `UI/Model/ReadyCheck.cs`, `UI/Model/DeathRecap.cs`; since 0.9.0)
+
+Two more overlays (`OverlayWindow`, as the callouts and the tracker: their own _Show_, lock, click-through, Grows,
+background and width in `OverlaySettings`, `Configuration.ReadyCheck` and `Configuration.DeathRecap`; both on at
+first, background 30%), each drawn as a card on its own dark ground (rgb 24 24 29, more solid than the window's
+background, 14px corners and a white hairline at 12%), the callouts' look. Both are in Arrange windows (their
+samples shown there) and on Settings → Windows. Neither reads a key: the pin and the rest are pressed with the mouse.
+
+**The ready check card** (`ReadyCheckWindow`, 340 wide at first, a third down the screen left of centre: beside the
+party list). The plugin only ever reads the game's ready check, never answers it (`Game/ReadyCheckReader.cs`):
+
+- **When it shows** (`ReadyCheckWatch`, tested): from the frame a ready check is seen going on, read from the game's
+  ready check agent (`AgentReadyCheck`'s entries, a member each with their answer: while one is still
+  `AwaitingResponse` the check is on [verify: the entries are answered or emptied when it ends]; the fields are read,
+  no game function is called). It stays while the check goes on and 30 seconds after it ends (`Linger`), and goes at
+  once when the pull starts (in combat). A check seen for over a minute counts as over (`Longest`: the game's lasts
+  30 seconds), so a reading that stuck can't hold it up. One that starts in combat isn't shown. The pin (top right,
+  ember while on) keeps it, through the pull too, until it's pressed again; unpinned after the check it goes a few
+  seconds later.
+- **Each member** (`ReadyCheckReader.Members`, twice a second while it shows): the party (`PartyMembers`, in the
+  party list's order) with their job's icon (`PlateArt.JobBadge`), their name (their job with the meter's _Show:
+  Jobs only_), and their food: Well Fed on their character's status list (the Status sheet's rows named "Well Fed",
+  and 48) and its time left ("52:10", the fork-and-knife before it). Green; **amber** when it would run out before
+  the average length of your kept pulls of this duty is over (`ReadyCheckView.AveragePull`: the kept pulls' list,
+  `RecordingInfo.Duration`, those of the duty you're in; with none kept, nothing is amber: only the time shows);
+  **red** "No food"; "can't see" (quiet) for one who isn't near (out of range, in another zone).
+- **Its head**: "Ready check" (an ember eyebrow), "7 of 8 fed · one runs out mid-pull" ("Everyone's fed" when all
+  are; "· one out of sight" when nobody's short but someone can't be seen), and "Your average pull here is 6:40."
+  under it when there's one.
+- **You** (in a well under the rows; `ReadyCheckReader.You`, every two seconds): the tinctures in your four
+  inventory pages (Medicine whose use gives Medicated, so not potions or elixirs [verify: the item action's first
+  value is the status it gives]), the meals (the Meal category), and your equipped gear's lowest condition
+  (Dalamud's `IGameInventory`, condition 30,000 is 100%, the soul crystal left out [verify: the scale]): "Gear 84%"
+  quietly, or under **20%** (`ReadyCheckView.GearLow`) an amber line "Gear 18%: repair soon" ("Gear 0%: broken,
+  repair it"), always.
+- **One line** when everyone's fed for longer than the average pull (or simply fed, with no pulls kept here) and
+  your gear is fine: a green tick, "Everyone's fed" and "The shortest has 27 minutes left · you have 14 tinctures".
+- Its foot: "Goes when the pull starts" over a thin ember bar that empties over the 30 seconds after the check
+  ends ("…, or in 24 s"); "Pinned" while it's kept. Its sample (Settings, Arrange windows) is a made-up party, one
+  of them short of food and one with none, with 18% gear.
+
+**The death recap** (`DeathRecapWindow`, 440 wide at first, at the right a fifth down the screen). Built from the
+meter's own deaths (`MeterEncounter.Deaths`, the opened-up meter's Deaths tab: `DeathEntry`, its recap lines, the
+killing blow `MeterView.KillingLine` finds), so the meter has to listen: with the recap on it does, where the meter
+would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.AlsoWanted`).
+
+- **Whose** (`DeathRecapQueue`, tested): _Recap deaths of_ **Me** (at first: the user's choice) or **Everyone**. A
+  death is new when it comes after the encounter was first looked at (one there when the plugin loaded, or the recap
+  was turned on, isn't). They go 8 seconds after the last one came (`Lasts`), the time standing still while the
+  mouse is over the window (held); the pin keeps them until it's pressed again. Several at once (a wipe) are one-line
+  rows, newest on top ("Fenn Hollow · Hello World (raid-wide)", the time and a chevron), at most eight; a row pressed
+  opens into the full card in its place (its chevron folds it), and under the rows "Goes in 8 s" and the pin.
+- **The card** (`DeathRecapView.Card`): the job's icon, "Velka Moor died" (their spot with _Jobs only_), "4:12 · P3"
+  (the clock, and the phase in a fight of more than one), a skull. In a red box: "Killed by **Latent Defect** for
+  **182,400** (41,200 more than they had), a tank buster, with no mitigation up." (the kind when it's told, "no
+  mitigation" when their statuses were read and nothing that lowers damage was up: a barrier doesn't count). "The
+  last 6 seconds": each hit, heal and barrier from six seconds before (the killing blow whenever it came), its time
+  before the death ("−4.1 s"), a mark (a sword red, a heart green, a shield amber), what it was and from whom (a
+  heal's healer, a barrier's: their first name; none with _Jobs only_), its amount (a barrier's isn't known:
+  "shield") and the HP after it as a small bar against their max HP (its number in the tooltip), the killing blow on a
+  red wash. "Up at the hit:" the mitigations up as chips (theirs first, then the party's on the boss, the barriers
+  last), "Nothing", or "Not seen: they were out of sight"; for a tank, the big cooldowns of their job that weren't
+  up, red: "No Rampart, Guardian or Hallowed Ground" (`Mitigations.MissingFor`); "Had Weakness" (amber) when they
+  died with Weakness or Brink of Death on. Its foot: **Open in the meter** (the opened-up meter on that death:
+  `MeterDetailWindow.Show(MeterTab.Deaths, fight, member, index)`), and alone, "Goes in 8 s ·" and the pin.
+- **What was up** (`Core/Meter/Mitigations.cs`): a catalogue of the mitigations by their English Status names (as
+  the meter's other lists: the game side finds their rows on the Status sheet read in English, `Game/PrepData.cs`): a
+  tank's own (Rampart, Guardian/Sentinel, Hallowed Ground, Damnation/Vengeance, Holmgang, Shadowed Vigil/Shadow Wall,
+  Living Dead, Great Nebula/Nebula, Superbolide: the notable ones; Bulwark, Holy Sheltron, Thrill of Battle,
+  Bloodwhetting, Dark Mind, Oblation, Camouflage, Heart of Corundum), the party's (Passage of Arms, Dark Missionary,
+  Heart of Light, Troubadour, Nature's Minne, Tactician, Shield Samba, Magick Barrier, Tempera Coat, Temperance,
+  Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, Kerachole, Holos,
+  Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night, Divine Benison, Galvanize, Intersection,
+  the Sage's, Radiant Aegis, Improvised Finish) and those on the enemy (Reprisal, Addle, Feint, Dismantle) [verify:
+  each status's name as the sheet has it]. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
+  meter's game side reads each party member's (during an encounter, each frame, with Weakness: `PartyState.Mitigation`)
+  and the party's on the enemies (four times a second, with their targetability: `MeterSession.EnemyMitigation`); a
+  death keeps theirs as last read alive (the frame they're seen dead has lost them) with the enemies' then
+  (`DeathEntry.Mitigation`, `MitigationKnown`).
+- **What the killing blow was** (`DeathHits.Kind`, tested; `DeathEntry.Hit`): at the death, the members whose last
+  hits have the same action within a second of the killing blow (one cast lands on them all in one message, before
+  the HP that says the death is read). **Raid-wide** when it hit half the party or more (three at least, in a party
+  of four or more); **a tank buster** when it hit only tanks (one or two), the one who died among them, for 40% of
+  their max HP or more. Anything else (a spread, a puddle, an auto-attack, an instant death) isn't named.
 
 ## Arrange windows (`UI/ArrangeWindow.cs`, `UI/ArrangeMode.cs`, `UI/Model/ArrangeWindows.cs`; since 0.8.0)
 
@@ -1954,7 +2045,8 @@ started (`WindowPlace`) and the samples it started. The windows read it through 
 
 **Who takes part** (`ArrangeParts.Taking`): each window that's turned on: the meter with _Show the meter_
 on; the plan window with _Show my plan in duties_ on, or open now; the callouts and the cooldown tracker with
-their _Show_ on. With none on, the toolbar says so (Settings → Features turns them on) and has only Cancel and
+their _Show_ on; since 0.9.0 the ready check card and the death recap with theirs ("Ready check", "Death recap": their
+samples shown, Grows, Click-through and Background in the options panel). With none on, the toolbar says so (Settings → Features turns them on) and has only Cancel and
 Done to press. Each shows even out of a duty, with something in it: the meter its sample fight (unless a real
 fight is on: then what it shows now), the callouts and the tracker their samples, the plan window as it is (its
 plan, or empty), opened if it was closed. Their _Preview_ tags can't be pressed meanwhile (the sample stays).
@@ -2014,16 +2106,18 @@ RaidPlanner/
               the roster and the diagnostics file (DiagnosticsLog), who the party is (PartyPick),
               the gear (Recording: Gear); Meter/: the combat parser (Effects, CombatParser), the sums (Tally),
               phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
-              which is which (CombatLists, CombatKinds), who interrupted, the moments before a pull
+              which is which (CombatLists, CombatKinds), the death recap's mitigations and a killing blow's
+              kind (Mitigations), who interrupted, the moments before a pull
               and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
               in the game (PlanService), summaries and the roster (Uploads), uploading every pull
-              (LogUploader), the party (PartyMembers), your gear (GearReader), and the game's version
-              and server time (GameClock)
-  UI/         the windows: MainWindow (Views/: Home, Pulls, Pull, Send, Settings and SettingsRows, Setup), PlanWindow and its board
+              (LogUploader), the party (PartyMembers), your gear (GearReader), the game's version
+              and server time (GameClock), the ready check's reads (ReadyCheckReader) and the statuses and items
+              it and the death recap look for (PrepData)
+  UI/         the windows: MainWindow (Views/: Home, Pulls, Pull, Send, Settings and SettingsRows (since 0.9.0 SettingsPrep: the ready check's and the death recap's rows), Setup), PlanWindow and its board
               (PlanBoard, BoardArt), MeterWindow (MeterWindow.Plate.cs: compact) and MeterDetailWindow,
               the compact meter's drawer in its themes (PlateMeter), the overlays (OverlayWindow:
-              CooldownWindow with its game side PartyCooldowns, CalloutWindow), Glyphs;
+              CooldownWindow with its game side PartyCooldowns, CalloutWindow, ReadyCheckWindow, DeathRecapWindow), Glyphs;
               Kit/ (tokens, fonts, text, controls, marks, the Boss, the frame, Home's and the guide's
               parts: HomeParts, the themes' drawing: PlateArt, Settings' panes, sections, more row and
               tags: SettingsParts; the windows' size: UiScale, ScaleFollower, CssLimits); Arrange windows (ArrangeWindow: the toolbar and ArrangePanel;
@@ -2035,7 +2129,8 @@ RaidPlanner/
               0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
-              settings (Overlay), Arrange windows' state, places and layout (ArrangeWindows), Settings'
+              settings (Overlay), the ready check's card and when it shows (ReadyCheck), the death recap's card and
+              queue (DeathRecap), Arrange windows' state, places and layout (ArrangeWindows), Settings'
               pages, rows, search and the Features cards' tags (SettingsIndex), 0.8.0's main parts (Features), the setup guide's rules (SetupGuide), a pull in a sentence
               (PullGist), pulls by night (PullNights), the plan's next step (PlanProgress),
               /raidcodex's words (Commands), SVG
@@ -2223,6 +2318,23 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### 0.9.0 (not released yet)
+
+- **A ready check card**: as the game's ready check starts, a card beside the party list says who's fed and for how
+  long (amber when their food would run out before your average pull here is over, red with none, "can't see" for
+  someone out of range), "7 of 8 fed · one runs out mid-pull" over your average pull, and yours: tinctures, food and
+  a warning when your gear's under 20%. When everyone's fed and your gear's fine it's one line. It goes when the pull
+  starts or 30 seconds after the check; its pin keeps it. It only reads the ready check, never answers it. Settings →
+  Plan and callouts → _Show at ready checks_ (on).
+- **A death recap**: when you die (or anyone, as Settings → Damage meter → _Recap deaths of_ says), a card from the
+  meter's own recap: what killed you and by how much over, whether it was a tank buster or a raid-wide, the last six
+  seconds' hits, heals and shields with your HP after each, what mitigation was up (and for a tank, the big cooldowns
+  that weren't), Weakness, and Open in the meter. It goes after 8 seconds, held while you point at it; its pin keeps
+  it. A wipe's deaths are one line each, newest on top; press one to open it. The meter listens with it on, even with
+  its window off.
+- Both are in Arrange windows and on Settings → Windows (show, lock, click-through, grows, background), each with a
+  sample.
 
 ### 0.8.3 (not released yet)
 

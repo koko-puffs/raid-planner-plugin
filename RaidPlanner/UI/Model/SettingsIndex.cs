@@ -131,6 +131,23 @@ namespace RaidPlanner.UI.Model
         Codex,
         Diagnostics,
         SetupGuide,
+
+        // 0.9.0: the ready check card (Plan and callouts → Ready checks; Windows).
+        ReadyCheckShow,
+        ReadyCheckSample,
+        ReadyCheckLock,
+        ReadyCheckClickThrough,
+        ReadyCheckGrows,
+        ReadyCheckBackground,
+
+        // 0.9.0: the death recap (Damage meter → Death recap; Windows).
+        DeathRecapShow,
+        DeathRecapWho,
+        DeathRecapSample,
+        DeathRecapLock,
+        DeathRecapClickThrough,
+        DeathRecapGrows,
+        DeathRecapBackground,
     }
 
     /// <summary>
@@ -228,6 +245,9 @@ namespace RaidPlanner.UI.Model
             new(SettingId.MeterSample, Met, "How it looks", "Play a sample fight", "A made-up pull with its clock running, to place the meter.", Action: true),
             new(SettingId.MeterRank, Met, "The numbers", "What it ranks by", "ENCDPS: over the fight's whole time, as FF Logs ranks. DPS: over each player's own time."),
             new(SettingId.MeterNames, Met, "The numbers", "Show", "Names, or only jobs when you share screenshots or stream."),
+            new(SettingId.DeathRecapShow, Met, "Death recap", "Show a death recap", "What killed them, their last seconds and what was up, as a death comes."),
+            new(SettingId.DeathRecapWho, Met, "Death recap", "Recap deaths of", "Yours only, or everyone's in the party.", Sub: true),
+            new(SettingId.DeathRecapSample, Met, "Death recap", "See it", "A made-up wipe's deaths, to place it.", Action: true),
             new(SettingId.MeterGrows, Met, "More", "Grows", "The edge that stays put as it grows.", "grows up or down", More: true, Echo: true),
             new(SettingId.MeterHead, Met, "More", "Head", "The clock, tabs, pulls and lock: at the top or the bottom.", "head", More: true),
             new(SettingId.MeterOrder, Met, "More", "Order", "Reading down the list.", "order", More: true),
@@ -254,6 +274,8 @@ namespace RaidPlanner.UI.Model
             new(SettingId.CalloutSample, Pla, "On-screen callouts", "Show sample callouts", "Made-up steps counting down, to place them.", Action: true),
             new(SettingId.ShareStep, Pla, "With your static", "Share my step with the site", "Present on the site can follow along."),
             new(SettingId.SendRoster, Pla, "With your static", "Send my party to my roster", "Their names, by spot, to your Raid Codex.", Action: true),
+            new(SettingId.ReadyCheckShow, Pla, "Ready checks", "Show at ready checks", "Who's fed and for how long, your tinctures and your gear's condition."),
+            new(SettingId.ReadyCheckSample, Pla, "Ready checks", "See it", "A made-up party's ready check, to place it.", Action: true),
             new(SettingId.CalloutLead, Pla, "More", "How early the sound plays", "Before the step goes off.", "how early the sound plays", More: true),
             new(SettingId.CalloutCompact, Pla, "More", "Smaller callouts", "Smaller words and rows.", "smaller callouts", More: true),
             new(SettingId.CalloutBackground, Pla, "More", "The callouts' background", "Their words stay solid.", "the callouts' background", More: true, Echo: true),
@@ -290,6 +312,16 @@ namespace RaidPlanner.UI.Model
             new(SettingId.CdClickThrough, Win, "Party cooldowns", "Click-through when locked", "The mouse goes through to the game.", Sub: true),
             new(SettingId.CdGrows, Win, "Party cooldowns", "Grows", "Which edge stays put as it grows."),
             new(SettingId.CdBackground, Win, "Party cooldowns", "Background", "Its words stay solid."),
+            new(SettingId.ReadyCheckShow, Win, "Ready check", "Show at ready checks", "As the game's ready check starts.", Echo: true, Keep: true),
+            new(SettingId.ReadyCheckLock, Win, "Ready check", "Lock it where it is", "No title bar, and no moving or sizing it."),
+            new(SettingId.ReadyCheckClickThrough, Win, "Ready check", "Click-through when locked", "The mouse goes through to the game (its pin can't be pressed then).", Sub: true),
+            new(SettingId.ReadyCheckGrows, Win, "Ready check", "Grows", "Which edge stays put as it grows."),
+            new(SettingId.ReadyCheckBackground, Win, "Ready check", "Background", "Its card stays solid."),
+            new(SettingId.DeathRecapShow, Win, "Death recap", "Show a death recap", "As a death comes.", Echo: true, Keep: true),
+            new(SettingId.DeathRecapLock, Win, "Death recap", "Lock it where it is", "No title bar, and no moving or sizing it."),
+            new(SettingId.DeathRecapClickThrough, Win, "Death recap", "Click-through when locked", "The mouse goes through to the game (its buttons can't be pressed then).", Sub: true),
+            new(SettingId.DeathRecapGrows, Win, "Death recap", "Grows", "Which edge stays put as it grows."),
+            new(SettingId.DeathRecapBackground, Win, "Death recap", "Background", "Its card stays solid."),
 
             // Account and privacy.
             new(SettingId.Account, Acc, "Your account", "Raid Codex account", "Link it with a token from the site, or unlink it.", Action: true),

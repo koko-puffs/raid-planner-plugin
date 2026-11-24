@@ -249,6 +249,19 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>How many seconds before a step its sound plays.</summary>
     public int CalloutSoundLead { get; set; } = 3;
 
+    // The ready check card (0.9.0; Settings → Plan and callouts → Ready checks, and Windows).
+
+    /// <summary>The ready check card's window: shown at ready checks (on at first), lock, click-through, grows, anchor, background, width.</summary>
+    public OverlaySettings ReadyCheck { get; set; } = new() { Show = true, Everywhere = true, Background = 0.3f };
+
+    // The death recap (0.9.0; Settings → Damage meter → Death recap, and Windows).
+
+    /// <summary>The death recap's window: shown when a death comes (on at first), lock, click-through, grows, anchor, background, width.</summary>
+    public OverlaySettings DeathRecap { get; set; } = new() { Show = true, Everywhere = true, Background = 0.3f };
+
+    /// <summary>Recap deaths of: everyone in the party (off at first: yours only, the user's choice).</summary>
+    public bool DeathRecapEveryone { get; set; }
+
     // How big the windows are (0.8.1; Settings → Windows → Size, /raidcodex size).
 
     /// <summary>

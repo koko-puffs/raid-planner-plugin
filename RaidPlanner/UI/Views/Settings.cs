@@ -523,6 +523,11 @@ public sealed partial class MainWindow
                 c.Diagnostics = d.Diagnostics;
                 recorder.Diagnostics.On = c.Diagnostics;
                 break;
+
+            // 0.9.0: the ready check card's and the death recap's (UI/Views/SettingsPrep.cs).
+            default:
+                ResetPrep(id, d);
+                break;
         }
     }
 

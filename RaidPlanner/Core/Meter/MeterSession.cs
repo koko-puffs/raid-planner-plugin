@@ -7,7 +7,10 @@ namespace RaidPlanner.Core.Meter;
 /// <summary>A party member as the game shows them this frame (the meter's names stay in the plugin).</summary>
 /// <param name="Role">The game's ClassJob role: 1 tank, 2 melee, 3 ranged, 4 healer.</param>
 /// <param name="Weakness">Since 0.4.0: Weakness (1) or Brink of Death (2) on them now, 0 neither.</param>
-public readonly record struct PartyState(uint Id, string Name, string Job, byte Role, long Hp, long MaxHp, bool InCombat, bool You, byte Weakness = 0)
+/// <param name="Mitigation">Since 0.9.0: the mitigations on them now (a <see cref="Mitigations"/> mask), for the death recap.</param>
+/// <param name="MitigationRead">Since 0.9.0: their statuses were read this frame (not when they're out of sight).</param>
+public readonly record struct PartyState(uint Id, string Name, string Job, byte Role, long Hp, long MaxHp, bool InCombat, bool You, byte Weakness = 0,
+    ulong Mitigation = 0, bool MitigationRead = false)
 {
     public bool Dead => MaxHp > 0 && Hp <= 0;
 }
@@ -215,7 +218,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var m = live.Join(p);
             m.Dead = dead;
             if (p.MaxHp > 0) m.MaxHp = p.MaxHp;
-            if (!dead) m.Weakness = p.Weakness;
+            if (!dead)
+            {
+                m.Weakness = p.Weakness;
+                // Since 0.9.0: what's on them as last read alive, for a death's recap.
+                m.Mitigation = p.Mitigation;
+                m.MitigationKnown = p.MitigationRead;
+            }
             if (known && !was && dead) live.Died(m, t, this);
             else if (known && was && !dead) live.Raised(m, t);
         }
@@ -241,6 +250,15 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     public void Targetable(uint enemy, bool on) => live?.Phases.Targetable(now - live.Start, enemy, on);
 
     public void EndTargets() => live?.Phases.EndFrame(now - live.Start);
+
+    /// <summary>
+    /// Since 0.9.0: the party's mitigations on the bosses now (Reprisal, Addle, Feint, Dismantle: a <see cref="Mitigations"/> mask),
+    /// read with their targetability; a death's recap says which were up.
+    /// </summary>
+    public void EnemyMitigation(ulong mask)
+    {
+        if (live != null) live.EnemyMitigation = mask & Mitigations.OnEnemy;
+    }
 
     /// <summary>The enemies worth reporting outside a duty: those the party has fought this encounter.</summary>
     public bool Engaged(uint enemy) => live != null && live.Enemies.Contains(enemy);
@@ -572,6 +590,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public (double T, Member By)? RaiseStatus;
         public Death? LastDeath;
 
+        // Since 0.9.0: the mitigations on them as last read alive, and whether they were read.
+        public ulong Mitigation;
+        public bool MitigationKnown;
+
         public readonly Recap[] Recent = new Recap[RecapLength];
         public int RecentCount;
         public int RecentNext;
@@ -609,6 +631,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public double? RaisedAt;
         public Member? RaisedBy;
         public bool HadWeakness;
+
+        // Since 0.9.0: the mitigations up as they died (theirs and the party's on the bosses), and what the killing blow was.
+        public ulong Mitigation;
+        public bool MitigationKnown;
+        public DeathHit Hit;
     }
 
     /// <summary>An event as it's kept (the text is made when it's read: a member's name may come later).</summary>
@@ -635,6 +662,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public readonly Tally Tally = new();
         public readonly PhaseClock Phases = new();
         public readonly List<Death> Deaths = new();
+
+        /// <summary>Since 0.9.0: the party's mitigations on the bosses as last read (<see cref="MeterSession.EnemyMitigation"/>).</summary>
+        public ulong EnemyMitigation;
 
         // Since 0.4.0: the events; the enemies' casts going on; who interrupted; each boss's target as a span, and the tank holding it.
         // The events in a ring (the newest MostEvents, nothing made per event), and how many there have been (what a list is made again by).
@@ -720,12 +750,41 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         {
             m.LastDied = t - Start;
             LastDeath = Math.Max(LastDeath, t);
-            var d = new Death { Who = m, T = t - Start, Recent = m.RecentInOrder(), MaxHp = m.MaxHp, HadWeakness = m.Weakness != 0 };
+            var d = new Death
+            {
+                Who = m, T = t - Start, Recent = m.RecentInOrder(), MaxHp = m.MaxHp, HadWeakness = m.Weakness != 0,
+                Mitigation = (m.MitigationKnown ? m.Mitigation : 0) | EnemyMitigation, MitigationKnown = m.MitigationKnown,
+            };
+            d.Hit = HitOf(d, m, t);
             Deaths.Add(d);
             m.LastDeath = d;
             m.RaisedWith = null;
             m.RaiseStatus = null;
             Happen(new Happening(t - Start, MeterEventKind.Death, m, null, 0, 0, d));
+        }
+
+        /// <summary>
+        /// Since 0.9.0: what the killing blow was, from how many it hit at once (<see cref="DeathHits.Kind"/>): the members whose last hits
+        /// have the same action within <see cref="DeathHits.Together"/> of it (the cast lands on them all in one message, before the HP
+        /// that says this death is read).
+        /// </summary>
+        private DeathHit HitOf(Death d, Member m, double t)
+        {
+            if (KillingBlow(d.Recent, t) is not { Instant: false } blow) return DeathHit.Unknown;
+            var hit = 0;
+            var tanks = 0;
+            foreach (var o in Members)
+            {
+                for (var i = 0; i < o.RecentCount; i++)
+                {
+                    var r = o.Recent[i];
+                    if (!r.Hit || r.What != blow.What || Math.Abs(r.T - blow.T) > DeathHits.Together) continue;
+                    hit++;
+                    if (o.Role == "tank") tanks++;
+                    break;
+                }
+            }
+            return DeathHits.Kind(hit, tanks, Members.Count, m.Role == "tank", -blow.Amount, d.MaxHp);
         }
 
         // -----------------------------------------------------------------------------------------
@@ -1093,8 +1152,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var blow = KillingBlow(d.Recent, Start + d.T);
             var amount = blow is { } b ? -b.Amount : 0;
             var overkill = blow is { } k && k.HpBefore >= 0 ? Math.Max(0, amount - k.HpBefore) : 0;
+            var (phase, _) = Phases.At(d.T);
             return new DeathEntry(d.Who.Id, d.Who.Slot, d.Who.Name, d.T, blow is { } w ? s.Name(w.What) : "Unknown", amount, overkill, d.PartOfWipe, recap,
-                d.MaxHp, d.RaisedAt, d.RaisedBy?.Slot, d.HadWeakness);
+                d.MaxHp, d.RaisedAt, d.RaisedBy?.Slot, d.HadWeakness, d.Mitigation, d.MitigationKnown, d.Hit, Phases.Starts.Count > 1 ? $"P{phase + 1}" : null);
         }
 
         /// <summary>

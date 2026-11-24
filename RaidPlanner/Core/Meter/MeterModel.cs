@@ -124,7 +124,11 @@ public sealed record RecapLine(double At, string What, long Amount, long HpBefor
 /// bars are drawn against; added in the review round). Added in 0.4.0: <see cref="RaisedAt"/> when
 /// they were alive again (seconds since the encounter began; null: not raised in it),
 /// <see cref="RaisedBy"/> the raiser's slot (null when it isn't known who), <see cref="HadWeakness"/>
-/// whether they died with Weakness or Brink of Death on (a death soon after an earlier raise).
+/// whether they died with Weakness or Brink of Death on (a death soon after an earlier raise). Since 0.9.0 (the death
+/// recap): <see cref="Mitigation"/> the mitigations up as the killing blow landed (a <see cref="Mitigations"/> mask: theirs as
+/// last read alive, and the party's on the bosses), <see cref="MitigationKnown"/> whether their statuses were read at all
+/// (out of sight they aren't), <see cref="Hit"/> what the killing blow was (a tank buster, a raid-wide), and
+/// <see cref="Phase"/> the phase they died in ("P3"; null in a fight of one phase).
 /// </summary>
 public sealed record DeathEntry(
     int PartyId,
@@ -139,7 +143,11 @@ public sealed record DeathEntry(
     long MaxHp = 0,
     double? RaisedAt = null,
     string? RaisedBy = null,
-    bool HadWeakness = false);
+    bool HadWeakness = false,
+    ulong Mitigation = 0,
+    bool MitigationKnown = false,
+    DeathHit Hit = DeathHit.Unknown,
+    string? Phase = null);
 
 /// <summary>What a line of the Events tab is (<see cref="MeterEvent.Kind"/>).</summary>
 public enum MeterEventKind

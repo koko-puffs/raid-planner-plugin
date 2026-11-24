@@ -89,6 +89,11 @@ public enum Icon
     Copy,
     Volume,
     Hourglass,
+
+    /// <summary>0.9.0: the ready check's and the death recap's pin, the ready check's food and gear.</summary>
+    Pin,
+    Utensils,
+    Wrench,
 }
 
 /// <summary>
@@ -222,6 +227,14 @@ public static class Icons
             "M16 9a5 5 0 0 1 0 6", "M19.364 18.364a9 9 0 0 0 0-12.728",
         }, false),
         [Icon.Hourglass] = (new[] { "M5 22h14", "M5 2h14", "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22", "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" }, false),
+        // 0.9.0: the ready check's and the death recap's.
+        [Icon.Pin] = (new[]
+        {
+            "M12 17v5",
+            "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",
+        }, false),
+        [Icon.Utensils] = (new[] { "M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2", "M7 2v20", "M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3z", "M21 15v7" }, false),
+        [Icon.Wrench] = (new[] { "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

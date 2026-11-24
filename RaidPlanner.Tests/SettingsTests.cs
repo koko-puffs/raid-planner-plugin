@@ -67,12 +67,17 @@ public class SettingsIndexTests
     public void Sections_keep_their_rows_in_order_and_leave_out_the_folded_ones()
     {
         var meter = SettingsIndex.Sections(SettingsTab.Meter);
-        Assert.Equal(new[] { "When it shows", "How it looks", "The numbers" }, meter.Select(s => s.Title));
+        // 0.9.0: the death recap's section.
+        Assert.Equal(new[] { "When it shows", "How it looks", "The numbers", "Death recap" }, meter.Select(s => s.Title));
         Assert.Equal(new[] { SettingId.ShowMeter, SettingId.MeterWhere, SettingId.MeterOpenInDuties, SettingId.MeterHide }, meter[0].Rows.Select(r => r.Id));
         Assert.DoesNotContain(meter.SelectMany(s => s.Rows), r => r.More);
         var windows = SettingsIndex.Sections(SettingsTab.Windows).Select(s => s.Title).ToList();
-        Assert.Equal(new[] { "Size", "Arrange", "Damage meter", "Plan window", "Callouts", "Party cooldowns" }, windows);
+        Assert.Equal(new[] { "Size", "Arrange", "Damage meter", "Plan window", "Callouts", "Party cooldowns", "Ready check", "Death recap" }, windows);
         Assert.NotNull(SettingsIndex.Section(SettingsTab.Plans, "On-screen callouts"));
+        // 0.9.0: the ready check card's switch is with the plan and its callouts, the death recap's with the meter.
+        Assert.Equal(new[] { SettingId.ReadyCheckShow, SettingId.ReadyCheckSample }, SettingsIndex.Section(SettingsTab.Plans, "Ready checks")!.Rows.Select(r => r.Id));
+        Assert.Equal(new[] { SettingId.DeathRecapShow, SettingId.DeathRecapWho, SettingId.DeathRecapSample },
+            SettingsIndex.Section(SettingsTab.Meter, "Death recap")!.Rows.Select(r => r.Id));
     }
 
     [Fact]
@@ -95,7 +100,8 @@ public class SettingsIndexTests
         Assert.Empty(SettingsIndex.Find("   "));
         Assert.Equal(new[] { SettingId.MeterRank }, SettingsIndex.Find("encdps").Select(e => e.Id));
         var backgrounds = SettingsIndex.Find("Background");
-        Assert.Equal(new[] { SettingId.MeterBackground, SettingId.CalloutBackground, SettingId.CdBackground }, backgrounds.Select(e => e.Id));
+        Assert.Equal(new[] { SettingId.MeterBackground, SettingId.CalloutBackground, SettingId.CdBackground, SettingId.ReadyCheckBackground, SettingId.DeathRecapBackground },
+            backgrounds.Select(e => e.Id));
         Assert.All(backgrounds, e => Assert.Equal(SettingsTab.Windows, e.Page));
         Assert.All(SettingsIndex.Find("e"), e => Assert.False(e.Echo));
         // Every word, anywhere in the name or the line.
@@ -130,6 +136,12 @@ public class SettingsIndexTests
         Assert.Contains(SettingId.CdBackground, windows);
         Assert.DoesNotContain(SettingId.ShowMeter, windows);
         Assert.DoesNotContain(SettingId.CdShow, windows);
+        Assert.Contains(SettingId.ReadyCheckLock, windows);
+        Assert.DoesNotContain(SettingId.ReadyCheckShow, windows);
+        Assert.DoesNotContain(SettingId.DeathRecapShow, windows);
+        Assert.Contains(SettingId.DeathRecapWho, SettingsIndex.Resets(SettingsTab.Meter));
+        Assert.Contains(SettingId.ReadyCheckShow, SettingsIndex.Resets(SettingsTab.Plans));
+        Assert.DoesNotContain(SettingId.ReadyCheckSample, SettingsIndex.Resets(SettingsTab.Plans));
         Assert.DoesNotContain(SettingId.Arrange, windows);
         // The meter's Grows and Background are on its page too, and its reset puts them back.
         var meter = SettingsIndex.Resets(SettingsTab.Meter);

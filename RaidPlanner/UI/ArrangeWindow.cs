@@ -28,6 +28,11 @@ public sealed class ArrangeWindow : Window
     private readonly CooldownWindow cooldowns;
     private DateTime failedAt;
 
+    /// <summary>Since 0.9.0: the ready check card and the death recap (set by the plugin; null, they don't take part).</summary>
+    public OverlayWindow? ReadyCheck { get; set; }
+
+    public OverlayWindow? DeathRecap { get; set; }
+
     private const string Title = "Arranging windows";
     private const string Line = "Drag them where you want. They lock when you’re done.";
     private const string NoneLine = "None of the windows is turned on: Settings → Features turns them on.";
@@ -82,7 +87,8 @@ public sealed class ArrangeWindow : Window
             Panel.IsOpen = true;
             return;
         }
-        var taking = ArrangeParts.Taking(config.ShowMeter, config.ShowPlanInDuties || plan.IsOpen, config.CalloutOverlay.Show, config.Cooldowns.Show);
+        var taking = ArrangeParts.Taking(config.ShowMeter, config.ShowPlanInDuties || plan.IsOpen, config.CalloutOverlay.Show, config.Cooldowns.Show,
+            ReadyCheck != null && config.ReadyCheck.Show, DeathRecap != null && config.DeathRecap.Show);
         var places = new (ArrangePart, WindowPlace)[taking.Count];
         for (var i = 0; i < taking.Count; i++) places[i] = (taking[i], PlaceOf(taking[i]));
         Session.Start(places);
@@ -103,6 +109,8 @@ public sealed class ArrangeWindow : Window
                     break;
                 case ArrangePart.Callouts:
                 case ArrangePart.Cooldowns:
+                case ArrangePart.ReadyCheck:
+                case ArrangePart.DeathRecap:
                     var w = Overlay(part).Window;
                     if (!w.Previewing)
                     {
@@ -228,8 +236,13 @@ public sealed class ArrangeWindow : Window
     };
 
     /// <summary>An overlay's window and its settings.</summary>
-    private (OverlayWindow Window, Func<OverlaySettings> Settings) Overlay(ArrangePart part) =>
-        part == ArrangePart.Callouts ? (callouts, () => config.CalloutOverlay) : (cooldowns, () => config.Cooldowns);
+    private (OverlayWindow Window, Func<OverlaySettings> Settings) Overlay(ArrangePart part) => part switch
+    {
+        ArrangePart.Callouts => (callouts, () => config.CalloutOverlay),
+        ArrangePart.ReadyCheck when ReadyCheck != null => (ReadyCheck, () => config.ReadyCheck),
+        ArrangePart.DeathRecap when DeathRecap != null => (DeathRecap, () => config.DeathRecap),
+        _ => (cooldowns, () => config.Cooldowns),
+    };
 
     // ---------------------------------------------------------------------------------------------
     // The toolbar.
@@ -455,7 +468,13 @@ public sealed class ArrangePanel : Window
         {
             y += S(6);
             var meter = part == ArrangePart.Meter;
-            var o = meter ? null : part == ArrangePart.Callouts ? config.CalloutOverlay : config.Cooldowns;
+            var o = meter ? null : part switch
+            {
+                ArrangePart.Callouts => config.CalloutOverlay,
+                ArrangePart.ReadyCheck => config.ReadyCheck,
+                ArrangePart.DeathRecap => config.DeathRecap,
+                _ => config.Cooldowns,
+            };
 
             // Grows: which edge stays put as it grows.
             Kit.Rule(dl, left, right, y);

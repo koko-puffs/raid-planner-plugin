@@ -43,6 +43,10 @@ Record the fights you're in, then make them into plans on
 - **A party cooldown tracker**: your party's raid buffs, mitigation and Swiftcast, each with the
   time until it's ready (yours from the game's own timers, the others' from when they used them), and
   a cooldown your plan has someone use soon outlined ("planned in 8 s").
+- **A ready check card**: when a ready check starts, who's fed and for how long (amber if their food runs
+  out before your average pull here), your tinctures and food, and a warning when your gear needs repairing.
+- **A death recap**: when you die (or anyone, if you like), what killed you, your last six seconds, and what
+  mitigation was up, with a button to open it in the meter.
 - **Tracks your progress** (once linked): how far each pull got, the boss's HP left and each spot's
   numbers, for the site's progress tracker.
 - **Only watches.** It never acts in the game or sends anything to it.

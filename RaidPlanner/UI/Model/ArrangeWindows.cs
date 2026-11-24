@@ -11,13 +11,19 @@ public enum ArrangePart
     Plan,
     Callouts,
     Cooldowns,
+
+    /// <summary>0.9.0: the ready check card.</summary>
+    ReadyCheck,
+
+    /// <summary>0.9.0: the death recap.</summary>
+    DeathRecap,
 }
 
 /// <summary>Which windows take part in Arrange windows, what each is called there and which options it has (worked out away from ImGui so it's tested).</summary>
 public static class ArrangeParts
 {
     /// <summary>Every window that can take part, in the order the mode lists them (the first taking part is picked at first).</summary>
-    public static readonly ArrangePart[] All = [ArrangePart.Meter, ArrangePart.Plan, ArrangePart.Callouts, ArrangePart.Cooldowns];
+    public static readonly ArrangePart[] All = [ArrangePart.Meter, ArrangePart.Plan, ArrangePart.Callouts, ArrangePart.Cooldowns, ArrangePart.ReadyCheck, ArrangePart.DeathRecap];
 
     /// <summary>Its label in its arranging head and the options panel (the mock-up's).</summary>
     public static string Label(ArrangePart part) => part switch
@@ -25,6 +31,8 @@ public static class ArrangeParts
         ArrangePart.Meter => "Meter",
         ArrangePart.Plan => "Plan",
         ArrangePart.Callouts => "Callouts",
+        ArrangePart.ReadyCheck => "Ready check",
+        ArrangePart.DeathRecap => "Death recap",
         _ => "Party cooldowns",
     };
 
@@ -36,15 +44,18 @@ public static class ArrangeParts
 
     /// <summary>
     /// The windows that take part, in <see cref="All"/>'s order: each one turned on (the meter's Show the meter;
-    /// the plan window with Show my plan in duties on, or open now; the callouts' and the tracker's Show).
+    /// the plan window with Show my plan in duties on, or open now; the callouts' and the tracker's Show; since 0.9.0 the ready
+    /// check card's and the death recap's Show).
     /// </summary>
-    public static List<ArrangePart> Taking(bool meter, bool plan, bool callouts, bool cooldowns)
+    public static List<ArrangePart> Taking(bool meter, bool plan, bool callouts, bool cooldowns, bool readyCheck = false, bool deathRecap = false)
     {
-        var list = new List<ArrangePart>(4);
+        var list = new List<ArrangePart>(6);
         if (meter) list.Add(ArrangePart.Meter);
         if (plan) list.Add(ArrangePart.Plan);
         if (callouts) list.Add(ArrangePart.Callouts);
         if (cooldowns) list.Add(ArrangePart.Cooldowns);
+        if (readyCheck) list.Add(ArrangePart.ReadyCheck);
+        if (deathRecap) list.Add(ArrangePart.DeathRecap);
         return list;
     }
 }

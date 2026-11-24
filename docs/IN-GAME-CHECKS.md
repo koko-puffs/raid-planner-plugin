@@ -107,3 +107,17 @@ the plugin names each tick after the caster's latest DoT on the target.
 - The callout sound follows the game's volume and chat-sound setting.
 - The new looks (0.8.x): the window size on a 4K screen, the callouts' ring and NOW, the cooldown tracker's rings, the
   meter staying open between pulls in duties.
+
+## 13. The ready check card and the death recap (0.9.0)
+
+- Start a ready check, and have someone else start one: the card comes as it starts (you answering or not), stays
+  while it goes on, goes 30 seconds after it ends, and goes at once when the pull starts. This checks that the ready
+  check agent's entries say "awaiting" only while a check is on.
+- A party member without food, one whose food runs out in a few minutes, one out of range or in another zone: red
+  "No food", amber (with pulls kept for the duty), "can't see". The time left should match the game's.
+- Your tinctures and meals: the counts match your inventory (potions and elixirs aren't tinctures). Gear under 20%
+  (or nearly broken): the amber warning, and the percentage matches the game's repair window.
+- Die to a tank buster with Rampart (or another big cooldown) up, and with nothing up; die to a raid-wide: the
+  recap says "a tank buster" or "a raid-wide", lists what was up (Reprisal on the boss too) and, for a tank, what
+  wasn't. Statuses are found by their English names: check one each on a non-English client.
+- A wipe with _Recap deaths of: Everyone_: one line each, newest on top; Open in the meter opens the right death.

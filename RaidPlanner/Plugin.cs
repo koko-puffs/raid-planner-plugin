@@ -63,6 +63,11 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>The on-screen callouts (0.4.0).</summary>
     private readonly CalloutWindow calloutWindow;
 
+    /// <summary>The ready check card and the death recap (0.9.0).</summary>
+    private readonly ReadyCheckWindow readyCheckWindow;
+
+    private readonly DeathRecapWindow deathRecapWindow;
+
     /// <summary>Arrange windows (0.8.0): its toolbar (with Done, Cancel, Reset places) and its options panel.</summary>
     private readonly ArrangeWindow arrangeWindow;
 
@@ -124,13 +129,34 @@ public sealed class Plugin : IDalamudPlugin
             cooldowns = new PartyCooldowns(data, recorder);
             cooldownWindow = new CooldownWindow(config, fonts, cooldowns);
             calloutWindow = new CalloutWindow(config, fonts, plans);
-            arrangeWindow = new ArrangeWindow(config, fonts, meterWindow, planWindow, calloutWindow, cooldownWindow);
+            // 0.9.0: the ready check card (read only: it never answers the game's) and the death recap (the meter's own deaths).
+            var prep = new PrepData();
+            meter.Prep = prep;
+            readyCheckWindow = new ReadyCheckWindow(config, fonts, new ReadyCheckReader(data, prep))
+            {
+                InCombat = () => Services.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat],
+                AveragePull = () => ReadyCheckView.AveragePull(store.All, recorder.DutyHere?.Name),
+            };
+            deathRecapWindow = new DeathRecapWindow(config, fonts)
+            {
+                Source = () => meter.Source,
+                OpenInMeter = (fight, member, death) => meterDetail.Show(Core.Meter.MeterTab.Deaths, fight, member, death),
+            };
+            // The recap reads the meter's deaths: the meter listens while it's on, even with its window off.
+            meter.AlsoWanted = () => config.DeathRecap.Show;
+            arrangeWindow = new ArrangeWindow(config, fonts, meterWindow, planWindow, calloutWindow, cooldownWindow)
+            {
+                ReadyCheck = readyCheckWindow,
+                DeathRecap = deathRecapWindow,
+            };
             windows.AddWindow(window);
             windows.AddWindow(planWindow);
             windows.AddWindow(meterWindow);
             windows.AddWindow(meterDetail);
             windows.AddWindow(cooldownWindow);
             windows.AddWindow(calloutWindow);
+            windows.AddWindow(readyCheckWindow);
+            windows.AddWindow(deathRecapWindow);
             // Last: drawn over the overlays it arranges.
             windows.AddWindow(arrangeWindow);
             windows.AddWindow(arrangeWindow.Panel);
@@ -149,6 +175,10 @@ public sealed class Plugin : IDalamudPlugin
             window.CalloutsSampleOn = () => calloutWindow.Previewing;
             window.ToggleCalloutsSample = () => calloutWindow.Previewing = !calloutWindow.Previewing;
             window.PlaySound = calloutWindow.Play;
+            window.ReadyCheckSampleOn = () => readyCheckWindow.Previewing;
+            window.ToggleReadyCheckSample = () => readyCheckWindow.Previewing = !readyCheckWindow.Previewing;
+            window.DeathRecapSampleOn = () => deathRecapWindow.Previewing;
+            window.ToggleDeathRecapSample = () => deathRecapWindow.Previewing = !deathRecapWindow.Previewing;
             window.TogglePlanWindow = () => planWindow.Toggle();
             window.PlanWindowOpen = () => planWindow.IsOpen;
             // Arrange windows (0.8.0): Settings → Windows and the setup guide start it; /raidcodex arrange too.
@@ -458,6 +488,8 @@ public sealed class Plugin : IDalamudPlugin
         // The overlays follow their settings (and their samples); the tracker's game side listens while it's shown where it may be.
         if (cooldownWindow.IsOpen != cooldownWindow.WantedOpen) cooldownWindow.IsOpen = cooldownWindow.WantedOpen;
         if (calloutWindow.IsOpen != calloutWindow.WantedOpen) calloutWindow.IsOpen = calloutWindow.WantedOpen;
+        if (readyCheckWindow.IsOpen != readyCheckWindow.WantedOpen) readyCheckWindow.IsOpen = readyCheckWindow.WantedOpen;
+        if (deathRecapWindow.IsOpen != deathRecapWindow.WantedOpen) deathRecapWindow.IsOpen = deathRecapWindow.WantedOpen;
         try
         {
             cooldowns.Wanted = config.Cooldowns.Show && !cooldownWindow.Previewing && (config.Cooldowns.Everywhere || recorder.DutyHere != null);
