@@ -53,6 +53,10 @@ public sealed class MeterDetailWindow : Window
 
     private static readonly string[] Ranks = { "ENCDPS", "DPS" };
 
+    /// <summary>The tabs in the order the window shows them (since 0.9.0 Mitigation sits after Healing; saved tabs keep their numbers).</summary>
+    private static readonly MeterTab[] TabOrder =
+        { MeterTab.Damage, MeterTab.Healing, MeterTab.Mitigation, MeterTab.Taken, MeterTab.Deaths, MeterTab.Events };
+
     private MeterTab tab = MeterTab.Damage;
     private int? fight;
     private int? player;
@@ -93,8 +97,8 @@ public sealed class MeterDetailWindow : Window
         BringToFront();
     }
 
-    /// <summary>At least as wide as the five tabs and the head's buttons side by side; the table and the abilities sit side by side from about 1100 (CSS px).</summary>
-    private static readonly CssLimits Limits = new(new Vector2(980, 360), new Vector2(2400, 1600));
+    /// <summary>At least as wide as the six tabs (Mitigation since 0.9.0) and the head's buttons side by side; the table and the abilities sit side by side from about 1100 (CSS px).</summary>
+    private static readonly CssLimits Limits = new(new Vector2(1100, 360), new Vector2(2400, 1600));
 
     /// <summary>Grows or shrinks it with the windows' size (Settings → Windows → Size).</summary>
     private readonly ScaleFollower follower = new();
@@ -195,13 +199,16 @@ public sealed class MeterDetailWindow : Window
         // The tabs, with icons and the deaths and events counted.
         var deaths = e != null ? MeterView.Deaths(e).Count : 0;
         var events = e != null && m != null ? m.Events(e.Id) : Array.Empty<MeterEvent>();
+        // Since 0.9.0 Mitigation after Healing (TabOrder: the tabs' places aren't their saved numbers).
         var tabs = new[]
         {
-            new TabSpec("Damage", Icon.Sword), new TabSpec("Healing", Icon.Heart), new TabSpec("Taken", Icon.Shield),
+            new TabSpec("Damage", Icon.Sword), new TabSpec("Healing", Icon.Heart), new TabSpec("Mitigation", Icon.Shield), new TabSpec("Taken", Icon.Zap),
             new TabSpec("Deaths", Icon.Skull, deaths > 0 ? deaths.ToString(System.Globalization.CultureInfo.InvariantCulture) : null),
             new TabSpec("Events", Icon.List, events.Count > 0 ? events.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) : null),
         };
-        tab = (MeterTab)(Rc ? Kit.Tabs("##detail-tab", new Vector2(left, y), tabs, (int)tab, TabSize.Md) : ThemedTabs(dl, new Vector2(left, y), tabs, (int)tab, out _));
+        var at = Math.Max(0, Array.IndexOf(TabOrder, tab));
+        var picked = Rc ? Kit.Tabs("##detail-tab", new Vector2(left, y), tabs, at, TabSize.Md) : ThemedTabs(dl, new Vector2(left, y), tabs, at, out _);
+        tab = TabOrder[Math.Clamp(picked, 0, TabOrder.Length - 1)];
         var tabsWidth = Rc ? Kit.TabsWidth(tabs, TabSize.Md) : ThemedTabsWidth(tabs);
 
         // The right of the row: Small, ENCDPS or DPS, which pull, a rule, where in the fight, the clock.
@@ -321,18 +328,24 @@ public sealed class MeterDetailWindow : Window
             // columns want about 700, the abilities' 400); narrower, the table alone, all its columns readable.
             var both = inner >= S(1060);
             var leftW = both ? MathF.Round(Math.Clamp(inner * 0.6f, S(640), inner - S(18) - S(400))) : inner;
+            // Healing and Mitigation (since 0.9.0) give the picked player's side more: its cards and its list want about 520.
+            if (tab is MeterTab.Healing or MeterTab.Mitigation && both) leftW = MathF.Round(Math.Clamp(inner * 0.45f, S(480), inner - S(18) - S(520)));
             DrawTable(dl, m!, e, new Vector2(left, y), leftW, bottom - y);
             if (both)
             {
                 var rightX = left + leftW + S(18);
-                DrawAbilities(dl, m!, e, new Vector2(rightX, y), left + inner - rightX, bottom - y);
+                var side = new Vector2(rightX, y);
+                if (tab == MeterTab.Healing) DrawHealer(dl, m!, e, side, left + inner - rightX, bottom - y);
+                else if (tab == MeterTab.Mitigation) DrawGuard(dl, m!, e, side, left + inner - rightX, bottom - y);
+                else DrawAbilities(dl, m!, e, side, left + inner - rightX, bottom - y);
             }
         }
 
         // The footnote: what Crit, DH and DPS mean.
         var note = tab switch
         {
-            MeterTab.Healing => "Healing is what the heals put back: the heal less the overheal. Shields aren't healing, so a scholar reads low here, as in ACT.",
+            MeterTab.Healing => "Healing is what the heals put back: the heal less the overheal. Shields aren't healing (as in ACT): what they absorbed is beside it, an estimate from the barrier the game shows before each hit, credited to whoever put the barrier on.",
+            MeterTab.Mitigation => "Busters are hits on one or two of 30% of their HP or more; raid-wides hit most of the party. Up is what they carried then (theirs, the party's, a barrier) and Reprisal, Addle, Feint or Dismantle on the enemy; a barrier's share of a hit is an estimate. Mitigation up is the time a boss was on them that one of their own was.",
             MeterTab.Taken => "Everything enemies and the floor did to each of you, bleeds and DoTs included: what the game took off your HP.",
             MeterTab.Deaths => "The wipe isn't anyone's death: the deaths in a wipe's last six seconds aren't counted against anyone. A raise is the dead member's HP coming back; who raised them is whose Raise was on them.",
             MeterTab.Events => "Casts are the GCDs used. Interrupts are the enemy casts stopped, credited to whoever's interrupt hit it in the second before (the game doesn't say who). Time dead leaves out the wipe.",
@@ -538,7 +551,7 @@ public sealed class MeterDetailWindow : Window
 
     private sealed record Col(string Head, float Width, Func<MeterRow, string> Text, bool Strong = false, Func<MeterRow, bool>? Red = null);
 
-    private Col[] Columns(MeterEncounter e) => tab switch
+    private Col[] Columns(MeterEncounter e, IMeterSource m) => tab switch
     {
         MeterTab.Healing => new Col[]
         {
@@ -546,9 +559,21 @@ public sealed class MeterDetailWindow : Window
             new("Healing", 80, r => Format.Thousands(r.Healing)),
             new("Over", 44, r => Format.PercentWhole(r.OverhealRate)),
             new("%", 42, r => Format.Share(r.HealingShare)),
+            new("Shields", 70, r => r.Absorbed > 0 ? Format.Thousands(r.Absorbed) : "–"),
             new("Crit", 44, r => Format.Share(r.HealCritRate)),
-            new("Max heal", 68, r => Format.Thousands(r.MaxHeal)),
             new("Raises", 46, r => MeterText.Count(r.RaisesGiven)),
+        },
+        // Since 0.9.0: each member's damage taken, the busters on them and how many met nothing, their own mitigation's time up while
+        // they held a boss, and what they healed on themselves.
+        MeterTab.Mitigation => new Col[]
+        {
+            new("Taken", 80, r => Format.Thousands(r.Taken), true),
+            new("%", 42, r => Format.Share(r.TakenShare)),
+            new("Busters", 52, r => m.Protection(e.Id, r.PartyId) is { } p ? MeterText.Count(p.Busters) : "–"),
+            new("Bare", 40, r => m.Protection(e.Id, r.PartyId) is { } p ? MeterText.Count(p.BustersBare) : "–",
+                Red: r => m.Protection(e.Id, r.PartyId) is { BustersBare: > 0 }),
+            new("Mit up", 50, r => m.Protection(e.Id, r.PartyId)?.Uptime is { } u ? Format.PercentWhole(u) : "–"),
+            new("Self-heal", 66, r => m.Protection(e.Id, r.PartyId) is { SelfHealing: > 0 } p ? Format.Thousands(p.SelfHealing) : "–"),
         },
         MeterTab.Taken => new Col[]
         {
@@ -589,7 +614,9 @@ public sealed class MeterDetailWindow : Window
     private void DrawTable(ImDrawListPtr dl, IMeterSource m, MeterEncounter e, Vector2 at, float w, float h)
     {
         Panel(dl, at, w, h);
-        var (cols, list, cells, partyCells) = TableOf(e);
+        var (cols, list, cells, partyCells) = TableOf(e, m);
+        // Mitigation (since 0.9.0) opens on the first tank when no one's picked yet.
+        if (tab == MeterTab.Mitigation && player == null && list.Find(r => r.Role == "tank" && !r.IsLimitBreak) is { } tank) player = tank.PartyId;
         var left = at.X + S(6) + S(12);
         var right = at.X + w - S(6) - S(12);
         var gap = S(10);
@@ -720,14 +747,15 @@ public sealed class MeterDetailWindow : Window
     /// once a snapshot (a few times a second while a fight is on), not each frame. The party's row leaves
     /// out what doesn't add up (crit, DH, the biggest hit, DPS: as the mock-up leaves them).
     /// </summary>
-    private (Col[] Cols, List<MeterRow> Rows, string[][] Cells, string[] Party) TableOf(MeterEncounter e)
+    private (Col[] Cols, List<MeterRow> Rows, string[][] Cells, string[] Party) TableOf(MeterEncounter e, IMeterSource m)
     {
         var rank = config.MeterRank;
         if (!ReferenceEquals(table.Of, e) || table.Tab != tab || table.Rank != rank)
         {
-            var cols = Columns(e);
-            // The events' counts in spot order (there's no one number to rank them by); the rest biggest first.
-            var rows = tab == MeterTab.Events ? MeterView.InSpotOrder(e.Rows) : MeterView.Ranked(e.Rows, tab, rank);
+            var cols = Columns(e, m);
+            // The events' counts in spot order (there's no one number to rank them by); Mitigation by damage taken; the rest biggest first.
+            var rows = tab == MeterTab.Events ? MeterView.InSpotOrder(e.Rows)
+                : MeterView.Ranked(e.Rows, tab == MeterTab.Mitigation ? MeterTab.Taken : tab, rank);
             if (tab == MeterTab.Damage && MeterView.LimitBreak(e.Rows) is { } lb) rows.Add(lb);
             var cells = new string[rows.Count][];
             for (var i = 0; i < rows.Count; i++)
@@ -742,7 +770,7 @@ public sealed class MeterDetailWindow : Window
                 {
                     "Deaths" => deaths,
                     "%" => "100.0",
-                    "DPS" or "Crit" or "DH" or "Max hit" or "Max heal" or "Over" => string.Empty,
+                    "DPS" or "Crit" or "DH" or "Max hit" or "Max heal" or "Over" or "Busters" or "Bare" or "Mit up" or "Self-heal" => string.Empty,
                     _ => cols[c].Text(e.Party),
                 };
             table = (e, tab, rank, cols, rows, cells, party);
@@ -917,6 +945,323 @@ public sealed class MeterDetailWindow : Window
     private static string Rate(double? r) => r is { } v ? Format.Share(v) : "–";
 
     private static string CountOf(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{Format.Thousands(n)} {many}";
+
+    // ---------------------------------------------------------------------------------------------
+    // Since 0.9.0: the picked player's side on Healing (their cards, their heals by ability) and on Mitigation (their cards,
+    // the big hits on them).
+
+    /// <summary>The side's head: the player's mark, "Name · JOB", the line under it, a number on the right. Returns where what follows starts.</summary>
+    private float SideHead(ImDrawListPtr dl, MeterRow row, Vector2 at, float w, string sub, string total)
+    {
+        var x = at.X + S(8) + S(10);
+        var right = at.X + w - S(8) - S(10);
+        var y = at.Y + S(12);
+        Badge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, false, row.Slot);
+        var tx = x + S(26) + S(12);
+        var totalW = PlateArt.Width(total, F.NumStrong);
+        var title = config.MeterJobsOnly ? row.Job : $"{row.Name} · {row.Job}";
+        PlateArt.Line(dl, new Vector2(tx, y), PlateArt.Fit(title, F.Title, right - totalW - S(12) - tx), F.Title, I.Strong, 15 * 1.25f);
+        PlateArt.Line(dl, new Vector2(tx, y + S(15 * 1.25f)), PlateArt.Fit(sub, F.Body, right - tx), F.Body, I.Muted, 19.5f);
+        PlateArt.LineRight(dl, right, y, total, F.NumStrong, I.Strong, 15 * 1.25f);
+        return y + S(38) + S(12);
+    }
+
+    /// <summary>Stat cards side by side (two rows of two when they'd be narrower than 120): each a hairline box, its label in the heads' capitals, its number big, a line under it. Returns their bottom.</summary>
+    private float Cards(ImDrawListPtr dl, IReadOnlyList<StatCard> cards, float x, float y, float w, string id)
+    {
+        var gap = S(10);
+        var perRow = (w - gap * (cards.Count - 1)) / cards.Count >= S(120) ? cards.Count : 2;
+        var cw = (w - gap * (perRow - 1)) / perRow;
+        var ch = S(74);
+        var rows = (cards.Count + perRow - 1) / perRow;
+        for (var i = 0; i < cards.Count; i++)
+        {
+            var c = cards[i];
+            var min = new Vector2(x + (i % perRow) * (cw + gap), y + (i / perRow) * (ch + gap));
+            var max = min + new Vector2(cw, ch);
+            var r = S(MathF.Min(I.PanelRadius, 8));
+            dl.AddRect(min + new Vector2(0.5f), max - new Vector2(0.5f), Palette.U32(Rc ? Palette.Line2 : I.PanelEdge), r, ImDrawFlags.None, 1f);
+            var ix = min.X + S(12);
+            var room = cw - S(24);
+            HeadWords(dl, ix, min.Y + S(8), c.Label, F.HeadSmall, 16);
+            var ink = c.Tone switch
+            {
+                CardTone.Warn => I.Warn,
+                CardTone.Bad => I.Bad,
+                _ => I.Strong,
+            };
+            PlateArt.Line(dl, new Vector2(ix, min.Y + S(24)), PlateArt.Fit(c.Value, F.Clock, room), F.Clock, ink, 26);
+            PlateArt.Line(dl, new Vector2(ix, min.Y + S(50)), PlateArt.Fit(c.Sub, F.Note, room), F.Note, I.Muted, 16);
+            if (Kit.Pointed(min, max) && (c.Tip != null || PlateArt.Width(c.Sub, F.Note) > room)) Kit.Tooltip(c.Tip is { } tip ? $"{c.Sub}\n\n{tip}" : c.Sub);
+        }
+        _ = id;
+        return y + rows * ch + (rows - 1) * gap;
+    }
+
+    /// <summary>
+    /// The Healing tab's side (`.ab`): the picked player's head, their cards (healing that landed, overheal and what wasted most,
+    /// shields absorbed: an estimate, heals cast on and off the GCD), then their heals by ability: landed, share, overheal, casts,
+    /// the biggest, a slim bar each to the biggest; the rest summed as "9 more".
+    /// </summary>
+    private void DrawHealer(ImDrawListPtr dl, IMeterSource m, MeterEncounter e, Vector2 at, float w, float h)
+    {
+        Panel(dl, at, w, h);
+        var row = e.Rows.FirstOrDefault(r => r.PartyId == player && !r.IsLimitBreak);
+        if (row == null) return;
+        var abilities = m.Abilities(e.Id, row.PartyId, MeterTab.Healing);
+        var prot = m.Protection(e.Id, row.PartyId);
+        var view = HealerOf(row, abilities, prot);
+        var x = at.X + S(8) + S(10);
+        var right = at.X + w - S(8) - S(10);
+        var y = SideHead(dl, row, at, w, view.Sub, view.Total);
+        y = Cards(dl, view.Cards, x, y, right - x, "##heal-cards") + S(14);
+
+        var widths = AbilityWidths(MeterGuard.HealerHeads, HealerWidths, view.Cells);
+        Span<float> edges = stackalloc float[MeterGuard.HealerHeads.Length];
+        var ex = right;
+        for (var i = edges.Length - 1; i >= 0; i--)
+        {
+            edges[i] = ex;
+            ex -= widths[i] + S(8);
+        }
+        HeadWords(dl, x, y, "Ability", F.HeadSmall, 26);
+        for (var i = 0; i < edges.Length; i++) HeadWords(dl, edges[i], y, MeterGuard.HealerHeads[i], F.HeadSmall, 26, true);
+        y += S(26);
+        Kit.Rule(dl, at.X + S(8), at.X + w - S(8), y - 1, I.Rule);
+        var rowH = S(30);
+        var fits = (int)Math.Max(1, (at.Y + h - S(8) - y) / rowH);
+        var shown = abilities.Count <= fits ? abilities.Count : Math.Max(0, fits - 1);
+        for (var n = 0; n < shown; n++)
+        {
+            var a = abilities[n];
+            var nx = x;
+            nx += PlateArt.Line(dl, new Vector2(nx, y), PlateArt.Fit(a.Name, F.BodyStrong, ex - x - (a.IsTick ? S(46) : 0) - (a.IsPet ? S(46) : 0)), F.BodyStrong, I.Strong, 30);
+            if (a.IsTick) nx += S(6) + SmallTag(dl, new Vector2(nx + S(6), y + (rowH - S(16)) / 2), "HoT");
+            if (a.IsPet) SmallTag(dl, new Vector2(nx + S(6), y + (rowH - S(16)) / 2), "pet");
+            var cells = view.Cells[n];
+            for (var i = 0; i < cells.Length && i < edges.Length; i++)
+            {
+                // Much overheal in the warning colour (the mock-up's 52%).
+                var ink = i == 0 ? I.Strong : i == 2 && a.OverRate >= MeterGuard.MuchOverheal ? I.Warn : I.Text;
+                PlateArt.LineRight(dl, edges[i], y, cells[i], F.Small, ink, 30);
+            }
+            var ba = new Vector2(x, y + rowH - S(2) - S(2));
+            var bb = new Vector2(right, y + rowH - S(2));
+            if (Rc)
+            {
+                dl.AddRectFilled(ba, bb, Palette.U32(Palette.Rgba(255, 255, 255, 0.04f)));
+                if (view.Biggest > 0) dl.AddRectFilled(ba, new Vector2(ba.X + (bb.X - ba.X) * a.Amount / view.Biggest, bb.Y), Palette.U32(Palette.Rgba(255, 255, 255, 0.22f)));
+            }
+            else
+            {
+                var bh = S(4);
+                var bt = new Vector2(ba.X, y + rowH - S(1) - bh);
+                dl.AddRectFilled(bt, new Vector2(bb.X, bt.Y + bh), Palette.U32(Rgb.A(I.Text, 0.05f)), MathF.Min(bh / 2, S(I.RowRadius)));
+                if (view.Biggest > 0) plate.BarOn(dl, bt, bb.X - ba.X, bh, a.Amount / (float)view.Biggest, row.Role, false);
+            }
+            y += rowH;
+        }
+        if (abilities.Count > shown)
+        {
+            long amount = 0;
+            double share = 0;
+            for (var n = shown; n < abilities.Count; n++)
+            {
+                amount += abilities[n].Amount;
+                share += abilities[n].Share;
+            }
+            PlateArt.Line(dl, new Vector2(x, y), $"{abilities.Count - shown} more", F.BodyStrong, I.Muted, 30);
+            PlateArt.LineRight(dl, edges[0], y, MeterNumber.Short(amount), F.Small, I.Muted, 30);
+            PlateArt.LineRight(dl, edges[1], y, Format.PercentWhole(share), F.Small, I.Muted, 30);
+        }
+        if (abilities.Count == 0) PlateArt.Line(dl, new Vector2(x, y), "No heals yet.", F.Body, I.Muted, 30);
+    }
+
+    private static readonly float[] HealerWidths = { 56, 44, 44, 40, 56 };
+
+    private (IReadOnlyList<AbilityRow>? Of, MeterProtection? Prot, MeterRow? Row, StatCard[] Cards, string[][] Cells, long Biggest, string Sub, string Total) healerView =
+        (null, null, null, Array.Empty<StatCard>(), Array.Empty<string[]>(), 0, string.Empty, string.Empty);
+
+    /// <summary>The healer's side in words, made again only for a new list, protection or row (a few times a second while live).</summary>
+    private (StatCard[] Cards, string[][] Cells, long Biggest, string Sub, string Total) HealerOf(MeterRow row, IReadOnlyList<AbilityRow> abilities, MeterProtection? prot)
+    {
+        if (!ReferenceEquals(healerView.Of, abilities) || !ReferenceEquals(healerView.Prot, prot) || !ReferenceEquals(healerView.Row, row))
+        {
+            var cells = new string[abilities.Count][];
+            long biggest = 0;
+            for (var i = 0; i < abilities.Count; i++)
+            {
+                cells[i] = MeterGuard.HealerCells(abilities[i]);
+                biggest = Math.Max(biggest, abilities[i].Amount);
+            }
+            var sub = $"Healing · {CountOf(abilities.Count, "ability", "abilities")}";
+            healerView = (abilities, prot, row, MeterGuard.HealerCards(row, abilities, prot), cells, biggest, sub, Format.Thousands((long)Math.Round(row.Hps)) + " HPS");
+        }
+        return (healerView.Cards, healerView.Cells, healerView.Biggest, healerView.Sub, healerView.Total);
+    }
+
+    /// <summary>
+    /// The Mitigation tab's side: the picked player's head, their cards (damage taken and their share, their own mitigation's time
+    /// up while they held a boss, the busters on them and how many met nothing, self-healing), then the busters and raid-wides on
+    /// them, oldest first, scrolling: the time, the enemy's action and what it was, the game's amount (and, when a barrier soaked
+    /// some, the HP it took: an estimate), the mitigations up as chips (or "nothing up"), and the tag.
+    /// </summary>
+    private void DrawGuard(ImDrawListPtr dl, IMeterSource m, MeterEncounter e, Vector2 at, float w, float h)
+    {
+        Panel(dl, at, w, h);
+        var row = e.Rows.FirstOrDefault(r => r.PartyId == player && !r.IsLimitBreak);
+        if (row == null) return;
+        var prot = m.Protection(e.Id, row.PartyId);
+        var view = GuardOf(row, prot);
+        var x = at.X + S(8) + S(10);
+        var right = at.X + w - S(8) - S(10);
+        var y = SideHead(dl, row, at, w, view.Sub, view.Total);
+        y = Cards(dl, view.Cards, x, y, right - x, "##guard-cards") + S(14);
+        HeadWords(dl, x, y, config.MeterJobsOnly ? "Busters and raid-wides" : $"Busters and raid-wides on {row.Name}", F.HeadSmall, 22);
+        y += S(22);
+        Kit.Rule(dl, at.X + S(8), at.X + w - S(8), y - 1, I.Rule);
+        var listH = at.Y + h - S(4) - y;
+        if (view.Lines.Length == 0)
+        {
+            PlateArt.Line(dl, new Vector2(x, y + S(4)), "None yet: busters (a hit on one or two of 30% of their HP or more) and raid-wides on them show here.", F.Body, I.Muted, 30);
+            return;
+        }
+        if (listH < S(20)) return;
+        ImGui.SetCursorScreenPos(new Vector2(at.X + 1, y));
+        var open = ImGui.BeginChild("##detail-hits", new Vector2(w - 2, listH), false, ImGuiWindowFlags.None);
+        Frame.Open.Push(false);
+        try
+        {
+            if (open) HitRows(view.Lines, w - 2, listH);
+        }
+        finally
+        {
+            if (Frame.Open.Count > 0) Frame.Open.Pop();
+            ImGui.EndChild();
+        }
+    }
+
+    /// <summary>The big hits' rows in the scrolling list (only those in view drawn).</summary>
+    private void HitRows(HitLine[] lines, float w, float viewH)
+    {
+        var dl = ImGui.GetWindowDrawList();
+        var rowH = S(44);
+        var start = ImGui.GetCursorScreenPos() + new Vector2(S(6), S(2));
+        var rw = ImGui.GetContentRegionAvail().X - S(12);
+        var scroll = ImGui.GetScrollY();
+        var first = Math.Max(0, (int)(scroll / rowH) - 1);
+        var last = Math.Min(lines.Length, first + (int)(viewH / rowH) + 3);
+        var timeW = MathF.Max(S(40), PlateArt.Width("00:00", F.Small));
+        var nameW = MathF.Min(S(170), rw * 0.28f);
+        var amountW = MathF.Max(S(120), PlateArt.Width("000,000 → 000,000", F.Small));
+        for (var i = first; i < last; i++)
+        {
+            var l = lines[i];
+            var min = start + new Vector2(0, rowH * i);
+            var max = min + new Vector2(rw, rowH);
+            var hovered = Kit.Pointed(min, max);
+            if (!Rc) RowGround(dl, min + new Vector2(0, S(1)), max - new Vector2(0, S(1)), hovered);
+            else
+            {
+                if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover), S(Palette.RadiusSm));
+                if (i > 0) Kit.Rule(dl, min.X, max.X, min.Y - 0.5f);
+            }
+            var cx = min.X + S(6);
+            PlateArt.Line(dl, new Vector2(cx, min.Y), l.Time, F.Small, I.Muted, 44);
+            cx += timeW + S(10);
+            PlateArt.Line(dl, new Vector2(cx, min.Y + S(4)), PlateArt.Fit(l.Ability, F.BodyStrong, nameW - S(8)), F.BodyStrong, I.Strong, 20);
+            PlateArt.Line(dl, new Vector2(cx, min.Y + S(22)), PlateArt.Fit(l.Kind, F.Note, nameW - S(8)), F.Note, I.Muted, 18);
+            cx += nameW;
+            var ax = cx;
+            ax += PlateArt.Line(dl, new Vector2(ax, min.Y), l.Amount, l.After == null ? F.NumStrong : F.Small, l.After == null ? I.Strong : I.Muted, 44);
+            if (l.After != null)
+            {
+                ax += PlateArt.Line(dl, new Vector2(ax, min.Y), " → ", F.Small, I.Faint, 44);
+                PlateArt.Line(dl, new Vector2(ax, min.Y), l.After, F.NumStrong, I.Strong, 44);
+            }
+            if (Kit.Pointed(new Vector2(cx, min.Y), new Vector2(cx + amountW, max.Y))) Kit.Tooltip(l.Tip);
+            cx += amountW + S(8);
+            // The tag on the right, the chips between.
+            var tagW = VerdictWidth(l.Verdict);
+            var tagX = max.X - S(6) - tagW;
+            Verdict(dl, new Vector2(tagX, min.Y + (rowH - S(20)) / 2), l.Verdict, l.Tag);
+            var chipsEnd = tagX - S(10);
+            if (l.Up.Count == 0)
+            {
+                PlateArt.Line(dl, new Vector2(cx, min.Y), "nothing up", F.Body, I.Bad, 44);
+                continue;
+            }
+            var chipY = min.Y + (rowH - S(20)) / 2;
+            for (var k = 0; k < l.Up.Count; k++)
+            {
+                var word = l.Up[k];
+                var cw = PlateArt.Width(word, F.Small) + S(12);
+                if (cx + cw > chipsEnd)
+                {
+                    var more = l.Up.Count - k;
+                    var moreW = PlateArt.Width($"+{more}", F.Small) + S(12);
+                    if (cx + moreW <= chipsEnd) Chip(dl, new Vector2(cx, chipY), $"+{more}", I.Muted);
+                    if (Kit.Pointed(new Vector2(cx, min.Y), new Vector2(chipsEnd, max.Y))) Kit.Tooltip(string.Join(", ", l.Up));
+                    break;
+                }
+                Chip(dl, new Vector2(cx, chipY), word, I.Text);
+                cx += cw + S(5);
+            }
+        }
+        ImGui.SetCursorScreenPos(start);
+        ImGui.Dummy(new Vector2(rw, rowH * lines.Length + S(4)));
+    }
+
+    /// <summary>A mitigation's chip: its name in the small face on a hairline box (20 tall).</summary>
+    private void Chip(ImDrawListPtr dl, Vector2 pos, string word, Vector4 ink)
+    {
+        var w = PlateArt.Width(word, F.Small) + S(12);
+        var r = S(MathF.Min(I.ChipRadius, 6));
+        dl.AddRectFilled(pos, pos + new Vector2(w, S(20)), Palette.U32(Rgb.A(I.Text, 0.04f)), r);
+        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, S(20)) - new Vector2(0.5f), Palette.U32(Rc ? Palette.Line2 : I.Chip), r, ImDrawFlags.None, 1f);
+        PlateArt.Line(dl, new Vector2(pos.X + S(6), pos.Y), word, F.Small, ink, 20);
+    }
+
+    private float VerdictWidth(string word) => HeadWidth(word, F.HeadSmall) + S(16);
+
+    /// <summary>A big hit's tag: Mitigated on a light wash in the strongest ink, Light in the warning colour, Unmitigated and Died in the bad one (Died on its wash).</summary>
+    private void Verdict(ImDrawListPtr dl, Vector2 pos, string word, MitigationVerdict v)
+    {
+        var w = VerdictWidth(word);
+        var size = new Vector2(w, S(20));
+        var r = S(MathF.Min(I.ChipRadius, 4));
+        var warn = I.Warn;
+        var (edge, fill, ink) = v switch
+        {
+            MitigationVerdict.Mitigated => (I.Strong, Rgb.A(I.Strong, 0.9f), Rc ? Palette.OnLight : (T.Light ? Rgb.Hex(0xffffff) : Rgb.Hex(0x0b0b0d))),
+            MitigationVerdict.Light => (warn, Rgb.A(warn, 0.08f), warn),
+            MitigationVerdict.Unmitigated => (I.Bad, Rgb.A(I.Bad, 0.06f), I.Bad),
+            _ => (I.Bad, I.BadWash, I.Bad),
+        };
+        dl.AddRectFilled(pos, pos + size, Palette.U32(fill), r);
+        dl.AddRect(pos + new Vector2(0.5f), pos + size - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
+        var tw = HeadWidth(word, F.HeadSmall);
+        var x = pos.X + (w - tw) / 2;
+        if (Rc) Kit.Label(dl, new Vector2(x, pos.Y + (S(20) - Txt.Natural(F.HeadSmall.Face, F.HeadSmall.Px)) / 2), word, F.HeadSmall.Px, 0.08f, ink);
+        else PlateArt.Line(dl, new Vector2(x, pos.Y), word, F.HeadSmall, ink, 20);
+    }
+
+    private (MeterProtection? Prot, MeterRow? Row, StatCard[] Cards, HitLine[] Lines, string Sub, string Total) guardView =
+        (null, null, Array.Empty<StatCard>(), Array.Empty<HitLine>(), string.Empty, string.Empty);
+
+    /// <summary>The mitigation side in words, made again only for a new protection or row.</summary>
+    private (StatCard[] Cards, HitLine[] Lines, string Sub, string Total) GuardOf(MeterRow row, MeterProtection? prot)
+    {
+        if (!ReferenceEquals(guardView.Prot, prot) || !ReferenceEquals(guardView.Row, row) || (prot == null && guardView.Cards.Length == 0))
+        {
+            var lines = prot == null ? Array.Empty<HitLine>() : prot.Hits.Select(MeterGuard.Line).ToArray();
+            var busters = prot?.Busters ?? 0;
+            var raidwides = prot == null ? 0 : prot.Hits.Count - busters;
+            var sub = $"Mitigation · {CountOf(busters, "buster", "busters")}, {CountOf(raidwides, "raid-wide", "raid-wides")}";
+            guardView = (prot, row, MeterGuard.GuardCards(row, prot), lines, sub, Format.Thousands(row.Taken) + " taken");
+        }
+        return (guardView.Cards, guardView.Lines, guardView.Sub, guardView.Total);
+    }
 
     // ---------------------------------------------------------------------------------------------
     // The events.

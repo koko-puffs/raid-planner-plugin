@@ -383,7 +383,7 @@ public sealed partial class MeterWindow
             for (var i = 0; i < n; i++)
             {
                 var l = rows[i];
-                Row(dl, l.Row, l.Value, l.Second, l.Bar, l.Id, stack.Row(arr.FromHead(i, n), rowH), rowH, g, e, tab, false);
+                Row(dl, l.Row, l.Value, l.Second, l.Bar, l.Id, stack.Row(arr.FromHead(i, n), rowH), rowH, g, e, tab, false, l.Striped);
             }
             if (lb != null && stack.Room - n * rowH + 1 >= lbH)
             {
@@ -403,7 +403,8 @@ public sealed partial class MeterWindow
     /// the theme's death mark), the job in the heads' capitals, the number, its second column; you in the
     /// theme's mark. Pressed, the meter opens up on them. Waiting, the number is a dash and there's no bar.
     /// </summary>
-    private void Row(ImDrawListPtr dl, MeterRow r, string value, string second, float bar, string id, float y, float rowH, NormalGrid g, MeterEncounter? e, MeterTab tab, bool waiting)
+    private void Row(ImDrawListPtr dl, MeterRow r, string value, string second, float bar, string id, float y, float rowH, NormalGrid g, MeterEncounter? e, MeterTab tab, bool waiting,
+        float striped = 0)
     {
         var t = PlateTheme;
         var ink = NI;
@@ -429,6 +430,9 @@ public sealed partial class MeterWindow
         if (inv) dl.AddRectFilled(min, max, Palette.U32(t.You), rad);
         if (hovered) dl.AddRectFilled(min, max, Palette.U32(ink.Hover), rad);
         if (!waiting && !inv) plate.BarOn(dl, min, TrackOf(g), ph, bar, r.Role, dead);
+        // Healing (since 0.9.0): the barriers it put on that soaked damage, striped after the bar; pointed at, what each part is.
+        if (!waiting && !inv && striped > 0) plate.StripesOn(dl, min, TrackOf(g), ph, bar, striped, r.Role, dead);
+        if (hovered && !waiting && tab == MeterTab.Healing) Kit.Tooltip(MeterView.HealTip(r));
         if (t.Row.Rule is { } rule) Kit.Rule(dl, min.X, max.X, max.Y, rule);
         if (you && !inv) plate.YouMark(dl, min, max, rad, ph, youStyle);
         // From the left: the icon (past the ribbon), the name.
@@ -501,7 +505,7 @@ public sealed partial class MeterWindow
                 : ended ? said.KeptAs
                 : tab switch
                 {
-                    MeterTab.Healing => "shields not counted",
+                    MeterTab.Healing => HealFoot(e),
                     MeterTab.Taken => "incl. bleeds",
                     _ => said.Where ?? (config.MeterRank == MeterRank.Dps ? "DPS" : "ENCDPS"),
                 };
@@ -515,6 +519,41 @@ public sealed partial class MeterWindow
         x += PlateArt.Line(dl, new Vector2(x, y), value, f.SmallStrong, ink.Strong, z.Foot);
         if (unit != null && x + PlateArt.Width(" " + unit, f.Small) <= rx) x += PlateArt.Line(dl, new Vector2(x, y), " " + unit, f.Small, ink.Muted, z.Foot);
         if (!previewInFoot) FootGauge(dl, x + S(12), rx, y, h, !ended);
+    }
+
+    /// <summary>The Healing tab's foot on the right ("26% over"), made again only for a new snapshot.</summary>
+    private string HealFoot(MeterEncounter e)
+    {
+        if (!ReferenceEquals(healFoot.Of, e)) healFoot = (e, MeterView.HealFoot(e));
+        return healFoot.Text;
+    }
+
+    private (MeterEncounter? Of, string Text) healFoot = (null, string.Empty);
+
+    /// <summary>
+    /// The Healing tab's legend under the rows (since 0.9.0): a solid swatch "Healing that landed", a striped one "Shields absorbed",
+    /// in the theme's healer colour and its small face; pointed at, that the shields are an estimate and never healing.
+    /// </summary>
+    private void Legend(ImDrawListPtr dl, float left, float y, float w)
+    {
+        var t = PlateTheme;
+        var f = NF;
+        var ink = NI;
+        var h = S(MeterView.LegendCss);
+        var sw = S(9);
+        var color = t.RoleColor("healer", config.MeterRoleColours);
+        var x = left + S(Z.Pad);
+        var sy = y + (h - sw) / 2;
+        dl.AddRectFilled(new Vector2(x, sy), new Vector2(x + sw, sy + sw), Palette.U32(Rgb.A(color, 0.85f)), S(2));
+        x += sw + S(6);
+        x += PlateArt.Line(dl, new Vector2(x, y), "Healing that landed", f.Small, ink.Muted, MeterView.LegendCss) + S(14);
+        var from = x;
+        PlateMeter.Stripes(dl, new Vector2(x, sy), new Vector2(x + sw, sy + sw), color);
+        x += sw + S(6);
+        x += PlateArt.Line(dl, new Vector2(x, y), "Shields absorbed", f.Small, ink.Muted, MeterView.LegendCss);
+        if (Kit.Pointed(new Vector2(from, y), new Vector2(x, y + h)))
+            Kit.Tooltip("Shields absorbed: what the barriers each healer (or tank) put on soaked of enemies' hits. An estimate, from the barrier the game shows before each hit; never counted as healing.");
+        _ = w;
     }
 
     /// <summary>The foot's ground: a hairline toward the rows, and a plate for a theme whose foot sits on one (Ready Check, Neon, Native).</summary>

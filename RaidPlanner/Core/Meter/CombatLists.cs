@@ -108,6 +108,63 @@ public static class CombatLists
     public static readonly IReadOnlyList<string> ProvokeNames = new[] { "Provoke" };
 
     public static readonly IReadOnlyList<string> ShirkNames = new[] { "Shirk" };
+
+    // ---------------------------------------------------------------------------------------------
+    // Since 0.9.0: what the meter's Mitigation tab and its shields absorbed read off the status lists (statuses' English
+    // names, level 100; a name the sheet doesn't have finds nothing): the invulnerabilities here, the rest from the death
+    // recap's catalogue (Mitigations), so the two agree. Only the meter asks: the recording's lists are as before.
+
+    /// <summary>The tanks' invulnerabilities.</summary>
+    public static readonly IReadOnlyList<string> InvulnerableNames = new[] { "Hallowed Ground", "Holmgang", "Living Dead", "Walking Dead", "Superbolide" };
+
+    /// <summary>What a status is to the Mitigation tab, by its English name (<see cref="MitigationKind.None"/> for anything else).</summary>
+    public static MitigationKind MitigationOf(string? englishName)
+    {
+        if (string.IsNullOrWhiteSpace(englishName)) return MitigationKind.None;
+        var name = englishName.Trim();
+        foreach (var n in InvulnerableNames)
+            if (n.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return MitigationKind.Invulnerable;
+        foreach (var n in ShieldNames)
+            if (n.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return MitigationKind.Shield;
+        return MitigationRoles.TryGetValue(name, out var role)
+            ? role switch
+            {
+                MitigationRole.Shield => MitigationKind.Shield,
+                MitigationRole.OnEnemy => MitigationKind.Enemy,
+                _ => MitigationKind.Mitigation,
+            }
+            : MitigationKind.None;
+    }
+
+    /// <summary>The death recap's catalogue (<see cref="Mitigations"/>) by English name: one list for both, so they agree.</summary>
+    private static readonly Dictionary<string, MitigationRole> MitigationRoles = BuildRoles();
+
+    private static Dictionary<string, MitigationRole> BuildRoles()
+    {
+        var d = new Dictionary<string, MitigationRole>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (n, i) in Mitigations.Names()) d.TryAdd(n, Mitigations.All[i].Kind);
+        return d;
+    }
+}
+
+/// <summary>What a status does against damage, as the meter's Mitigation tab reads it (<see cref="CombatLists.MitigationOf"/>). Since 0.9.0.</summary>
+public enum MitigationKind : byte
+{
+    None,
+
+    /// <summary>Lowers the damage the one carrying it takes (Rampart, Kerachole, Troubadour…).</summary>
+    Mitigation,
+
+    /// <summary>A barrier on the one carrying it.</summary>
+    Shield,
+
+    /// <summary>A tank's invulnerability.</summary>
+    Invulnerable,
+
+    /// <summary>On an enemy, lowering the damage it does (Reprisal, Addle, Feint, Dismantle).</summary>
+    Enemy,
 }
 
 /// <summary>
@@ -145,6 +202,9 @@ public sealed class CombatKinds
     /// <summary>Is an action on the GCD (<see cref="CombatLists.IsGcd"/>, from the Action sheet's cooldown groups).</summary>
     public Func<uint, bool> Gcd { get; init; } = _ => false;
 
+    /// <summary>What a status does against damage (the meter's Mitigation tab and shields absorbed; <see cref="CombatLists.MitigationOf"/>). Since 0.9.0.</summary>
+    public Func<uint, MitigationKind> Mitigation { get; init; } = _ => MitigationKind.None;
+
     /// <summary>The kinds by English names: an action's (<paramref name="actionName"/>) and a status's, null for none.</summary>
     public static CombatKinds FromNames(Func<uint, string?> actionName, Func<uint, string?> statusName, Func<uint, bool>? gcd = null)
     {
@@ -166,6 +226,7 @@ public sealed class CombatKinds
             Provoke = id => In(CombatLists.ProvokeNames, actionName(id)),
             Shirk = id => In(CombatLists.ShirkNames, actionName(id)),
             Gcd = gcd ?? (_ => false),
+            Mitigation = id => CombatLists.MitigationOf(statusName(id)),
         };
     }
 }

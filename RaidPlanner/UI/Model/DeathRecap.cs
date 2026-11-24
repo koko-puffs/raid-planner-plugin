@@ -90,7 +90,7 @@ public static class DeathRecapView
         var up = Mitigations.In(d.Mitigation);
         var tank = string.Equals(role, "tank", StringComparison.OrdinalIgnoreCase);
         // Up at the hit: the mitigations first, the barriers after; for a tank, their big cooldowns that weren't.
-        var words = up.Where(m => m.Kind != MitigationKind.Shield).Select(m => m.Key).Concat(up.Where(m => m.Kind == MitigationKind.Shield).Select(m => m.Key)).ToList();
+        var words = up.Where(m => m.Kind != MitigationRole.Shield).Select(m => m.Key).Concat(up.Where(m => m.Kind == MitigationRole.Shield).Select(m => m.Key)).ToList();
         var missing = tank && d.MitigationKnown ? Mitigations.MissingFor(job, d.Mitigation) : new List<string>();
         return new RecapCard(fightId, index, d.PartyId, d.Name, d.Slot, job, role, you, d.At, d.Phase, d.KilledBy, d.Amount, d.Overkill, d.Hit, rows, words,
             d.MitigationKnown, d.MitigationKnown && !Mitigations.AnyMitigation(d.Mitigation), missing, d.HadWeakness, MeterView.RecapMax(d));

@@ -39,6 +39,12 @@ public readonly record struct PartyState(uint Id, string Name, string Job, byte 
 /// targets (<see cref="Aggro"/>: tank swaps, a non-tank holding a boss), stuns and the like landing (a control
 /// status a party member's action put on someone outside the party, its message's own status effect, with damage or
 /// not: <see cref="StatusOn"/>), and the limit break gauge (<see cref="Gauge"/>), as each encounter's <see cref="Events"/> and the rows' counts.
+///
+/// Since 0.9.0, for healers and tanks: the mitigation each party member and enemy carries, as the game side reads their
+/// status lists (<see cref="Wearing"/>, <see cref="EnemyWearing"/>); from them and each enemy hit's barrier reading, what
+/// barriers absorbed (<see cref="ShieldBook"/>, credited to whoever's barrier it was: <see cref="MeterRow.Absorbed"/>), the
+/// big hits on each member with what was up (<see cref="GuardRules"/>), heals cast on and off the GCD, self-healing, and
+/// how long a member's own mitigation was up while they held a boss (<see cref="Protection"/>). Healing itself is as before.
 /// </summary>
 public sealed class MeterSession : IMeterSource, ICombatSink
 {
@@ -64,6 +70,24 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
     /// <summary>The most events kept for an encounter (the newest so many: a long pull's feed goes on to its end).</summary>
     public const int MostEvents = 200;
+
+    /// <summary>A member who died this long after a big hit died to it, as the Mitigation tab tells it (the recording's death cause window).</summary>
+    public const double DiedAfterHit = RecordingBuilder.DeathCause;
+
+    /// <summary>A barrier a party member put on someone is taken to be theirs this long, when the one carrying it isn't read (out of sight).</summary>
+    public const double ShieldMemory = 30;
+
+    /// <summary>The most big hits kept for an encounter (the hits on two or more of a tenth of their HP, or one of a fifth).</summary>
+    public const int MostHits = 600;
+
+    // Since 0.9.0: the statuses that matter to the Mitigation tab on each party member (by entity id) and on each enemy (with
+    // when it was read), as the game side last read them; and what barriers absorbed, worked out hit by hit.
+    private readonly Dictionary<uint, List<Worn>> worn = new();
+    private readonly Dictionary<uint, (double At, List<Worn> List)> enemyWorn = new();
+    private readonly ShieldBook shieldBook = new();
+    // Each member's healing and mitigation worked out for one encounter (the table asks for every row's), with when and whether live.
+    private readonly Dictionary<int, (double At, bool Live, MeterProtection? Value)> protections = new();
+    private int protectionOf = -1;
 
     private readonly Func<uint, string> actionName;
     private readonly Func<uint, string> statusName;
@@ -165,6 +189,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             earlyItemCount = 0;
             // Who's down is read afresh (a member out of sight isn't kept dead from the last zone).
             down.Clear();
+            worn.Clear();
+            enemyWorn.Clear();
+            shieldBook.Clear();
         }
         territory = territoryId;
         content = contentId;
@@ -244,6 +271,71 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         }
         if (double.IsNaN(outOfCombatSince)) outOfCombatSince = t;
         else if (t - outOfCombatSince >= EndAfter) End(Outcome.Ended);
+    }
+
+    /// <summary>
+    /// A party member's status list is read this frame (since 0.9.0): what they carried before is let go, and each of theirs that
+    /// matters to the Mitigation tab follows (<see cref="Wears"/>). One not read (out of sight) keeps what they had.
+    /// </summary>
+    public void Wearing(uint member)
+    {
+        if (member == 0) return;
+        if (!worn.TryGetValue(member, out var list))
+        {
+            if (worn.Count > 48) worn.Clear();
+            worn[member] = list = new List<Worn>(8);
+        }
+        list.Clear();
+    }
+
+    /// <summary>A status on a party member, and the party member who put it on (an entity id, a pet's owner; 0 no one in the party). Only mitigation, barriers and invulnerabilities are kept.</summary>
+    public void Wears(uint member, uint status, uint source)
+    {
+        if (!worn.TryGetValue(member, out var list)) return;
+        var kind = kinds.Mitigation(status);
+        if (kind is MitigationKind.None or MitigationKind.Enemy) return;
+        if (list.Count < 32) list.Add(new Worn(status, source, kind));
+    }
+
+    /// <summary>An enemy's status list is read (since 0.9.0, four times a second during an encounter): what the party put on it that lowers its damage follows (<see cref="EnemyWears"/>).</summary>
+    public void EnemyWearing(uint enemy)
+    {
+        if (enemy == 0) return;
+        if (!enemyWorn.TryGetValue(enemy, out var e))
+        {
+            if (enemyWorn.Count > 64) enemyWorn.Clear();
+            e = (now, new List<Worn>(4));
+        }
+        e.List.Clear();
+        enemyWorn[enemy] = (now, e.List);
+    }
+
+    /// <summary>A status on an enemy that a party member (<paramref name="source"/>, 0 not one) put on: Reprisal, Addle, Feint, Dismantle are kept.</summary>
+    public void EnemyWears(uint enemy, uint status, uint source)
+    {
+        if (!enemyWorn.TryGetValue(enemy, out var e) || kinds.Mitigation(status) != MitigationKind.Enemy) return;
+        if (e.List.Count < 16) e.List.Add(new Worn(status, source, MitigationKind.Enemy));
+    }
+
+    /// <summary>A party member's statuses as last read (null: never read).</summary>
+    private List<Worn>? WornBy(uint member) => worn.TryGetValue(member, out var list) ? list : null;
+
+    /// <summary>
+    /// The party's debuffs on the enemy whose hit it was, read in the last second; for a hit from one not read (a boss's
+    /// invisible helper, as many raid-wides are), the debuffs on every enemy read then (in a boss fight, the boss's).
+    /// </summary>
+    private void EnemyDebuffs(uint source, double t, List<Worn> into)
+    {
+        if (enemyWorn.TryGetValue(source, out var e) && t - e.At <= 1.0)
+        {
+            into.AddRange(e.List);
+            return;
+        }
+        foreach (var (_, other) in enemyWorn)
+            if (t - other.At <= 1.0)
+                foreach (var w in other.List)
+                    if (!into.Contains(w))
+                        into.Add(w);
     }
 
     /// <summary>An enemy's targetability (report them all, then <see cref="EndTargets"/>): how phases are told.</summary>
@@ -477,6 +569,21 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         return null;
     }
 
+    /// <summary>A member's healing and mitigation in an encounter (the opened-up meter's Healing and Mitigation tabs; since 0.9.0), worked out again a few times a second while it's live.</summary>
+    public MeterProtection? Protection(int encounterId, int partyId)
+    {
+        var f = Find(encounterId);
+        if (protectionOf != encounterId)
+        {
+            protections.Clear();
+            protectionOf = encounterId;
+        }
+        if (protections.TryGetValue(partyId, out var p) && Fresh(f, p.At, p.Live)) return p.Value;
+        var value = f?.Protection(partyId, this);
+        protections[partyId] = (now, f is { IsLive: true }, value);
+        return value;
+    }
+
     public IReadOnlyList<AbilityRow> Abilities(int encounterId, int partyId, MeterTab tab)
     {
         var f = Find(encounterId);
@@ -543,6 +650,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
     {
         fights.RemoveAll(f => f != live);
         abilities = null;
+        protections.Clear();
         pace = null;
         kept = null;
     }
@@ -598,6 +706,22 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public int RecentCount;
         public int RecentNext;
 
+        // Since 0.9.0 (the Healing and Mitigation tabs): what their barriers soaked (an estimate) and by which; what they healed on
+        // themselves and with what; their heal and barrier casts (each use once) by ability, on and off the GCD; the last one counted;
+        // the barriers party members put on them lately (when their status list isn't read); how long they held a boss and had their
+        // own mitigation up while they did.
+        public long Absorbed;
+        public readonly Dictionary<uint, long> AbsorbedBy = new();
+        public long SelfHealing;
+        public readonly Dictionary<AbilityKey, long> SelfBy = new();
+        public readonly Dictionary<AbilityKey, int> HealCasts = new();
+        public int GcdHeals;
+        public int OgcdHeals;
+        public (uint Action, double T) LastHealCast = (0, double.NaN);
+        public readonly List<(uint Status, uint By, double T)> ShieldsPut = new();
+        public double Held;
+        public double Covered;
+
         public void Remember(in Recap r)
         {
             Recent[RecentNext] = r;
@@ -637,6 +761,17 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public bool MitigationKnown;
         public DeathHit Hit;
     }
+
+    /// <summary>One enemy action's hits on the party, close together (since 0.9.0): when the first landed, the action, and each member's part.</summary>
+    private sealed class HitGroup
+    {
+        public required double T;
+        public required uint Action;
+        public readonly List<HitPart> Parts = new(8);
+    }
+
+    /// <summary>A member's part of a big hit: the game's amount, what barriers soaked of it (an estimate), their max HP, what was up for them then.</summary>
+    private sealed record HitPart(Member Who, long Amount, long Absorbed, long MaxHp, Worn[] Up);
 
     /// <summary>An event as it's kept (the text is made when it's read: a member's name may come later).</summary>
     private readonly record struct Happening(double T, MeterEventKind Kind, Member? Who, Member? Other, uint Action, uint Status, Death? Death, double Seconds = 0);
@@ -681,6 +816,12 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
         /// <summary>The party's damage in each second of the encounter (the limit break's too), for pace.</summary>
         private readonly List<long> perSecond = new();
+
+        // Since 0.9.0: the enemies' hits worth a look (one enemy action's hits together: GuardRules.Together), each member's part of
+        // each with what was up for them; when the bosses' holders were last counted; a list kept for reading what's worn.
+        private readonly List<HitGroup> hitGroups = new();
+        private double lastWatch = double.NaN;
+        private readonly List<Worn> wornNow = new();
 
         private MeterEncounter? snapshot;
         private double snapshotAt = double.NegativeInfinity;
@@ -910,6 +1051,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         /// <summary>Each frame: the bosses' spans held long enough, and the interruptible casts that went off.</summary>
         public void Watch(double t, MeterSession s)
         {
+            Guarding(t, s);
             // The keys copied first (Judge writes back), into a list kept for it: nothing made each frame.
             judging.Clear();
             foreach (var (enemy, a) in aggro)
@@ -926,6 +1068,163 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             }
             if (done != null)
                 foreach (var enemy in done) casts.Remove(enemy);
+        }
+
+        /// <summary>
+        /// Each frame (since 0.9.0): for each member a boss is on (not a cast's target), the time since the last frame (at most half
+        /// a second) is time they held it, and time their own mitigation was up when they carried one of theirs (put on by them:
+        /// mitigation, a barrier, an invulnerability) or their Reprisal (Addle, Feint…) was on a boss they held.
+        /// </summary>
+        private void Guarding(double t, MeterSession s)
+        {
+            var dt = double.IsNaN(lastWatch) ? 0 : Math.Clamp(t - lastWatch, 0, 0.5);
+            lastWatch = t;
+            if (dt <= 0 || aggro.Count == 0) return;
+            foreach (var m in Members)
+            {
+                var held = false;
+                var covered = false;
+                foreach (var (enemy, a) in aggro)
+                {
+                    if (a.CastTarget || a.On != m.Entity) continue;
+                    held = true;
+                    if (!covered && s.enemyWorn.TryGetValue(enemy, out var e) && t - e.At <= 1.0)
+                        foreach (var w in e.List)
+                            if (w.Source == m.Entity)
+                                covered = true;
+                }
+                if (!held) continue;
+                if (!covered && s.WornBy(m.Entity) is { } list)
+                    foreach (var w in list)
+                        if (w.Source == m.Entity)
+                            covered = true;
+                m.Held += dt;
+                if (covered) m.Covered += dt;
+            }
+        }
+
+        /// <summary>
+        /// An enemy's hit on a member (since 0.9.0): what their barrier soaked of it (<see cref="ShieldBook"/>), credited to whoever's
+        /// barriers were on them (as their status list said, else the barriers party members put on them lately), shared evenly
+        /// when there were several; and, for a hit of a tenth of their HP or more, their part of the action's hits with what was up.
+        /// </summary>
+        private void Guard(in TakenHit e, Member m, MeterSession s)
+        {
+            var maxHp = e.MaxHp > 0 ? e.MaxHp : m.MaxHp;
+            var absorbed = s.shieldBook.Absorb(e.Target, e.T, e.Shield, maxHp, e.Amount);
+            var worn = s.WornBy(e.Target);
+            if (absorbed > 0) Credit(absorbed, e.T, m, worn, s);
+            if (e.Amount <= 0 || maxHp <= 0 || (double)e.Amount / maxHp < 0.1 || hitGroups.Count >= MostHits) return;
+            wornNow.Clear();
+            if (worn != null)
+                foreach (var w in worn)
+                    if (!wornNow.Contains(w))
+                        wornNow.Add(w);
+            s.EnemyDebuffs(e.Source, e.T, wornNow);
+            HitGroup? group = null;
+            for (var i = hitGroups.Count - 1; i >= 0 && e.T - hitGroups[i].T <= GuardRules.Together; i--)
+                if (hitGroups[i].Action == e.Action)
+                {
+                    group = hitGroups[i];
+                    break;
+                }
+            if (group == null)
+            {
+                group = new HitGroup { T = e.T, Action = e.Action };
+                hitGroups.Add(group);
+            }
+            group.Parts.Add(new HitPart(m, e.Amount, absorbed, maxHp, wornNow.ToArray()));
+        }
+
+        /// <summary>What a barrier soaked, to whoever's barriers were on the one hit (the party's: a pet's is its owner's).</summary>
+        private void Credit(long absorbed, double t, Member on, List<Worn>? worn, MeterSession s)
+        {
+            var n = 0;
+            if (worn != null)
+            {
+                foreach (var w in worn)
+                    if (w.Kind == MitigationKind.Shield)
+                        n = AddSource(n, w.Source, w.Status);
+            }
+            else
+            {
+                // Not read (out of sight): the barriers party members put on them in the last ShieldMemory seconds.
+                for (var i = on.ShieldsPut.Count - 1; i >= 0; i--)
+                    if (t - on.ShieldsPut[i].T <= ShieldMemory)
+                        n = AddSource(n, on.ShieldsPut[i].By, on.ShieldsPut[i].Status);
+            }
+            if (n == 0) return;
+            GuardRules.Split(absorbed, creditSources.AsSpan(0, n), creditShares);
+            for (var i = 0; i < n; i++)
+            {
+                if (Of(creditSources[i], s) is not { } by) continue;
+                by.Absorbed += creditShares[i];
+                by.AbsorbedBy[creditStatuses[i]] = by.AbsorbedBy.GetValueOrDefault(creditStatuses[i]) + creditShares[i];
+            }
+        }
+
+        // Whose barriers were on the one hit, and which (a few at most; kept, so nothing's made per hit).
+        private readonly uint[] creditSources = new uint[8];
+        private readonly uint[] creditStatuses = new uint[8];
+        private readonly long[] creditShares = new long[8];
+
+        private int AddSource(int n, uint source, uint status)
+        {
+            if (source == 0 || n >= creditSources.Length || Array.IndexOf(creditSources, source, 0, n) >= 0) return n;
+            creditSources[n] = source;
+            creditStatuses[n] = status;
+            return n + 1;
+        }
+
+        /// <summary>A member's healing and mitigation (the Healing and Mitigation tabs), from what's been kept.</summary>
+        public MeterProtection? Protection(int partyId, MeterSession s)
+        {
+            var m = Members.FirstOrDefault(x => x.Id == partyId);
+            if (m == null) return null;
+            var hits = new List<BigHit>();
+            var busters = 0;
+            var bare = 0;
+            var party = Math.Max(1, Members.Count);
+            foreach (var g in hitGroups)
+            {
+                // Each member's part (a hit that came in two effects is one), and the action's whole.
+                var mine = g.Parts.Where(p => p.Who == m).ToList();
+                if (mine.Count == 0) continue;
+                var targets = 0;
+                double biggest = 0, sum = 0;
+                foreach (var who in g.Parts.Select(p => p.Who).Distinct())
+                {
+                    var theirs = g.Parts.Where(p => p.Who == who).ToList();
+                    var share = (double)theirs.Sum(p => p.Amount) / Math.Max(1, theirs.Max(p => p.MaxHp));
+                    targets++;
+                    sum += share;
+                    biggest = Math.Max(biggest, share);
+                }
+                if (GuardRules.Classify(targets, party, biggest, sum / targets) is not { } kind) continue;
+                var amount = mine.Sum(p => p.Amount);
+                var absorbed = mine.Sum(p => p.Absorbed);
+                var up = new List<MitigationUp>();
+                foreach (var w in mine.SelectMany(p => p.Up))
+                {
+                    var name = s.statusName(w.Status);
+                    if (up.Exists(u => u.Name == name)) continue;
+                    var by = w.Source == 0 ? null : Of(w.Source);
+                    up.Add(new MitigationUp(name, w.Kind, w.Source == m.Entity, by?.Slot ?? string.Empty));
+                }
+                if (absorbed > 0 && !up.Exists(u => u.Kind == MitigationKind.Shield)) up.Add(new MitigationUp("Barrier", MitigationKind.Shield, false, string.Empty));
+                var at = g.T - Start;
+                var died = Deaths.Any(d => d.Who == m && d.T >= at - 0.05 && d.T - at <= DiedAfterHit);
+                var verdict = GuardRules.Verdict(up.Count, up.Exists(u => u.Kind == MitigationKind.Invulnerable), died);
+                if (kind != BigHitKind.Raidwide)
+                {
+                    busters++;
+                    if (up.Count == 0) bare++;
+                }
+                hits.Add(new BigHit(at, g.Action, s.actionName(g.Action), kind, targets, amount, absorbed, up, verdict));
+            }
+            var absorbedBy = m.AbsorbedBy.OrderByDescending(kv => kv.Value).Select(kv => (s.statusName(kv.Key), kv.Value)).ToList();
+            var selfBy = m.SelfBy.OrderByDescending(kv => kv.Value).Select(kv => (s.Name(kv.Key), kv.Value)).ToList();
+            return new MeterProtection(m.Id, m.Absorbed, absorbedBy, m.SelfHealing, selfBy, m.GcdHeals, m.OgcdHeals, m.Held, m.Covered, hits, busters, bare);
         }
 
         /// <summary>The events as the window reads them (made again when there are more, or a death became the wipe's).</summary>
@@ -1016,19 +1315,50 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                     if (e.RecipientParty && Of(e.Recipient, s) is { } healed)
                         healed.Remember(new Recap(e.T, new AbilityKey(e.Action, false, (e.Flags & FxFlags.Pet) != 0, false), e.Amount, e.HpBefore,
                             (e.Flags & FxFlags.Pet) != 0 ? $"{m.Name}'s pet" : m.Name, false));
+                    if (e.Recipient == m.Entity && (e.Flags & FxFlags.LimitBreak) == 0)
+                    {
+                        var key = new AbilityKey(e.Action, false, (e.Flags & FxFlags.Pet) != 0, false);
+                        var landed = e.Amount - e.Overheal;
+                        m.SelfHealing += landed;
+                        m.SelfBy[key] = m.SelfBy.GetValueOrDefault(key) + landed;
+                    }
+                    HealCast(m, e, s);
                     break;
                 case FxKind.Shield:
                     Tally.Shield(m.Id);
                     if (e.RecipientParty && Of(e.Recipient, s) is { } shielded)
+                    {
                         shielded.Remember(new Recap(e.T, new AbilityKey(e.Status, false, false, true), 0, e.HpBefore, $"Shield from {m.Name}", false));
+                        if (shielded.ShieldsPut.Count >= 8) shielded.ShieldsPut.RemoveAt(0);
+                        shielded.ShieldsPut.Add((e.Status, m.Entity, e.T));
+                    }
+                    HealCast(m, e, s);
                     break;
             }
+        }
+
+        /// <summary>
+        /// A heal or barrier cast (since 0.9.0): each use once (its effects on every target come at one time), by its ability, and,
+        /// not a pet's, on or off the GCD. The limit break's isn't anyone's.
+        /// </summary>
+        private static void HealCast(Member m, in PartyEffect e, MeterSession s)
+        {
+            if ((e.Flags & FxFlags.LimitBreak) != 0 || e.Action == 0) return;
+            if (m.LastHealCast.Action == e.Action && Math.Abs(m.LastHealCast.T - e.T) < 1e-6) return;
+            m.LastHealCast = (e.Action, e.T);
+            var pet = (e.Flags & FxFlags.Pet) != 0;
+            var key = new AbilityKey(e.Action, false, pet, false);
+            m.HealCasts[key] = m.HealCasts.GetValueOrDefault(key) + 1;
+            if (pet) return;
+            if (s.kinds.Gcd(e.Action)) m.GcdHeals++;
+            else m.OgcdHeals++;
         }
 
         public void Taken(in TakenHit e, MeterSession s)
         {
             if (Of(e.Target, s) is not { } m) return;
             Tally.Taken(m.Id, e.Action, false, e.Amount);
+            Guard(e, m, s);
             Enemies.Add(e.Source);
             LastEvent = Math.Max(LastEvent, e.T);
             var note = (e.Fx & Effects.FxInstantDeath) != 0 ? "Instant death" : (e.Fx & Effects.FxCrit) != 0 ? "Critical" : string.Empty;
@@ -1059,6 +1389,13 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 {
                     var part = e.Amount == 0 ? 0 : over * share.Amount / e.Amount;
                     Tally.Heal(m.Id, share.Action, share.Amount, part, FxFlags.None, true, share.Status, share.Estimated);
+                    // A HoT of theirs on themselves (Aurora, Regen on the healer): self-healing.
+                    if (e.Target == m.Entity)
+                    {
+                        var key = share.Action == 0 ? new AbilityKey(share.Status, true, false, true) : new AbilityKey(share.Action, true, false, false);
+                        m.SelfHealing += share.Amount - part;
+                        m.SelfBy[key] = m.SelfBy.GetValueOrDefault(key) + share.Amount - part;
+                    }
                 }
                 else
                 {
@@ -1110,7 +1447,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 Tally.PartyHealing == 0 ? 0 : (double)t.Healing / Tally.PartyHealing, t.HealCritRate, t.MaxHeal,
                 t.Taken, t.Taken / clock, Tally.PartyTaken == 0 ? 0 : (double)t.Taken / Tally.PartyTaken, t.MaxTaken,
                 deaths, dead, diedAt, lb ? 0 : t.Active,
-                m?.Casts ?? 0, m?.Potions ?? 0, m?.RaisesGiven ?? 0, m?.Raised ?? 0, deadFor, m?.Interrupts ?? 0);
+                m?.Casts ?? 0, m?.Potions ?? 0, m?.RaisesGiven ?? 0, m?.Raised ?? 0, deadFor, m?.Interrupts ?? 0,
+                m?.Absorbed ?? 0, (m?.Absorbed ?? 0) / clock);
         }
 
         private MeterRow PartyRow(List<MeterRow> rows, double clock)
@@ -1143,7 +1481,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 Tally.PartyTaken, Tally.PartyTaken / clock, Tally.PartyTaken == 0 ? 0 : 1, rows.Count == 0 ? 0 : rows.Max(r => r.MaxTaken),
                 rows.Sum(r => r.Deaths), Members.Count > 0 && Members.All(m => m.Dead), null, Math.Max(0, clock),
                 rows.Sum(r => r.Casts), rows.Sum(r => r.Potions), rows.Sum(r => r.RaisesGiven), rows.Sum(r => r.Raised), rows.Sum(r => r.DeadSeconds),
-                rows.Sum(r => r.Interrupts));
+                rows.Sum(r => r.Interrupts), rows.Sum(r => r.Absorbed), rows.Sum(r => r.Absorbed) / clock);
         }
 
         private DeathEntry DeathOf(Death d, MeterSession s)
@@ -1190,12 +1528,15 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             };
             if (by == null || by.Count == 0) return Array.Empty<AbilityRow>();
             var total = by.Values.Sum(x => x.Amount);
+            // Healing's casts (since 0.9.0): each use once; a HoT's ticks each one.
+            var casts = tab == MeterTab.Healing && partyId != -1 ? Members.FirstOrDefault(x => x.Id == partyId)?.HealCasts : null;
             return by.OrderByDescending(kv => kv.Value.Amount)
                 .Select(kv => new AbilityRow(kv.Key.IsStatus ? 0 : kv.Key.Id, s.Name(kv.Key), kv.Key.Tick, kv.Key.Pet, kv.Value.Amount,
                     total == 0 ? 0 : (double)kv.Value.Amount / total, kv.Value.Hits,
                     kv.Key.Tick || tab == MeterTab.Taken || kv.Value.Hits == 0 ? null : (double)kv.Value.Crits / kv.Value.Hits,
                     kv.Key.Tick || tab != MeterTab.Damage || kv.Value.Hits == 0 ? null : (double)kv.Value.DirectHits / kv.Value.Hits,
-                    kv.Value.Max, kv.Value.Estimated))
+                    kv.Value.Max, kv.Value.Estimated, kv.Value.Over,
+                    tab != MeterTab.Healing ? 0 : kv.Key.Tick ? kv.Value.Hits : casts?.GetValueOrDefault(kv.Key) ?? 0))
                 .ToList();
         }
     }

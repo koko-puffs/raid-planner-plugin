@@ -280,7 +280,7 @@ public sealed class CombatParser
                 // The party member it's from: the caster's member, or the target when it came from them.
                 var from = d.FromTarget ? (targetParty ? target : 0) : member;
                 if (from != 0) FromParty(b, d, from, origin, recipient, recipientParty, recipientHostile, hp, max, pet && !d.FromTarget, lb && !d.FromTarget, withAmount);
-                else if (recipientParty) OnParty(b, d, origin, recipient, hp, max);
+                else if (recipientParty) OnParty(b, d, origin, recipient, hp, max, onTarget ? b.Shield[i] : -1);
             }
         }
         // The use after its effects, so an encounter its first hit starts has begun when the use is told.
@@ -391,14 +391,15 @@ public sealed class CombatParser
     }
 
     /// <summary>Something not the party's landing on a party member: damage (or instant death) taken.</summary>
-    private void OnParty(EffectBatch b, in Decoded d, uint origin, uint recipient, long hp, long max)
+    private void OnParty(EffectBatch b, in Decoded d, uint origin, uint recipient, long hp, long max, int shield)
     {
         int fx;
         switch (d.Kind)
         {
             case EffectKind.Damage:
                 if (d.Amount <= 0) return;
-                fx = (d.Crit ? Effects.FxCrit : 0) | (d.DirectHit ? Effects.FxDirectHit : 0) | (d.Blocked ? Effects.FxBlocked : 0) | (d.Parried ? Effects.FxParried : 0);
+                fx = (d.Crit ? Effects.FxCrit : 0) | (d.DirectHit ? Effects.FxDirectHit : 0) | (d.Blocked ? Effects.FxBlocked : 0) | (d.Parried ? Effects.FxParried : 0)
+                    | (d.Absorbed ? Effects.FxAbsorbed : 0);
                 break;
             case EffectKind.InstantDeath:
                 fx = Effects.FxInstantDeath;
@@ -406,7 +407,7 @@ public sealed class CombatParser
             default:
                 return;
         }
-        var hit = new TakenHit(b.T, origin, b.Action, recipient, d.Amount, fx, hp, max);
+        var hit = new TakenHit(b.T, origin, b.Action, recipient, d.Amount, fx, hp, max, shield);
         foreach (var s in sinks) s.Taken(hit);
     }
 

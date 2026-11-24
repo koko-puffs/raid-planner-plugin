@@ -1351,6 +1351,45 @@ cast's target) and a non-tank holding a boss (said when it moves off, with how l
 gauge** (`IMeterSource.LimitBreak`): bars full, the bars there are, the units in the one filling, units a
 bar; none outside a party that fills one.
 
+**Since 0.9.0, for healers and tanks** (`Core/Meter/Guard.cs`; nothing new is recorded: the recording's format is as it was):
+- **Shields absorbed** (`MeterRow.Absorbed`, and a second over the encounter's length, as HPS): an **estimate** of what the
+  barriers each member put on soaked of enemies' hits. The game doesn't say: a hit's amount is the whole hit (the barrier's
+  part included), and a member's barrier is a whole % of their max HP (`ShieldValue`), read with their HP as an enemy's hit
+  on them arrives (`TakenHit.Shield`, the batch's `Shield` the hooks already read). That reading is the barrier *before*
+  the hit (the game takes a hit off a moment after its message, HP and barrier alike), so a hit's absorbed is
+  min(hit, barrier) (`ShieldBook`); hits that come before the game has shown the last one's effect (the same % read again
+  within 1.5 s) share that barrier, what the earlier took coming off it first. So it's right to about 1% of max HP a hit,
+  and a hit's own "partly absorbed" flag (`Param4 & 4`, now also in `TakenHit.Fx` as `FxAbsorbed`; still unverified) isn't
+  needed. It's **credited** to whoever's barrier was on them: their status list read each frame during an encounter (the
+  barriers by name, `CombatLists.ShieldNames` and the death recap's catalogue's, each with its source; a pet's is its owner's), shared
+  evenly between several (`GuardRules.Split`); for a member whose list isn't read (out of sight), the barriers party
+  members put on them in the last 30 s (their actions' effects). A barrier of no one in the party (or none named) is no
+  one's. Never part of Healing (as before, and as the site counts it): it's beside it.
+- **Heals cast** (`MeterProtection.GcdHeals`, `OgcdHeals`): each use of a heal or barrier once, however many it landed on
+  (its effects come at one time), on or off the GCD (`CombatKinds.Gcd`); pets' and the limit break's left out. Each heal's
+  casts and overheal are in the Healing breakdown too (`AbilityRow.Casts`, `Over`; a HoT's ticks count as its casts).
+- **Self-healing**: what their heals on themselves put back (the overheal left out): their heals and lifesteal on
+  themselves, their HoTs' ticks on themselves; by ability.
+- **Big hits** (`MeterProtection.Hits`): one enemy action's hits on the party within 0.75 s are one hit; a member's part
+  of 10% of their max HP or more is kept (600 an encounter at most). It's a **buster** on one or two (and fewer than the
+  party) when the biggest took 30% of their max HP or more (the whole hit, a barrier's part included), a **raid-wide** on
+  three or more and more than half the party when they took 12% of their max HP or more on average; anything else isn't
+  listed (`GuardRules.Classify`). Each carries what was **up** for them: the statuses on them that mitigate (by name,
+  `CombatLists.MitigationOf`: the invulnerabilities, `ShieldNames` and the death recap's catalogue, `Mitigations`, one list
+  for both so they agree; who put each on), and the party's Reprisal, Addle,
+  Feint or Dismantle on the enemy whose hit it was (the catalogue's; read four times a second with the targetability,
+  fresh in the last second), or, for a hit from an enemy not read (a boss's invisible helper, as many raid-wides are), on
+  every enemy read then; a barrier that soaked some but isn't named is "Barrier". Its **verdict** (`GuardRules.Verdict`):
+  _Died_ when they died within 3 s of it, _Mitigated_ with an invulnerability or two or more up, _Light_ with one,
+  _Unmitigated_ with none. A hit under an invulnerability that did nothing isn't seen (the parser keeps no 0 hit), so isn't listed.
+- **Mitigation up** (`HeldSeconds`, `CoveredSeconds`, `Uptime`): each frame a boss is on a member (the bosses' targets,
+  not a cast's), the time since the last frame is time they held it, and time their own mitigation was up when they
+  carried one of theirs (mitigation, a barrier or an invulnerability they put on themselves) or their Reprisal (Addle…)
+  was on a boss they held.
+The game side reads each party member's status list each frame during an encounter (the list it already read for Weakness)
+and the enemies' four times a second (with the targetability); the status kinds are found by English name on the Status
+sheet, as the other lists (`CombatKinds.Mitigation`, `GameData`).
+
 **Phases**: the recording's rule (`PhaseClock`): four times a second during an encounter the enemies'
 targetability is read (in a duty every enemy, outside or in a field zone only those the party has
 fought), and a new phase begins when every enemy that had been targetable was gone 8 seconds or
@@ -1453,7 +1492,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   alone, _Jobs only_), the job in mono, the number in mono 600 13px, its second column, and a 2px bar
   under it to the top player's (grey; yours ember; a death's dimmer, its name muted with a red
   skull). The limit break has its own row under a hairline; the party's number at the foot ("Party ·
-  165,000", "… HPS"), with where in the fight, "shields not counted", "incl. bleeds", "kept as pull
+  165,000", "… HPS"), with where in the fight, "26% over" (the party's overheal, Healing; "shields not counted" before 0.9.0), "incl. bleeds", "kept as pull
   12" or "click-through" on the right. A total of ten million or more is shortened in the 66px column ("13.1M";
   "3,912,400" whole). The rows' words and bars, and the fight's other words (its clock, which pull,
   its deaths' lines), are worked out once a snapshot (the source makes one four times a second
@@ -1712,8 +1751,32 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   the meter's × again stop it too. The windows read it instead of the meter's own numbers, never
   both, and what was picked in one (a pull, a player) is let go of in the other. It doesn't start
   while a real fight is on (in combat or after its first hit), and one starting ends it at once.
-- **Opened up** (`MeterDetailWindow`, "Raid Codex meter", 1180×560 at first, 980×360 at the least
-  since 0.4.0, for the fifth tab; `/raidcodex meter big`): the five tabs full size with their icons and
+- **The Healing tab since 0.9.0**, both meters: each row's bar is the healing that landed (solid) and then, striped in
+  the same colour, what the barriers they put on absorbed (an estimate: _The meter's numbers_), both against the most of
+  the two together (`MeterView.HealingTop`, `HealBar`, `ShieldBar`; the rows still ranked by HPS, the number still HPS,
+  its second column overheal %); the normal meter has a legend under the rows (a solid swatch "Healing that landed", a
+  striped one "Shields absorbed"; pointed at, that they're an estimate and never healing) and says the party's overheal
+  on the foot's right; a row pointed at says its healing, overheal and shields absorbed. The compact meter's details panel
+  has "Shields est." in crit's place. Readout's cells for the stripes are half lit.
+- **Opened up** (`MeterDetailWindow`, "Raid Codex meter", 1180×560 at first, 1100×360 at the least
+  since 0.9.0, for the sixth tab (980 since 0.4.0); `/raidcodex meter big`). **Since 0.9.0** the tabs are Damage,
+  Healing, **Mitigation**, Taken, Deaths and Events (Mitigation's saved number is the last: `MeterTab.Mitigation`; the
+  small meter doesn't show it, and Taken's icon is a bolt now). On **Healing** the table has _Shields_ (what their
+  barriers absorbed, an estimate) in max heal's place, and the picked player's side (from about 1100 wide, the table
+  given 45% of it) has their head ("Name · JOB", "Healing · 6 abilities", their HPS), four cards (`MeterGuard.HealerCards`:
+  healing that landed and a second; overheal and the ability that wasted most, in the warning colour from 30%; shields
+  absorbed and the barrier that soaked most, "Estimate"; heals cast on and off the GCD) and their heals by ability
+  (landed, share, overheal %, casts, the biggest; a HoT tagged, a pet's tagged, much overheal in the warning colour). On
+  **Mitigation** (for everyone; it opens on the first tank) the table ranks by damage taken with taken, %, busters,
+  _Bare_ (busters with nothing up, red when any), _Mit up_ (their own mitigation's time up while they held a boss) and
+  self-healing; the side has four cards (`MeterGuard.GuardCards`: damage taken and their share; mitigation up "of the
+  1:40 they held a boss"; tank busters, red with "1 with nothing up"; self-healing and with what) and "Busters and
+  raid-wides on Name", oldest first, scrolling: the time, the enemy's action over "Buster", "Shared buster" or
+  "Raid-wide · 8 hit", the game's amount and (a barrier soaked some) "→" the HP it took (an estimate; its tooltip says
+  so), the mitigations up as chips (another's with their spot, "+2" past the room) or "nothing up" in red, and the tag:
+  MITIGATED on a light wash, LIGHT in the warning colour, UNMITIGATED and DIED in red (`MeterGuard.Line`). The sample
+  fight has shields, heals and big hits for both (`MeterPreview.Protection`).
+  Before 0.9.0: the five tabs full size with their icons and
   the deaths and events counted; the clock,
   where in the fight ("P2 · 0:41 in"; these two only as they fit beside the tabs), which pull ("Pull
   12 · now ⌄"), ENCDPS or DPS, a quiet square _Copy as text_ (0.4.0: the copy mark, a tick while it
@@ -2019,11 +2082,12 @@ would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.A
   the meter's other lists: the game side finds their rows on the Status sheet read in English, `Game/PrepData.cs`): a
   tank's own (Rampart, Guardian/Sentinel, Hallowed Ground, Damnation/Vengeance, Holmgang, Shadowed Vigil/Shadow Wall,
   Living Dead, Great Nebula/Nebula, Superbolide: the notable ones; Bulwark, Holy Sheltron, Thrill of Battle,
-  Bloodwhetting, Dark Mind, Oblation, Camouflage, Heart of Corundum), the party's (Passage of Arms, Dark Missionary,
-  Heart of Light, Troubadour, Nature's Minne, Tactician, Shield Samba, Magick Barrier, Tempera Coat, Temperance,
-  Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, Kerachole, Holos,
-  Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night, Divine Benison, Galvanize, Intersection,
-  the Sage's, Radiant Aegis, Improvised Finish) and those on the enemy (Reprisal, Addle, Feint, Dismantle) [verify:
+  Bloodwhetting, Dark Mind, Oblation, Camouflage, Heart of Corundum), others' own (Third Eye, Riddle of Earth), the
+  party's (Passage of Arms, Dark Missionary, Heart of Light, Troubadour, Nature's Minne, Tactician, Shield Samba, Magick
+  Barrier, Temperance, Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, Neutral
+  Sect, The Bole, Sun Sign, Kerachole, Holos, Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night,
+  Divine Benison, Galvanize, Intersection, the Sage's, Radiant Aegis, Improvised Finish, Tempera Coat, Stem the Tide,
+  Shade Shift, Arcane Crest, Manaward) and those on the enemy (Reprisal, Addle, Feint, Dismantle) [verify:
   each status's name as the sheet has it]. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
   meter's game side reads each party member's (during an encounter, each frame, with Weakness: `PartyState.Mitigation`)
   and the party's on the enemies (four times a second, with their targetability: `MeterSession.EnemyMitigation`); a
@@ -2170,7 +2234,8 @@ RaidPlanner/
               phases (PhaseClock), the meter's session (MeterSession) and its model (MeterModel),
               which is which (CombatLists, CombatKinds), the death recap's mitigations and a killing blow's
               kind (Mitigations), who interrupted, the moments before a pull
-              and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch)
+              and the countdown (CastWatch: CastWatch, PrePull, CountdownWatch), shields absorbed and the
+              Mitigation tab's rules (Guard: ShieldBook, GuardRules; 0.9.0)
   Game/       the recorder, its hooks, the game's data, the meter's game side (CombatMeter), plans
               in the game (PlanService), summaries and the roster (Uploads), uploading every pull
               (LogUploader), the party (PartyMembers), your gear (GearReader), the game's version
@@ -2188,7 +2253,7 @@ RaidPlanner/
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
               meter's sizes and place (MeterLayout) and its sample fight (MeterPreview), its
-              0.4.0 words (MeterText), the cooldown tracker's catalogue, book and rows (Cooldowns),
+              0.4.0 words (MeterText), the Healing and Mitigation tabs' cards and lines (MeterGuard; 0.9.0), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
               settings (Overlay), the ready check's card and when it shows (ReadyCheck), the death recap's card and
@@ -2405,6 +2470,16 @@ entry).
   (shown, how many, smaller), whose deaths are recapped, the plan window, the party cooldowns, the windows' size, and its own window places
   (Arrange windows in its duties moves those). Changes made in a duty to what its profile changes are the profile's.
   Kept safe across a crash or a reload. Home says which profile is in effect.
+
+- **The meter for healers**: the Healing tab's bars show the healing that landed and, striped after it, what your shields
+  absorbed (an estimate from the barrier the game shows before each hit, credited to whoever put the shield on; never
+  counted as healing), with a legend and the party's overheal at the foot. Opened up, Healing has a Shields column and,
+  for the player picked, cards (healing that landed, overheal and what wasted most, shields absorbed, heals cast on and
+  off the GCD) over their heals by ability with overheal and casts.
+- **The meter for tanks**: a new Mitigation tab in the opened-up meter: damage taken and your share, how much of the time
+  you held the boss your own mitigation was up, the tank busters on you and how many met nothing, self-healing, and every
+  buster and raid-wide on you with what was up (your mitigation, the party's, shields, Reprisal, Addle, Feint or Dismantle
+  on the enemy) and a tag: Mitigated, Light, Unmitigated or Died.
 
 ### 0.8.3 (not released yet)
 

@@ -152,6 +152,7 @@ public sealed class GameData
             Provoke = id => named.Value.Provoke.Contains(id),
             Shirk = id => named.Value.Shirk.Contains(id),
             Gcd = IsGcd,
+            Mitigation = id => named.Value.Mitigation.TryGetValue(id, out var k) ? k : MitigationKind.None,
         };
     }
 
@@ -164,11 +165,11 @@ public sealed class GameData
     public CombatKinds Kinds { get; }
 
     private sealed record Named(HashSet<uint> Interrupts, HashSet<uint> Raises, HashSet<uint> Provoke, HashSet<uint> Shirk, HashSet<uint> RaiseStatuses,
-        Dictionary<uint, int> Weakness, HashSet<uint> Control, HashSet<uint> KnockbackImmunity);
+        Dictionary<uint, int> Weakness, HashSet<uint> Control, HashSet<uint> KnockbackImmunity, Dictionary<uint, MitigationKind> Mitigation);
 
     private static Named ReadNamed()
     {
-        var n = new Named(new(), new(), new(), new(), new(), new(), new(), new());
+        var n = new Named(new(), new(), new(), new(), new(), new(), new(), new(), new());
         static HashSet<string> Set(IReadOnlyList<string> names) => new(names, StringComparer.OrdinalIgnoreCase);
         var interrupts = Set(CombatLists.InterruptNames);
         var raises = Set(CombatLists.RaiseActionNames);
@@ -197,6 +198,8 @@ public sealed class GameData
                 if (kb.Contains(name)) n.KnockbackImmunity.Add(row.RowId);
                 if (name.Equals("Weakness", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 1;
                 else if (name.Equals("Brink of Death", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 2;
+                // Since 0.9.0: what each does against damage (the meter's Mitigation tab and shields absorbed).
+                if (CombatLists.MitigationOf(name) is var mit and not MitigationKind.None) n.Mitigation[row.RowId] = mit;
             }
         }
         catch (Exception ex)

@@ -108,6 +108,7 @@ public sealed unsafe class CombatMeter : IDisposable
     {
         Session.Stop();
         recorder.Combat.Forget();
+        owners.Clear();
         // A stop that isn't for good lasts until here: the meter tries again in the new zone.
         if (odd.NewZone(recorder.Combat.Anomalies)) Session.Problem = null;
     });
@@ -260,8 +261,9 @@ public sealed unsafe class CombatMeter : IDisposable
     }
 
     /// <summary>
-    /// During an encounter, from a party member's status list: Weakness (1) or Brink of Death (2) on them, and (since 0.9.0, for the
-    /// death recap) the mitigations on them as a <see cref="Mitigations"/> mask; nothing read when they aren't near.
+    /// During an encounter, from a party member's status list: Weakness (1) or Brink of Death (2) on them, and (since 0.9.0) the
+    /// mitigations on them: as a <see cref="Mitigations"/> mask for the death recap, and each with who put it on for the
+    /// Mitigation tab and shields absorbed; nothing read when they aren't near.
     /// </summary>
     private (byte Weakness, ulong Mitigation, bool Read) Statuses(uint entityId, bool statuses)
     {
@@ -273,13 +275,15 @@ public sealed unsafe class CombatMeter : IDisposable
         byte weak = 0;
         ulong mits = 0;
         var prep = Prep;
+        Session.Wearing(entityId);
         var list = bc->StatusManager.Status;
         for (var i = 0; i < list.Length; i++)
         {
-            var id = list[i].StatusId;
+            var id = (uint)list[i].StatusId;
             if (id == 0) continue;
             if (data.Kinds.Weakness(id) is var w and > 0) weak = (byte)Math.Max(weak, w);
             if (prep != null) mits |= Mitigations.Bit(prep.MitigationIndex(id));
+            if (data.Kinds.Mitigation(id) != MitigationKind.None) Session.Wears(entityId, id, MemberFrom(list[i].SourceObject.ObjectId));
         }
         return (weak, mits, prep != null);
     }
@@ -295,6 +299,38 @@ public sealed unsafe class CombatMeter : IDisposable
                 mits |= Mitigations.Bit(prep.MitigationIndex(list[i].StatusId));
         return mits & Mitigations.OnEnemy;
     }
+
+    /// <summary>The party's debuffs on an enemy that lower its damage (Reprisal, Addle, Feint, Dismantle), with who put each on (since 0.9.0).</summary>
+    private void EnemyStatuses(uint entityId, BattleChara* bc)
+    {
+        Session.EnemyWearing(entityId);
+        var list = bc->StatusManager.Status;
+        for (var i = 0; i < list.Length; i++)
+        {
+            var id = (uint)list[i].StatusId;
+            if (id != 0 && data.Kinds.Mitigation(id) == MitigationKind.Enemy) Session.EnemyWears(entityId, id, MemberFrom(list[i].SourceObject.ObjectId));
+        }
+    }
+
+    /// <summary>The party member a status's source stands for: themselves, or a pet's or summon's owner (looked up once and kept); 0 for none.</summary>
+    private uint MemberFrom(uint source)
+    {
+        if (source is 0 or InvalidId) return 0;
+        var parser = recorder.Combat;
+        if (parser.IsParty(source)) return source;
+        if (!owners.TryGetValue(source, out var owner))
+        {
+            var manager = CharacterManager.Instance();
+            var bc = manager == null ? null : manager->LookupBattleCharaByEntityId(source);
+            owner = bc == null ? 0 : bc->Character.GameObject.OwnerId;
+            if (owner == InvalidId) owner = 0;
+            if (owners.Count > 256) owners.Clear();
+            owners[source] = owner;
+        }
+        return parser.IsParty(owner) ? owner : 0;
+    }
+
+    private readonly Dictionary<uint, uint> owners = new();
 
     private string Place(uint territory)
     {
@@ -327,6 +363,7 @@ public sealed unsafe class CombatMeter : IDisposable
             // Its cast (since 0.4.0), and, for the bosses below, whom it's on.
             var bc = (BattleChara*)npc.Address;
             onEnemies |= EnemyMitigation(bc);
+            if (bc != null) EnemyStatuses(npc.EntityId, bc);
             var cast = bc == null ? null : bc->GetCastInfo();
             uint castAt = 0;
             if (cast != null && cast->IsCasting && cast->ActionType == 1 && cast->ActionId != 0)

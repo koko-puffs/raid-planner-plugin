@@ -3,8 +3,11 @@ using System.Collections.Generic;
 
 namespace RaidPlanner.Core.Meter;
 
-/// <summary>What a mitigation is (<see cref="MitigationSpec.Kind"/>): the death recap's "Up at the hit" sorts and words them by it.</summary>
-public enum MitigationKind
+/// <summary>
+/// What a mitigation is (<see cref="MitigationSpec.Kind"/>): the death recap's "Up at the hit" sorts and words them by it; the
+/// meter's Mitigation tab reads the same catalogue as a <see cref="MitigationKind"/> (<see cref="CombatLists.MitigationOf"/>).
+/// </summary>
+public enum MitigationRole
 {
     /// <summary>A tank's own: Rampart, Guardian, Holmgang, Shadowed Vigil, Great Nebula…</summary>
     Personal,
@@ -24,7 +27,7 @@ public enum MitigationKind
 /// game's Status sheet (each row with one of them counts: Sentinel and Guardian are one), the jobs that have it, and whether
 /// a tank dying without it is worth saying (<see cref="Notable"/>: their big personal cooldowns and invulnerability).
 /// </summary>
-public sealed record MitigationSpec(string Key, MitigationKind Kind, IReadOnlyList<string> Names, IReadOnlyList<string> Jobs, bool Notable = false)
+public sealed record MitigationSpec(string Key, MitigationRole Kind, IReadOnlyList<string> Names, IReadOnlyList<string> Jobs, bool Notable = false)
 {
     public bool For(string? job)
     {
@@ -48,17 +51,17 @@ public static class Mitigations
     private static readonly string[] Tanks = { "PLD", "WAR", "DRK", "GNB" };
 
     private static MitigationSpec P(string key, bool notable, string job, params string[] names) =>
-        new(key, MitigationKind.Personal, names.Length > 0 ? names : new[] { key }, new[] { job }, notable);
+        new(key, MitigationRole.Personal, names.Length > 0 ? names : new[] { key }, new[] { job }, notable);
 
-    private static MitigationSpec Party(string key, string job, params string[] names) => new(key, MitigationKind.Party, names.Length > 0 ? names : new[] { key }, new[] { job });
+    private static MitigationSpec Party(string key, string job, params string[] names) => new(key, MitigationRole.Party, names.Length > 0 ? names : new[] { key }, new[] { job });
 
-    private static MitigationSpec Shield(string key, string job, params string[] names) => new(key, MitigationKind.Shield, names.Length > 0 ? names : new[] { key }, new[] { job });
+    private static MitigationSpec Shield(string key, string job, params string[] names) => new(key, MitigationRole.Shield, names.Length > 0 ? names : new[] { key }, new[] { job });
 
     /// <summary>Every mitigation, in the order a recap lists them (a mask's bits are these indices).</summary>
     public static readonly IReadOnlyList<MitigationSpec> All = new[]
     {
         // A tank's own, the notable ones first (a tank dying without them is said).
-        new MitigationSpec("Rampart", MitigationKind.Personal, new[] { "Rampart" }, Tanks, true),
+        new MitigationSpec("Rampart", MitigationRole.Personal, new[] { "Rampart" }, Tanks, true),
         P("Guardian", true, "PLD", "Guardian", "Sentinel"),
         P("Hallowed Ground", true, "PLD"),
         P("Damnation", true, "WAR", "Damnation", "Vengeance"),
@@ -76,6 +79,10 @@ public static class Mitigations
         P("Camouflage", false, "GNB"),
         P("Heart of Corundum", false, "GNB", "Heart of Corundum", "Clarity of Corundum", "Heart of Stone"),
 
+        // Others' own.
+        P("Third Eye", false, "SAM", "Third Eye", "Tengentsu"),
+        P("Riddle of Earth", false, "MNK"),
+
         // The party's, from its members.
         Party("Passage of Arms", "PLD", "Passage of Arms", "Arms Up"),
         Party("Dark Missionary", "DRK"),
@@ -85,14 +92,16 @@ public static class Mitigations
         Party("Tactician", "MCH"),
         Party("Shield Samba", "DNC"),
         Party("Magick Barrier", "RDM"),
-        Party("Tempera Coat", "PCT", "Tempera Coat", "Tempera Grassa"),
-        Party("Temperance", "WHM", "Temperance", "Divine Grace"),
+        Party("Temperance", "WHM"),
         Party("Aquaveil", "WHM"),
         Party("Sacred Soil", "SCH"),
         Party("Fey Illumination", "SCH", "Fey Illumination", "Seraphic Illumination"),
         Party("Expedient", "SCH", "Desperate Measures"),
         Party("Collective Unconscious", "AST"),
         Party("Exaltation", "AST"),
+        Party("Neutral Sect", "AST"),
+        Party("The Bole", "AST"),
+        Party("Sun Sign", "AST"),
         Party("Kerachole", "SGE"),
         Party("Holos", "SGE"),
         Party("Taurochole", "SGE"),
@@ -110,12 +119,17 @@ public static class Mitigations
         Shield("Panhaima", "SGE", "Panhaima", "Panhaimatinon", "Holosakos"),
         Shield("Radiant Aegis", "SMN"),
         Shield("Improvised Finish", "DNC"),
+        Shield("Tempera Coat", "PCT", "Tempera Coat", "Tempera Grassa"),
+        Shield("Stem the Tide", "WAR"),
+        Shield("Shade Shift", "NIN"),
+        Shield("Arcane Crest", "RPR", "Arcane Crest", "Crest of Time Borrowed"),
+        Shield("Manaward", "BLM"),
 
         // On the enemy.
-        new MitigationSpec("Reprisal", MitigationKind.OnEnemy, new[] { "Reprisal" }, Tanks),
-        new MitigationSpec("Addle", MitigationKind.OnEnemy, new[] { "Addle" }, new[] { "BLM", "SMN", "RDM", "PCT" }),
-        new MitigationSpec("Feint", MitigationKind.OnEnemy, new[] { "Feint" }, new[] { "MNK", "DRG", "NIN", "SAM", "RPR", "VPR" }),
-        new MitigationSpec("Dismantle", MitigationKind.OnEnemy, new[] { "Dismantled" }, new[] { "MCH" }),
+        new MitigationSpec("Reprisal", MitigationRole.OnEnemy, new[] { "Reprisal" }, Tanks),
+        new MitigationSpec("Addle", MitigationRole.OnEnemy, new[] { "Addle" }, new[] { "BLM", "SMN", "RDM", "PCT" }),
+        new MitigationSpec("Feint", MitigationRole.OnEnemy, new[] { "Feint" }, new[] { "MNK", "DRG", "NIN", "SAM", "RPR", "VPR" }),
+        new MitigationSpec("Dismantle", MitigationRole.OnEnemy, new[] { "Dismantled", "Dismantle" }, new[] { "MCH" }),
     };
 
     /// <summary>Each English status name and the mitigation it's (its index in <see cref="All"/>).</summary>
@@ -130,9 +144,9 @@ public static class Mitigations
     public static ulong Bit(int index) => index is >= 0 and < 64 ? 1UL << index : 0;
 
     /// <summary>The bits of the mitigations that are on the enemy (Reprisal, Addle, Feint, Dismantle).</summary>
-    public static readonly ulong OnEnemy = MaskOf(MitigationKind.OnEnemy);
+    public static readonly ulong OnEnemy = MaskOf(MitigationRole.OnEnemy);
 
-    private static ulong MaskOf(MitigationKind kind)
+    private static ulong MaskOf(MitigationRole kind)
     {
         ulong mask = 0;
         for (var i = 0; i < All.Count; i++)
@@ -166,7 +180,7 @@ public static class Mitigations
     public static bool AnyMitigation(ulong mask)
     {
         foreach (var m in In(mask))
-            if (m.Kind != MitigationKind.Shield)
+            if (m.Kind != MitigationRole.Shield)
                 return true;
         return false;
     }
@@ -178,7 +192,7 @@ public static class Mitigations
         for (var i = 0; i < All.Count; i++)
         {
             var m = All[i];
-            if (m.Notable && m.Kind == MitigationKind.Personal && m.For(job) && (mask & Bit(i)) == 0) list.Add(m.Key);
+            if (m.Notable && m.Kind == MitigationRole.Personal && m.For(job) && (mask & Bit(i)) == 0) list.Add(m.Key);
         }
         return list;
     }

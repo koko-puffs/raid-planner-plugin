@@ -149,8 +149,12 @@ public readonly record struct PartyEffect(
         hpBefore < 0 || maxHp <= 0 ? 0 : Math.Clamp(heal - Math.Max(0, maxHp - hpBefore), 0, heal);
 }
 
-/// <summary>An enemy's action landing on a party member (damage, or an instant death): its amount, the hit's flags (<see cref="Effects"/> Fx…), the HP before.</summary>
-public readonly record struct TakenHit(double T, uint Source, uint Action, uint Target, long Amount, int Fx, long HpBefore, long MaxHp);
+/// <summary>
+/// An enemy's action landing on a party member (damage, or an instant death): its amount, the hit's flags (<see cref="Effects"/> Fx…), the HP before.
+/// Since 0.9.0 the target's barrier as the hit arrived (<see cref="Shield"/>, % of their max HP as the game shows it; −1 unknown): what the meter's
+/// estimate of the shields absorbed starts from (<see cref="ShieldBook"/>). The game's amount is the whole hit, the part a barrier soaked included.
+/// </summary>
+public readonly record struct TakenHit(double T, uint Source, uint Action, uint Target, long Amount, int Fx, long HpBefore, long MaxHp, int Shield = -1);
 
 /// <summary>
 /// A damage- or heal-over-time tick (actor control 23): on whom, the source as the game said (a

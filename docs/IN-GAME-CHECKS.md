@@ -133,3 +133,19 @@ the plugin names each tick after the caster's latest DoT on the target.
 - Window places: Arrange windows in a duty with a profile that keeps its own, then leave: every window back where it
   was, the plan window too. Reload the plugin, and close the game, in such a duty: your usual places and settings
   are back after, and the profile's again in the duty.
+
+## 15. Shields absorbed and the Mitigation tab (0.9.0)
+
+The meter estimates what a barrier soaked from the barrier the game shows on a member as an enemy's hit arrives
+(the `shield` on each `enemy-hit` diagnostics line). It takes that reading to be the barrier before the hit.
+
+- A Scholar's Adloquium (Galvanize) or a Sage's Eukrasian Diagnosis on the tank, then a buster: the Healing tab's
+  striped part for the healer, against FF Logs' "absorbed" for the same pull (roughly; it's an estimate to about 1%
+  of max HP a hit).
+- Two barriers on one player from two healers (Galvanize and Haima): each healer gets some.
+- A Seraph's or a fairy's barrier (Seraphic Veil, Consolation): credited to the Scholar.
+- A raid-wide just after a party barrier (Succor, Panhaima): every member's hit shares the barrier as the game shows it.
+- The opened-up Mitigation tab on a tank: the busters listed are the boss's busters (not auto-attacks), what's listed
+  as up matches what was on (Rampart, Guardian, Reprisal on the boss), and "Mitigation up" looks right for a tank who
+  held the boss the whole time.
+- A raid-wide from an invisible helper: Reprisal, Addle and Feint on the boss still show as up for it.
