@@ -108,6 +108,74 @@ public static class CombatLists
     public static readonly IReadOnlyList<string> ProvokeNames = new[] { "Provoke" };
 
     public static readonly IReadOnlyList<string> ShirkNames = new[] { "Shirk" };
+
+    // ---------------------------------------------------------------------------------------------
+    // Since 0.9.0: what the meter's Mitigation tab and its shields absorbed read off the status lists (statuses' English
+    // names, level 100; a name the sheet doesn't have finds nothing). Only the meter asks: the recording's lists are as before.
+
+    /// <summary>
+    /// Mitigation on the one it's on: the tanks' own (Rampart, Guardian, Vengeance, Shadowed Vigil, Great Nebula…), the
+    /// party's (Troubadour, Kerachole, Sacred Soil…), and the few others' own (Third Eye, Riddle of Earth).
+    /// </summary>
+    public static readonly IReadOnlyList<string> MitigationNames = new[]
+    {
+        "Rampart", "Sentinel", "Guardian", "Bulwark", "Sheltron", "Holy Sheltron", "Knight's Resolve", "Intervention", "Passage of Arms",
+        "Vengeance", "Damnation", "Thrill of Battle", "Raw Intuition", "Bloodwhetting", "Stem the Flow", "Nascent Glint",
+        "Shadow Wall", "Shadowed Vigil", "Dark Mind", "Oblation", "Dark Missionary",
+        "Camouflage", "Nebula", "Great Nebula", "Heart of Stone", "Heart of Corundum", "Clarity of Corundum", "Heart of Light",
+        "Troubadour", "Tactician", "Shield Samba", "Magick Barrier", "Temperance", "Aquaveil", "Sacred Soil", "Fey Illumination",
+        "Desperate Measures", "Collective Unconscious", "Neutral Sect", "Exaltation", "The Bole", "Sun Sign", "Kerachole", "Taurochole",
+        "Holos", "Third Eye", "Tengentsu", "Riddle of Earth",
+    };
+
+    /// <summary>Barriers the meter also counts as mitigation on the one carrying them (besides <see cref="ShieldNames"/>, which the recording uses as ever).</summary>
+    public static readonly IReadOnlyList<string> MoreShieldNames = new[]
+    {
+        "Stem the Tide", "Shade Shift", "Arcane Crest", "Crest of Time Borrowed", "Manaward", "Tempera Coat", "Tempera Grassa",
+    };
+
+    /// <summary>The tanks' invulnerabilities.</summary>
+    public static readonly IReadOnlyList<string> InvulnerableNames = new[] { "Hallowed Ground", "Holmgang", "Living Dead", "Walking Dead", "Superbolide" };
+
+    /// <summary>Mitigation on the enemy (its damage lowered): Reprisal, Addle, Feint, Dismantle's (its status is "Dismantled").</summary>
+    public static readonly IReadOnlyList<string> EnemyMitigationNames = new[] { "Reprisal", "Addle", "Feint", "Dismantled", "Dismantle" };
+
+    /// <summary>What a status is to the Mitigation tab, by its English name (<see cref="MitigationKind.None"/> for anything else).</summary>
+    public static MitigationKind MitigationOf(string? englishName)
+    {
+        if (string.IsNullOrWhiteSpace(englishName)) return MitigationKind.None;
+        var name = englishName.Trim();
+        bool In(IReadOnlyList<string> names)
+        {
+            foreach (var n in names)
+                if (n.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+        if (In(InvulnerableNames)) return MitigationKind.Invulnerable;
+        if (In(ShieldNames) || In(MoreShieldNames)) return MitigationKind.Shield;
+        if (In(EnemyMitigationNames)) return MitigationKind.Enemy;
+        if (In(MitigationNames)) return MitigationKind.Mitigation;
+        return MitigationKind.None;
+    }
+}
+
+/// <summary>What a status does against damage, as the meter's Mitigation tab reads it (<see cref="CombatLists.MitigationOf"/>). Since 0.9.0.</summary>
+public enum MitigationKind : byte
+{
+    None,
+
+    /// <summary>Lowers the damage the one carrying it takes (Rampart, Kerachole, Troubadour…).</summary>
+    Mitigation,
+
+    /// <summary>A barrier on the one carrying it.</summary>
+    Shield,
+
+    /// <summary>A tank's invulnerability.</summary>
+    Invulnerable,
+
+    /// <summary>On an enemy, lowering the damage it does (Reprisal, Addle, Feint, Dismantle).</summary>
+    Enemy,
 }
 
 /// <summary>
@@ -145,6 +213,9 @@ public sealed class CombatKinds
     /// <summary>Is an action on the GCD (<see cref="CombatLists.IsGcd"/>, from the Action sheet's cooldown groups).</summary>
     public Func<uint, bool> Gcd { get; init; } = _ => false;
 
+    /// <summary>What a status does against damage (the meter's Mitigation tab and shields absorbed; <see cref="CombatLists.MitigationOf"/>). Since 0.9.0.</summary>
+    public Func<uint, MitigationKind> Mitigation { get; init; } = _ => MitigationKind.None;
+
     /// <summary>The kinds by English names: an action's (<paramref name="actionName"/>) and a status's, null for none.</summary>
     public static CombatKinds FromNames(Func<uint, string?> actionName, Func<uint, string?> statusName, Func<uint, bool>? gcd = null)
     {
@@ -166,6 +237,7 @@ public sealed class CombatKinds
             Provoke = id => In(CombatLists.ProvokeNames, actionName(id)),
             Shirk = id => In(CombatLists.ShirkNames, actionName(id)),
             Gcd = gcd ?? (_ => false),
+            Mitigation = id => CombatLists.MitigationOf(statusName(id)),
         };
     }
 }

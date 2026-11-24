@@ -20,6 +20,9 @@ public enum MeterTab
 
     /// <summary>The encounter's events (<see cref="IMeterSource.Events"/>): deaths, raises, interrupts, potions, limit breaks, tank swaps. Added in 0.4.0.</summary>
     Events,
+
+    /// <summary>The opened-up meter's only (the small meter doesn't show it): the big hits on each member and what was up for them. Added in 0.9.0.</summary>
+    Mitigation,
 }
 
 /// <summary>What the meter ranks damage by (Settings): damage over the encounter, or over each player's own time.</summary>
@@ -57,6 +60,9 @@ public enum PaceAgainst
 /// <see cref="Raised"/> times they were raised, <see cref="DeadSeconds"/> seconds spent dead (deaths
 /// in the wipe not counted; a death not raised counts to the encounter's end),
 /// <see cref="Interrupts"/> enemy casts they're credited with interrupting. The party row sums them.
+/// Added in 0.9.0: <see cref="Absorbed"/> what the barriers they put on soaked of enemies' hits (an estimate,
+/// <see cref="ShieldBook"/>; credited to whoever put the barrier on; never part of <see cref="Healing"/>, which stays what the
+/// heals put back, as the site counts it) and that over the encounter's length (<see cref="AbsorbedPerSecond"/>, as HPS is).
 /// </summary>
 public sealed record MeterRow(
     int PartyId,
@@ -94,13 +100,16 @@ public sealed record MeterRow(
     int RaisesGiven = 0,
     int Raised = 0,
     double DeadSeconds = 0,
-    int Interrupts = 0);
+    int Interrupts = 0,
+    long Absorbed = 0,
+    double AbsorbedPerSecond = 0);
 
 /// <summary>
 /// One ability in a player's breakdown (by ability, for one tab): its own row for a DoT/HoT's ticks
 /// (<see cref="IsTick"/>; the game's tick doesn't say whether it crit, so those rates are null),
 /// pets' actions named with the pet. <see cref="Estimated"/> when the game sent one tick for several
-/// players' DoTs and the share was worked out.
+/// players' DoTs and the share was worked out. Since 0.9.0 a heal's overheal (<see cref="Over"/>) and how many times it was
+/// cast (<see cref="Casts"/>: each use once, however many it landed on; a HoT's ticks each one; 0 on the other tabs).
 /// </summary>
 public sealed record AbilityRow(
     uint ActionId,
@@ -113,7 +122,75 @@ public sealed record AbilityRow(
     double? CritRate,
     double? DirectHitRate,
     long Max,
-    bool Estimated);
+    bool Estimated,
+    long Over = 0,
+    int Casts = 0)
+{
+    /// <summary>A heal's overheal as a share of all it would have healed (0–1; 0 for damage).</summary>
+    public double OverRate => Amount + Over <= 0 ? 0 : (double)Over / (Amount + Over);
+}
+
+/// <summary>What a big hit was (the Mitigation tab): a buster on one, a buster shared by two, a raid-wide. Since 0.9.0.</summary>
+public enum BigHitKind
+{
+    Buster,
+    SharedBuster,
+    Raidwide,
+}
+
+/// <summary>How a big hit was met (the Mitigation tab's tag). Since 0.9.0.</summary>
+public enum MitigationVerdict
+{
+    /// <summary>Two or more mitigations up (or an invulnerability).</summary>
+    Mitigated,
+
+    /// <summary>One.</summary>
+    Light,
+
+    /// <summary>Nothing up: no mitigation on them, none on the enemy, no barrier.</summary>
+    Unmitigated,
+
+    /// <summary>They died within <see cref="MeterSession.DiedAfterHit"/> seconds of it.</summary>
+    Died,
+}
+
+/// <summary>A mitigation up on a big hit: its name, what it is, whether it's the target's own (they put it on), and who put it on (a slot, "" not known).</summary>
+public sealed record MitigationUp(string Name, MitigationKind Kind, bool Own, string By);
+
+/// <summary>
+/// A big hit on one party member (the Mitigation tab): when (encounter seconds), the enemy's action, what it was, how many it
+/// hit, the game's amount (the whole hit), what barriers soaked of it (an estimate; the HP it took is the rest), the mitigations up
+/// on them and on the enemy, and how it was met. Since 0.9.0.
+/// </summary>
+public sealed record BigHit(double At, uint Action, string Ability, BigHitKind Kind, int Targets, long Amount, long Absorbed,
+    IReadOnlyList<MitigationUp> Up, MitigationVerdict Verdict);
+
+/// <summary>
+/// One party member's healing and mitigation in an encounter, for the opened-up meter's Healing and Mitigation tabs (since 0.9.0).
+/// <see cref="Absorbed"/> what their barriers soaked (an estimate) with the biggest barriers by name (<see cref="AbsorbedBy"/>);
+/// <see cref="Healed"/> what they took back with heals on themselves (<see cref="SelfHealing"/>, its abilities by name);
+/// <see cref="GcdHeals"/> and <see cref="OgcdHeals"/> their heal and barrier casts on and off the GCD (pets' left out);
+/// <see cref="HeldSeconds"/> how long they held a boss and <see cref="CoveredSeconds"/> how much of that their own mitigation was up
+/// (theirs on them, or their Reprisal on the boss); the big hits on them (<see cref="Hits"/>, oldest first), the busters among them
+/// and how many of those met nothing.
+/// </summary>
+public sealed record MeterProtection(
+    int PartyId,
+    long Absorbed,
+    IReadOnlyList<(string Name, long Amount)> AbsorbedBy,
+    long SelfHealing,
+    IReadOnlyList<(string Name, long Amount)> SelfHealingBy,
+    int GcdHeals,
+    int OgcdHeals,
+    double HeldSeconds,
+    double CoveredSeconds,
+    IReadOnlyList<BigHit> Hits,
+    int Busters,
+    int BustersBare)
+{
+    /// <summary>The share of the time they held a boss that their own mitigation was up (null: they never held one).</summary>
+    public double? Uptime => HeldSeconds < 1 ? null : Math.Clamp(CoveredSeconds / HeldSeconds, 0, 1);
+}
 
 /// <summary>A line of a death's recap: a hit (negative amount), a heal or shield (positive), with the HP before it.</summary>
 public sealed record RecapLine(double At, string What, long Amount, long HpBefore, string Note);
@@ -268,4 +345,7 @@ public interface IMeterSource
 
     /// <summary>The limit break gauge now, or null outside a party that fills one. Added in 0.4.0.</summary>
     LimitBreakGauge? LimitBreak => null;
+
+    /// <summary>A party member's healing and mitigation in an encounter (the Healing and Mitigation tabs), or null. Added in 0.9.0.</summary>
+    MeterProtection? Protection(int encounterId, int partyId) => null;
 }

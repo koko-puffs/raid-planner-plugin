@@ -9,8 +9,11 @@ namespace RaidPlanner.UI.Model;
 /// <summary>One of the picker's rows: an encounter, whether it's the one shown, live, or the best.</summary>
 public sealed record PickerRow(MeterEncounter Fight, bool Shown, bool Live, bool Best);
 
-/// <summary>A row of the small meter as it's drawn: the row, its number and second column in words, its bar (0–1), its id.</summary>
-public sealed record MeterLine(MeterRow Row, string Value, string Second, float Bar, string Id);
+/// <summary>
+/// A row of the small meter as it's drawn: the row, its number and second column in words, its bar (0–1), its id; since 0.9.0 on
+/// the Healing tab the striped part after the bar (<see cref="Striped"/>, 0–1 of the track: the barriers it put on that soaked damage).
+/// </summary>
+public sealed record MeterLine(MeterRow Row, string Value, string Second, float Bar, string Id, float Striped = 0);
 
 /// <summary>
 /// What the meter's windows show of an encounter, worked out away from ImGui so it's tested: the
@@ -69,9 +72,16 @@ public static class MeterView
     {
         var ranked = Ranked(e.Rows, tab, rank);
         var top = ranked.Count > 0 ? Value(ranked[0], tab, rank) : 0;
+        // Healing's bars (since 0.9.0): healing that landed, then the barriers that soaked damage, against the most of the two together.
+        var healTop = tab == MeterTab.Healing ? HealingTop(ranked) : 0;
         var rows = new List<MeterLine>(ranked.Count);
         foreach (var r in ranked)
-            rows.Add(new MeterLine(r, ValueText(r, tab, rank, true), Second(r, tab), Bar(r, top, tab, rank), "##mr" + r.PartyId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        {
+            var id = "##mr" + r.PartyId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            rows.Add(tab == MeterTab.Healing
+                ? new MeterLine(r, ValueText(r, tab, rank, true), Second(r, tab), HealBar(r, healTop), id, ShieldBar(r, healTop))
+                : new MeterLine(r, ValueText(r, tab, rank, true), Second(r, tab), Bar(r, top, tab, rank), id));
+        }
         MeterLine? lb = null;
         if (tab == MeterTab.Damage && LimitBreak(e.Rows) is { } l)
             lb = new MeterLine(l, Format.Thousands((long)Math.Round(l.EncDps)), Format.Share(l.DamageShare), top > 0 ? (float)Math.Clamp(l.EncDps / top, 0, 1) : 0, "##mr-lb");
@@ -85,6 +95,35 @@ public static class MeterView
         MeterTab.Taken => Format.Share(r.TakenShare),
         _ => Format.Share(r.DamageShare),
     };
+
+    /// <summary>The Healing tab's longest bar (since 0.9.0): the most of a row's HPS and its barriers soaked a second together.</summary>
+    public static double HealingTop(IEnumerable<MeterRow> rows)
+    {
+        double top = 0;
+        foreach (var r in rows)
+            if (!r.IsLimitBreak)
+                top = Math.Max(top, r.Hps + r.AbsorbedPerSecond);
+        return top;
+    }
+
+    /// <summary>A Healing row's solid bar: its HPS against <see cref="HealingTop"/> (0–1).</summary>
+    public static float HealBar(MeterRow r, double top) => top <= 0 ? 0 : (float)Math.Clamp(r.Hps / top, 0, 1);
+
+    /// <summary>A Healing row's striped part after its bar: what its barriers soaked a second, against <see cref="HealingTop"/> (0–1).</summary>
+    public static float ShieldBar(MeterRow r, double top) => top <= 0 ? 0 : (float)Math.Clamp(r.AbsorbedPerSecond / top, 0, 1 - HealBar(r, top));
+
+    /// <summary>The Healing tab's foot on the right (since 0.9.0): the party's overheal ("26% over").</summary>
+    public static string HealFoot(MeterEncounter e) => Format.PercentWhole(e.Party.OverhealRate) + " over";
+
+    /// <summary>The Healing tab's legend's height (CSS px), under the rows of the normal meter.</summary>
+    public const float LegendCss = 20;
+
+    /// <summary>The words a Healing row says when pointed at: its healing, overheal and (an estimate) what its barriers soaked.</summary>
+    public static string HealTip(MeterRow r) =>
+        $"{Format.Thousands(r.Healing)} healing landed ({Format.Thousands((long)Math.Round(r.Hps))} a second), {Format.PercentWhole(r.OverhealRate)} overheal.\n"
+        + (r.Absorbed > 0
+            ? $"Shields absorbed: {Format.Thousands(r.Absorbed)} ({Format.Thousands((long)Math.Round(r.AbsorbedPerSecond))} a second), an estimate from the barrier the game shows before each hit. Not counted as healing."
+            : "No shields of theirs absorbed anything.");
 
     /// <summary>A row's bar: its number against the top player's (0–1).</summary>
     public static float Bar(MeterRow r, double top, MeterTab tab, MeterRank rank) =>

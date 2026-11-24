@@ -216,6 +216,7 @@ public sealed class MeterPreview : IMeterSource
     /// </summary>
     public IReadOnlyList<AbilityRow> Abilities(int encounterId, int partyId, MeterTab tab)
     {
+        if (tab == MeterTab.Healing && Get(encounterId) is { } he) return HealAbilities(he, partyId);
         if (tab != MeterTab.Damage || Get(encounterId) is not { } e) return Array.Empty<AbilityRow>();
         if (ReferenceEquals(abilities.Of, e) && abilities.Member == partyId && abilities.Tab == tab) return abilities.Rows;
         long damage = 0;
@@ -353,6 +354,9 @@ public sealed class MeterPreview : IMeterSource
                 Casts = (int)(Math.Min(t, p.Died) / 2.45),
                 Potions = PotionsBy(p.Id, t),
                 Interrupts = p.Slot == "OT" && t >= 84.4 ? 1 : 0,
+                // 0.9.0's: the barriers each put on that soaked damage (the scholar's most), at a steady rate while alive.
+                Absorbed = (long)Math.Round(AbsorbedRate(p.Slot) * Math.Min(t, p.Died)),
+                AbsorbedPerSecond = AbsorbedRate(p.Slot) * Math.Min(t, p.Died) / clock,
                 DeadSeconds = deaths > 0 ? t - p.Died : 0,
             });
         }
@@ -363,6 +367,8 @@ public sealed class MeterPreview : IMeterSource
         var overAll = 0.0;
         foreach (var r in rows) overAll += r.Overheal;
         var (casts, potions, interrupts, deadFor) = (0, 0, 0, 0.0);
+        long absorbed = 0;
+        foreach (var r in rows) absorbed += r.Absorbed;
         foreach (var r in rows)
         {
             casts += r.Casts;
@@ -378,6 +384,8 @@ public sealed class MeterPreview : IMeterSource
             Potions = potions,
             Interrupts = interrupts,
             DeadSeconds = deadFor,
+            Absorbed = absorbed,
+            AbsorbedPerSecond = absorbed / clock,
         };
         var deathsNow = new List<DeathEntry>(Deaths.Length);
         foreach (var d in Deaths)
@@ -386,6 +394,88 @@ public sealed class MeterPreview : IMeterSource
         var ended = t >= Ends;
         return new MeterEncounter(LivePull, LivePull, "Example Arena", 1, 0, t, !ended, ended ? Outcome.Wipe : null, t, t < PhaseTwo ? "P1" : "P2", t < PhaseTwo ? 0 : PhaseTwo,
             rows, total, deathsNow);
+    }
+
+    /// <summary>A healer's heals in the sample (since 0.9.0, the Healing tab): name, share of their healing, overheal, a cast every so many seconds, the biggest, a HoT's ticks.</summary>
+    private static readonly (string Name, double Share, double Over, double Every, long Max, bool Tick)[] HealMoves =
+    {
+        ("Medica III", 0.24, 0.52, 21, 18204, false), ("Afflatus Rapture", 0.19, 0.38, 16, 14880, false), ("Regen", 0.14, 0.22, 3, 6910, true),
+        ("Tetragrammaton", 0.11, 0.09, 24, 41230, false), ("Liturgy of the Bell", 0.09, 0.27, 95, 22640, false), ("Assize", 0.08, 0.35, 32, 36940, false),
+    };
+
+    private (MeterEncounter? Of, int Member, IReadOnlyList<AbilityRow> Rows) heals = (null, 0, Array.Empty<AbilityRow>());
+
+    private IReadOnlyList<AbilityRow> HealAbilities(MeterEncounter e, int partyId)
+    {
+        if (ReferenceEquals(heals.Of, e) && heals.Member == partyId) return heals.Rows;
+        var row = e.Rows.FirstOrDefault(r => r.PartyId == partyId && !r.IsLimitBreak);
+        var list = new List<AbilityRow>();
+        if (row is { Role: "healer" })
+            for (var i = 0; i < HealMoves.Length; i++)
+            {
+                var m = HealMoves[i];
+                var landed = (long)Math.Round(row.Healing * m.Share);
+                var casts = Math.Max(1, (int)(e.Duration / m.Every));
+                list.Add(new AbilityRow((uint)(200 + i), m.Name, m.Tick, false, landed, m.Share, casts, m.Tick ? null : 0.2, null, m.Max, false,
+                    (long)Math.Round(landed * m.Over / (1 - m.Over)), casts));
+            }
+        heals = (e, partyId, list);
+        return list;
+    }
+
+    /// <summary>What a spot's barriers soaked a second in the sample (since 0.9.0): the scholar's most, the tanks' and the white mage's a little.</summary>
+    private static double AbsorbedRate(string slot) => slot switch
+    {
+        "H2" => 3100,
+        "OT" => 420,
+        "H1" => 260,
+        "MT" => 180,
+        _ => 0,
+    };
+
+    /// <summary>The sample's big hits (since 0.9.0): on whom (party ids), when, the action, what it was, the amount, what barriers soaked, what was up, the tag.</summary>
+    private static readonly (int[] On, double At, string Ability, BigHitKind Kind, long Amount, long Absorbed, string[] Up, MitigationVerdict Verdict)[] SampleHits =
+    {
+        (new[] { 6, 5, 7, 8, 1, 3, 4, 2 }, 41, "Atomic Ray", BigHitKind.Raidwide, 96300, 34700, new[] { "Reprisal", "Divine Veil", "Rampart" }, MitigationVerdict.Mitigated),
+        (new[] { 6 }, 118, "Solar Ray", BigHitKind.Buster, 212000, 0, new[] { "Guardian", "Reprisal" }, MitigationVerdict.Mitigated),
+        (new[] { 5 }, 131, "Solar Ray", BigHitKind.Buster, 208400, 22600, new[] { "The Blackest Night" }, MitigationVerdict.Light),
+        (new[] { 6, 5, 7, 8, 1, 3, 4, 2 }, 165, "Atomic Ray", BigHitKind.Raidwide, 98100, 12100, new[] { "Galvanize" }, MitigationVerdict.Light),
+        (new[] { 6 }, 182, "Solar Ray", BigHitKind.Buster, 214500, 0, new[] { "Bulwark" }, MitigationVerdict.Light),
+        (new[] { 5 }, 196, "Latent Defect", BigHitKind.Buster, 182400, 0, Array.Empty<string>(), MitigationVerdict.Unmitigated),
+    };
+
+    /// <summary>The sample's healing and mitigation for a player (the opened-up meter's Healing and Mitigation tabs), as far as the pull has gone.</summary>
+    public MeterProtection? Protection(int encounterId, int partyId)
+    {
+        if (Get(encounterId) is not { } e) return null;
+        var row = e.Rows.FirstOrDefault(r => r.PartyId == partyId && !r.IsLimitBreak);
+        if (row == null) return null;
+        var t = e.Duration;
+        var hits = new List<BigHit>();
+        foreach (var h in SampleHits)
+        {
+            if (h.At > t || Array.IndexOf(h.On, partyId) < 0) continue;
+            var up = h.Up.Select(n => new MitigationUp(n, n is "Divine Veil" or "Galvanize" or "The Blackest Night" ? MitigationKind.Shield
+                : n == "Reprisal" ? MitigationKind.Enemy : MitigationKind.Mitigation, row.Role == "tank" && n != "Galvanize", string.Empty)).ToList();
+            hits.Add(new BigHit(h.At, 0, h.Ability, h.Kind, h.On.Length, h.Amount, h.Absorbed, up, h.Verdict));
+        }
+        var busters = hits.Count(x => x.Kind != BigHitKind.Raidwide);
+        var bare = hits.Count(x => x.Kind != BigHitKind.Raidwide && x.Up.Count == 0);
+        var tank = row.Role == "tank";
+        var healer = row.Role == "healer";
+        var by = row.Slot switch
+        {
+            "H2" => new List<(string, long)> { ("Galvanize", row.Absorbed * 7 / 10), ("Seraphic Veil", row.Absorbed * 3 / 10) },
+            "OT" => new List<(string, long)> { ("The Blackest Night", row.Absorbed) },
+            "H1" => new List<(string, long)> { ("Divine Benison", row.Absorbed) },
+            "MT" => new List<(string, long)> { ("Divine Veil", row.Absorbed) },
+            _ => new List<(string, long)>(),
+        };
+        var selfBy = tank ? new List<(string, long)> { (row.Job == "PLD" ? "Holy Spirit" : "Abyssal Drain", (long)(t * 1300)), ("Blood Weapon", (long)(t * 400)) }
+            : healer ? new List<(string, long)> { (row.Job == "WHM" ? "Medica III" : "Succor", (long)(t * 260)) } : new List<(string, long)>();
+        var held = tank ? t * (row.Slot == "MT" ? 0.62 : 0.38) : 0;
+        return new MeterProtection(partyId, row.Absorbed, by, selfBy.Sum(x => x.Item2), selfBy, healer ? (int)(t / 8.3) : 0, healer ? (int)(t / 4.6) : 0,
+            held, held * (row.Slot == "MT" ? 0.62 : 0.71), hits, busters, bare);
     }
 
     /// <summary>The tinctures a player had used by second <paramref name="t"/> (the script's).</summary>

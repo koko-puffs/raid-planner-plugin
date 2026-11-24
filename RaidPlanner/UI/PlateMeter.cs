@@ -66,6 +66,10 @@ internal sealed class PlateMeter
         public string? DeadFor;
         public string Id = string.Empty;
         public float Target;
+
+        /// <summary>Healing's striped part after the bar (since 0.9.0: the barriers it put on that soaked damage), 0–1 of the track.</summary>
+        public float Striped;
+
         public int Rank;
     }
 
@@ -263,6 +267,14 @@ internal sealed class PlateMeter
             l.Value = MeterNumber.Text(v, whole);
             l.Share = MeterView.Second(row, numbers);
             l.Target = top > 0 ? (float)Math.Clamp(v / top, 0, 1) : 0;
+            l.Striped = 0;
+            if (numbers == MeterTab.Healing)
+            {
+                // Healing that landed, then (striped) the barriers that soaked damage, against the most of the two together.
+                var healTop = MeterView.HealingTop(ranked);
+                l.Target = MeterView.HealBar(row, healTop);
+                l.Striped = MeterView.ShieldBar(row, healTop);
+            }
             l.Rank = i + 1;
             l.RankText = RankTexts[Math.Min(i + 1, RankTexts.Length - 1)];
             l.PinnedRank = PinnedTexts[Math.Min(i + 1, PinnedTexts.Length - 1)];
@@ -922,7 +934,12 @@ internal sealed class PlateMeter
         var valW = ValueColumn();
         // The bar, on its track: from the row's left to just before the share (and, a hard-ended bar, the number), so it never runs under them.
         if (t.Bar.Style != BarStyle.Segments && !inv)
-            Bar(dl, min, PlateColumns.Track(iw, padR, heartSlot, shareW, S(1), t.Bar.BeforeNumber ? valW : 0, gap), rh, bar, r.Role, dead);
+        {
+            var track = PlateColumns.Track(iw, padR, heartSlot, shareW, S(1), t.Bar.BeforeNumber ? valW : 0, gap);
+            Bar(dl, min, track, rh, bar, r.Role, dead);
+            // Healing's shields absorbed, striped after the bar (as it eases, the stripes keep to its end).
+            if (!waiting && l.Striped > 0) StripesOn(dl, min, track, rh, bar, l.Striped, r.Role, dead);
+        }
         if (t.Row.Rule is { } rule) Kit.Rule(dl, min.X, max.X, max.Y, rule);
         // You.
         if (you) YouMark(dl, min, max, rad, rh, youStyle);
@@ -1071,6 +1088,46 @@ internal sealed class PlateMeter
             var a = new Vector2(MathF.Round(min.X + i * step), MathF.Round(min.Y));
             dl.AddRectFilled(a, a + new Vector2(S(b.Cell), h), i < on ? lit : dim);
         }
+    }
+
+    /// <summary>
+    /// The striped part after a bar (since 0.9.0, the Healing tab's shields absorbed): from <paramref name="from"/> of the track for
+    /// <paramref name="length"/> of it, a faint wash of the role's colour with its diagonal stripes; Readout's cells half lit.
+    /// </summary>
+    public void StripesOn(ImDrawListPtr dl, Vector2 min, float track, float h, float from, float length, string? role, bool dead)
+    {
+        if (length <= 0 || track <= 0) return;
+        var rc = dead ? T.DeadBar : Role(role);
+        if (T.Bar.Style == BarStyle.Segments)
+        {
+            var b = T.Bar;
+            var step = S(b.Cell + b.CellGap);
+            var n = Math.Max(1, (int)MathF.Floor(track / step));
+            var a0 = (int)MathF.Round(n * Math.Clamp(from, 0, 1));
+            var a1 = (int)MathF.Round(n * Math.Clamp(from + length, 0, 1));
+            for (var i = a0; i < a1; i++)
+            {
+                var a = new Vector2(MathF.Round(min.X + i * step), MathF.Round(min.Y));
+                dl.AddRectFilled(a, a + new Vector2(S(b.Cell), h), Palette.U32(Rgb.A(rc, 0.45f)));
+            }
+            return;
+        }
+        var x0 = MathF.Round(min.X + track * Math.Clamp(from, 0, 1));
+        var x1 = MathF.Round(min.X + track * Math.Clamp(from + length, 0, 1));
+        if (x1 - x0 < 1) return;
+        Stripes(dl, new Vector2(x0, min.Y), new Vector2(x1, min.Y + h), rc, dead);
+    }
+
+    /// <summary>Diagonal stripes in a box (the shields' part of a bar, the legend's swatch): a faint wash of the colour and its lines.</summary>
+    public static void Stripes(ImDrawListPtr dl, Vector2 a, Vector2 b, Vector4 color, bool dead = false)
+    {
+        dl.AddRectFilled(a, b, Palette.U32(Rgb.A(color, dead ? 0.05f : 0.12f)));
+        dl.PushClipRect(a, b, true);
+        var h = b.Y - a.Y;
+        var gap = MathF.Max(3, S(5));
+        var line = Palette.U32(Rgb.A(color, dead ? 0.2f : 0.55f));
+        for (var x = a.X - h; x < b.X; x += gap) dl.AddLine(new Vector2(x, b.Y), new Vector2(x + h, a.Y), line, MathF.Max(1, S(1.5f)));
+        dl.PopClipRect();
     }
 
     /// <summary>Grimoire's ribbon on your row: its strip's left edge and width (CSS px); the job icon starts 6 past it.</summary>
@@ -1499,7 +1556,8 @@ internal sealed class PlateMeter
                 Set(1, "Overheal", Format.PercentWhole(r.OverhealRate));
                 Set(2, "Share", Format.Share(r.HealingShare) + "%");
                 Set(3, "Healing", MeterNumber.Short(r.Healing));
-                Set(4, "Crit", Format.PercentWhole(r.HealCritRate));
+                // Since 0.9.0: what their barriers soaked (an estimate; the foot says so), in crit's place.
+                Set(4, "Shields est.", MeterNumber.Short(r.Absorbed));
                 Set(5, "Max heal", MeterNumber.Short(r.MaxHeal));
                 break;
             case MeterTab.Taken:
@@ -1529,7 +1587,9 @@ internal sealed class PlateMeter
             d.Abilities.Add((a.IsTick ? a.Name + " (DoT)" : a.Name, Format.Share(a.Share) + "%", MeterNumber.Short(a.Amount), top > 0 ? (float)(a.Amount / (double)top) : 0));
         }
         var readout = T.Id == MeterThemeId.Readout;
-        d.Foot = readout
+        d.Foot = tab == MeterTab.Healing
+            ? readout ? "shields: estimated, not healing" : "Shields absorbed are an estimate"
+            : readout
             ? $"deaths {r.Deaths} · gcd {r.Casts} · pot {r.Potions}"
             : $"{Words.Count(r.Deaths, "death")} · {r.Casts.ToString(CultureInfo.InvariantCulture)} GCDs · {Words.Count(r.Potions, "potion")}";
         d.Link = readout ? "[click] open full table" : "Click: the full table and recap";

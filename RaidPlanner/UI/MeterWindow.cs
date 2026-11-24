@@ -495,7 +495,7 @@ public sealed partial class MeterWindow : Window
         }
         var pace = tab == MeterTab.Damage && config.MeterPace != PaceAgainst.Off && m.Pace(e.Id, config.MeterPace) != null;
         var lb = LinesOf(e, tab, config.MeterRank).LimitBreak != null;
-        return MeterFit.Fight(z, party, pace, lb);
+        return MeterFit.Fight(z, party, pace, lb) + (tab == MeterTab.Healing ? MeterView.LegendCss : 0);
     }
 
     /// <summary>A death's row on the Deaths tab (CSS px), measured in its faces as it was last drawn (its words' heights).</summary>
@@ -673,7 +673,10 @@ public sealed partial class MeterWindow : Window
             PaceRow(dl, top.X, ref stack, w, pace);
         UnderTabs(ref stack);
         var fy = stack.Far(S(z.Foot));
+        // Healing's legend between the rows and the foot (since 0.9.0).
+        var ly = tab == MeterTab.Healing ? stack.Far(S(MeterView.LegendCss)) : float.NaN;
         Rows(dl, top.X, w, e, tab, stack);
+        if (!float.IsNaN(ly)) Legend(dl, top.X, ly, w);
         Footer(dl, top.X, fy, w, e, tab, ended, stack);
     }
 

@@ -99,6 +99,7 @@ public sealed unsafe class CombatMeter : IDisposable
     {
         Session.Stop();
         recorder.Combat.Forget();
+        owners.Clear();
         // A stop that isn't for good lasts until here: the meter tries again in the new zone.
         if (odd.NewZone(recorder.Combat.Anomalies)) Session.Problem = null;
     });
@@ -250,7 +251,10 @@ public sealed unsafe class CombatMeter : IDisposable
         return (name, job, role);
     }
 
-    /// <summary>During an encounter, Weakness (1) or Brink of Death (2) on a party member, from their status list (0 when they aren't near).</summary>
+    /// <summary>
+    /// During an encounter, Weakness (1) or Brink of Death (2) on a party member, from their status list (0 when they aren't near);
+    /// since 0.9.0, from the same list, what they carry against damage and who put it on (the Mitigation tab, shields absorbed).
+    /// </summary>
     private byte Weakness(uint entityId, bool statuses)
     {
         if (!statuses) return 0;
@@ -259,12 +263,49 @@ public sealed unsafe class CombatMeter : IDisposable
         var bc = manager->LookupBattleCharaByEntityId(entityId);
         if (bc == null) return 0;
         byte weak = 0;
+        Session.Wearing(entityId);
         var list = bc->StatusManager.Status;
         for (var i = 0; i < list.Length; i++)
-            if (list[i].StatusId != 0 && data.Kinds.Weakness(list[i].StatusId) is var w and > 0)
-                weak = (byte)Math.Max(weak, w);
+        {
+            var id = (uint)list[i].StatusId;
+            if (id == 0) continue;
+            if (data.Kinds.Weakness(id) is var w and > 0) weak = (byte)Math.Max(weak, w);
+            if (data.Kinds.Mitigation(id) != MitigationKind.None) Session.Wears(entityId, id, MemberFrom(list[i].SourceObject.ObjectId));
+        }
         return weak;
     }
+
+    /// <summary>The party's debuffs on an enemy that lower its damage (Reprisal, Addle, Feint, Dismantle), with who put each on (since 0.9.0).</summary>
+    private void EnemyStatuses(uint entityId, BattleChara* bc)
+    {
+        Session.EnemyWearing(entityId);
+        var list = bc->StatusManager.Status;
+        for (var i = 0; i < list.Length; i++)
+        {
+            var id = (uint)list[i].StatusId;
+            if (id != 0 && data.Kinds.Mitigation(id) == MitigationKind.Enemy) Session.EnemyWears(entityId, id, MemberFrom(list[i].SourceObject.ObjectId));
+        }
+    }
+
+    /// <summary>The party member a status's source stands for: themselves, or a pet's or summon's owner (looked up once and kept); 0 for none.</summary>
+    private uint MemberFrom(uint source)
+    {
+        if (source is 0 or InvalidId) return 0;
+        var parser = recorder.Combat;
+        if (parser.IsParty(source)) return source;
+        if (!owners.TryGetValue(source, out var owner))
+        {
+            var manager = CharacterManager.Instance();
+            var bc = manager == null ? null : manager->LookupBattleCharaByEntityId(source);
+            owner = bc == null ? 0 : bc->Character.GameObject.OwnerId;
+            if (owner == InvalidId) owner = 0;
+            if (owners.Count > 256) owners.Clear();
+            owners[source] = owner;
+        }
+        return parser.IsParty(owner) ? owner : 0;
+    }
+
+    private readonly Dictionary<uint, uint> owners = new();
 
     private string Place(uint territory)
     {
@@ -295,6 +336,7 @@ public sealed unsafe class CombatMeter : IDisposable
             if (!targetable) continue;
             // Its cast (since 0.4.0), and, for the bosses below, whom it's on.
             var bc = (BattleChara*)npc.Address;
+            if (bc != null) EnemyStatuses(npc.EntityId, bc);
             var cast = bc == null ? null : bc->GetCastInfo();
             uint castAt = 0;
             if (cast != null && cast->IsCasting && cast->ActionType == 1 && cast->ActionId != 0)
