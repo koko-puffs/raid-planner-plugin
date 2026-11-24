@@ -2621,7 +2621,7 @@ entry).
   enemies could heal you for more than you were missing with no overheal. Each now counts from the HP the ones
   before it left, on the meter and in recordings.
 
-### 0.8.3 (not released yet)
+### 0.8.3
 
 - **The cooldown tracker in the callouts' look**: each cooldown on a row of its own with a countdown ring that empties
   as it comes back (yours ember, whole and green when ready), the time with a small "s" beside it, a little space
