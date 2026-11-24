@@ -322,4 +322,25 @@ public class ProtectionTests
         var dps = s.Protection(e.Id, e.Rows.Single(r => r.Slot == "R1").PartyId)!;
         Assert.Null(dps.Uptime);
     }
+
+    /// <summary>
+    /// 0.9.0's review: the barriers go by the Status sheet's names (xivapi's English Status.csv): The Blackest Night's status
+    /// is "Blackest Night" (1178), which until then wasn't a barrier anywhere (the action's name, no status's, was listed), so
+    /// a DRK's barrier was never credited, never "up", and wasn't in the death recap; and Guardian's Will (3830), Brutal
+    /// Shell (1898) and The Spire (3892), each "a … barrier is nullifying damage", weren't listed at all.
+    /// </summary>
+    [Fact]
+    public void The_barriers_go_by_the_Status_sheets_names()
+    {
+        foreach (var name in new[] { "Blackest Night", "Guardian's Will", "Brutal Shell", "The Spire" })
+        {
+            Assert.Contains(name, CombatLists.ShieldNames);
+            Assert.Equal(MitigationKind.Shield, CombatLists.MitigationOf(name));
+        }
+        var tbn = Mitigations.Names().Single(n => n.Name == "Blackest Night").Index;
+        Assert.Equal("The Blackest Night", Mitigations.All[tbn].Key);
+        Assert.Equal(MitigationRole.Shield, Mitigations.All[tbn].Kind);
+        // Guardian's own mitigation stays mitigation; its barrier is the barrier.
+        Assert.Equal(MitigationKind.Mitigation, CombatLists.MitigationOf("Guardian"));
+    }
 }

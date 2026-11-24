@@ -19,13 +19,18 @@ public static class CombatLists
 
     /// <summary>
     /// Barriers: statuses that soak damage. Never healing (as in ACT): the meter only notes one was
-    /// put on, as a shield (<c>fx</c> kind 3) rather than a status (kind 4).
+    /// put on, as a shield (<c>fx</c> kind 3) rather than a status (kind 4). The names are the Status
+    /// sheet's, not the actions': The Blackest Night's barrier is "Blackest Night" (rows 1178, 1308; until
+    /// 0.9.0 it was listed as the action's name, which no status has, so it was never a barrier). Since 0.9.0
+    /// also the level 100 barriers that were missing: Guardian's Will (Guardian's), Brutal Shell's and the
+    /// Spire card's (each "A … barrier is nullifying damage" on the sheet).
     /// </summary>
     public static readonly IReadOnlyList<string> ShieldNames = new[]
     {
         "Galvanize", "Catalyze", "Seraphic Veil", "Eukrasian Diagnosis", "Eukrasian Prognosis", "Differential Diagnosis",
         "Haima", "Haimatinon", "Panhaima", "Panhaimatinon", "Holosakos", "Divine Benison", "Divine Caress", "Intersection",
-        "Divine Veil", "Shake It Off", "The Blackest Night", "Improvised Finish", "Radiant Aegis", "Stoneskin",
+        "Divine Veil", "Shake It Off", "Blackest Night", "Improvised Finish", "Radiant Aegis", "Stoneskin",
+        "Guardian's Will", "Brutal Shell", "The Spire",
     };
 
     /// <summary>

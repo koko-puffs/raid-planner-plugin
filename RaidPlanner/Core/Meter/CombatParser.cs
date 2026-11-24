@@ -17,7 +17,8 @@ namespace RaidPlanner.Core.Meter;
 /// - A pet's or summon's action is its owner's (the owner comes from the game), flagged as a pet's.
 /// - Limit breaks (ActionCategory 9 and 15) are flagged; the meter gives them a row of their own.
 /// - Damage is types 3, 5 and 6; heals type 4 (its crit in another byte); MP is never healing;
-///   a barrier (a shield status) is never healing either.
+///   a barrier (a shield status) is never healing either. A heal's HP before (its overheal's measure) is the HP read
+///   for the message with the earlier heals in it on the same one added (since 0.9.0: an area attack's lifesteal).
 /// - Damage between party members, and anything between two others, isn't kept.
 /// - A tick is credited to the party member the game names (a pet's owner); a damage tick on an enemy
 ///   that names no one is shared out between the party members with one of the jobs' DoTs on the target
@@ -250,6 +251,7 @@ public sealed class CombatParser
         if (member != 0)
             foreach (var s in sinks)
                 s.Used(b.T, member, b.Caster, b.Action);
+        healedCount = 0;
         for (var i = 0; i < b.Count; i++)
         {
             var target = b.Targets[i];
@@ -279,12 +281,43 @@ public sealed class CombatParser
                 var recipientHostile = onTarget ? b.Hostile[i] : member == 0;
                 // The party member it's from: the caster's member, or the target when it came from them.
                 var from = d.FromTarget ? (targetParty ? target : 0) : member;
+                // A second heal on the same one in this message (lifesteal from each enemy an area attack hit, Clemency on
+                // oneself) finds the HP the earlier ones left: the HP was read once, before any of them (since 0.9.0's review).
+                if (from != 0 && d.Kind == EffectKind.Heal) hp = HealedNow(recipient, hp, max, d.Amount);
                 if (from != 0) FromParty(b, d, from, origin, recipient, recipientParty, recipientHostile, hp, max, pet && !d.FromTarget, lb && !d.FromTarget, withAmount);
                 else if (recipientParty) OnParty(b, d, origin, recipient, hp, max, onTarget ? b.Shield[i] : -1);
             }
         }
         // The use after its effects, so an encounter its first hit starts has begun when the use is told.
         if (member != 0 && !CombatLists.IsAutoAttack(cat)) Use(b, member, (pet ? UseFlags.Pet : UseFlags.None) | (lb ? UseFlags.LimitBreak : UseFlags.None));
+    }
+
+    // The party's heals in the message being read, by whom they landed on (each target and the caster at most): nothing made per message.
+    private readonly (uint Who, long Amount)[] healed = new (uint, long)[EffectBatch.MaxTargets + 1];
+    private int healedCount;
+
+    /// <summary>
+    /// The HP a heal in this message found (its <see cref="PartyEffect.HpBefore"/>, what its overheal is measured from): the HP the
+    /// game side read (−1 unknown) with the heals before it in the message on the same one added, up to their max HP. The HP is read
+    /// once a message, before any of its effects, so an area attack's lifesteal (a heal on the caster from each enemy hit) measured
+    /// every heal from that one reading: three 5,000 heals on a caster missing 6,000 counted 15,000 healed and no overheal, where
+    /// the game can put back only the 6,000. Then this heal is added for the next.
+    /// </summary>
+    private long HealedNow(uint who, long hp, long max, long amount)
+    {
+        var i = 0;
+        while (i < healedCount && healed[i].Who != who) i++;
+        var before = hp;
+        if (i < healedCount)
+        {
+            if (hp >= 0) before = max > 0 ? Math.Min(max, hp + healed[i].Amount) : hp + healed[i].Amount;
+            healed[i].Amount += amount;
+        }
+        else if (healedCount < healed.Length)
+        {
+            healed[healedCount++] = (who, amount);
+        }
+        return before;
     }
 
     /// <summary>
