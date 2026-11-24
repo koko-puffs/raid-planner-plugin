@@ -2182,12 +2182,14 @@ would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.A
   Living Dead, Great Nebula/Nebula, Superbolide: the notable ones; Bulwark, Holy Sheltron, Thrill of Battle,
   Bloodwhetting, Dark Mind, Oblation, Camouflage, Heart of Corundum), others' own (Third Eye, Riddle of Earth), the
   party's (Passage of Arms, Dark Missionary, Heart of Light, Troubadour, Nature's Minne, Tactician, Shield Samba, Magick
-  Barrier, Temperance, Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, Neutral
-  Sect, The Bole, Sun Sign, Kerachole, Holos, Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night,
+  Barrier, Temperance, Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, The
+  Bole, Sun Sign, Kerachole, Holos, Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night,
   Divine Benison, Galvanize, Intersection, the Sage's, Radiant Aegis, Improvised Finish, Tempera Coat, Stem the Tide,
-  Shade Shift, Arcane Crest, Manaward) and those on the enemy (Reprisal, Addle, Feint, Dismantle); each status's name
+  Shade Shift, Arcane Crest, Manaward, Neutral Sect's on the party) and those on the enemy (Reprisal, Addle, Feint, Dismantle); each status's name
   checked against the English Status sheet in 0.9.0's review (xivapi's ffxiv-datamining `Status.csv`), where only The
-  Blackest Night's was wrong: its status is "Blackest Night", the action's name no status has. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
+  Blackest Night's was wrong: its status is "Blackest Night", the action's name no status has. A name the sheet gives to
+  statuses of different kinds is told apart by id where it matters (`Mitigations.NotMitigation`): Neutral Sect on the
+  party is a barrier (1921, 3988), the Astrologian's own of the name (1892 healing up, 2044 casts quickened) nothing. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
   meter's game side reads each party member's (during an encounter, each frame, with Weakness: `PartyState.Mitigation`)
   and the party's on the enemies (four times a second, with their targetability: `MeterSession.EnemyMitigation`); a
   death keeps theirs as last read alive (the frame they're seen dead has lost them) with the enemies' then
@@ -2611,6 +2613,9 @@ entry).
   plugin looked for the action's name, so it was never a barrier: not in shields absorbed, never "up" on the Mitigation
   tab or in the death recap, and recorded as a plain status. Guardian's Will (Guardian's barrier), Brutal Shell's barrier
   and The Spire's are barriers too now.
+- **Neutral Sect's barrier is a barrier**: on the party it was counted as mitigation (its absorbed part no one's), and the
+  Astrologian's own Neutral Sect (healing up) counted as mitigation up for them; now the party's is a barrier, credited to
+  the Astrologian, and theirs is nothing.
 - **Lifesteal on an area attack isn't overcounted**: an attack that heals you for each enemy it hits (an area
   weaponskill under Bloodbath) had every one of those heals measured against your HP before the first, so a pack of
   enemies could heal you for more than you were missing with no overheal. Each now counts from the HP the ones

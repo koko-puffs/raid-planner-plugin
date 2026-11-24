@@ -94,7 +94,7 @@ public sealed class PrepData
                 var name = row.Name.ExtractText().Trim();
                 if (name.Length == 0) continue;
                 // Every row with the name: only the party's (and the bosses') statuses are asked about.
-                if (names.TryGetValue(name, out var i)) mitigation[row.RowId] = i;
+                if (names.TryGetValue(name, out var i) && !Mitigations.NotMitigation.Contains(row.RowId)) mitigation[row.RowId] = i;
                 if (name.Equals("Well Fed", StringComparison.OrdinalIgnoreCase)) wellFed.Add(row.RowId);
             }
         }

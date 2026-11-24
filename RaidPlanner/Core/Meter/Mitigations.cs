@@ -100,7 +100,6 @@ public static class Mitigations
         Party("Expedient", "SCH", "Desperate Measures"),
         Party("Collective Unconscious", "AST"),
         Party("Exaltation", "AST"),
-        Party("Neutral Sect", "AST"),
         Party("The Bole", "AST"),
         Party("Sun Sign", "AST"),
         Party("Kerachole", "SGE"),
@@ -126,6 +125,8 @@ public static class Mitigations
         Shield("Shade Shift", "NIN"),
         Shield("Arcane Crest", "RPR", "Arcane Crest", "Crest of Time Borrowed"),
         Shield("Manaward", "BLM"),
+        // Neutral Sect's on the party is a barrier (1921, 3988); the AST's own of the name aren't mitigation (NotMitigation).
+        Shield("Neutral Sect", "AST"),
 
         // On the enemy.
         new MitigationSpec("Reprisal", MitigationRole.OnEnemy, new[] { "Reprisal" }, Tanks),
@@ -133,6 +134,13 @@ public static class Mitigations
         new MitigationSpec("Feint", MitigationRole.OnEnemy, new[] { "Feint" }, new[] { "MNK", "DRG", "NIN", "SAM", "RPR", "VPR" }),
         new MitigationSpec("Dismantle", MitigationRole.OnEnemy, new[] { "Dismantled", "Dismantle" }, new[] { "MCH" }),
     };
+
+    /// <summary>
+    /// Status rows that share a catalogued name but aren't mitigation, by id (the names alone can't tell them apart): the
+    /// Astrologian's own Neutral Sect, healing magic potency up (1892) and its casts quickened (2044), where the party's of
+    /// that name is a barrier (1921, 3988). As the Status sheet has them.
+    /// </summary>
+    public static readonly IReadOnlySet<uint> NotMitigation = new HashSet<uint> { 1892, 2044 };
 
     /// <summary>Each English status name and the mitigation it's (its index in <see cref="All"/>).</summary>
     public static IEnumerable<(string Name, int Index)> Names()

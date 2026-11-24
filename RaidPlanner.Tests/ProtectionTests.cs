@@ -373,4 +373,15 @@ public class ProtectionTests
         // Guardian's own mitigation stays mitigation; its barrier is the barrier.
         Assert.Equal(MitigationKind.Mitigation, CombatLists.MitigationOf("Guardian"));
     }
+
+    [Fact]
+    public void Neutral_sect_on_the_party_is_a_barrier_and_the_astrologians_own_of_the_name_isnt_mitigation()
+    {
+        // The Status sheet: 1921 and 3988 "A magicked barrier is nullifying damage."; 1892 healing magic potency up, 2044 casts quickened.
+        Assert.Equal(MitigationKind.Shield, CombatLists.MitigationOf("Neutral Sect"));
+        Assert.Contains(1892u, Mitigations.NotMitigation);
+        Assert.Contains(2044u, Mitigations.NotMitigation);
+        Assert.DoesNotContain(1921u, Mitigations.NotMitigation);
+        Assert.DoesNotContain(3988u, Mitigations.NotMitigation);
+    }
 }

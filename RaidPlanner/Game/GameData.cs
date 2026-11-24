@@ -199,7 +199,7 @@ public sealed class GameData
                 if (name.Equals("Weakness", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 1;
                 else if (name.Equals("Brink of Death", StringComparison.OrdinalIgnoreCase)) n.Weakness[row.RowId] = 2;
                 // Since 0.9.0: what each does against damage (the meter's Mitigation tab and shields absorbed).
-                if (CombatLists.MitigationOf(name) is var mit and not MitigationKind.None) n.Mitigation[row.RowId] = mit;
+                if (!Mitigations.NotMitigation.Contains(row.RowId) && CombatLists.MitigationOf(name) is var mit and not MitigationKind.None) n.Mitigation[row.RowId] = mit;
             }
         }
         catch (Exception ex)
