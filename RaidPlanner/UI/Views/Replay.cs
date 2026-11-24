@@ -393,7 +393,7 @@ public sealed partial class MainWindow
             var done = replayT >= cast.End;
             var timeText = cast.Stopped switch
             {
-                CastStop.Interrupted => "Interrupted",
+                CastStop.Interrupted when done => "Interrupted",
                 CastStop.Cancelled when done => "Stopped",
                 _ => done ? "Went off" : ReplayText.SecondsLeft(cast.End - replayT),
             };

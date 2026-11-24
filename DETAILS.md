@@ -2546,7 +2546,8 @@ entry).
   waymarks, HP and deaths; down the right each boss's HP and cast, the party's HP, barriers and debuffs, and what
   just happened; along the bottom Play and the pull's steps, the bosses' buffs, the party's debuffs and the deaths,
   pressed or dragged to go anywhere in it, and grown to fill the window. A line that runs through its caster (Seiryu's
-  sigils) is drawn across it, as the Raid Codex draws it, not only in front.
+  sigils) is drawn across it, as the Raid Codex draws it, not only in front. A boss's card says "Interrupted" once
+  the cast is stopped, not from the moment it began (its time left counts down to the interrupt until then).
 
 - **A ready check card**: as the game's ready check starts, a card beside the party list says who's fed and for how
   long (amber when their food would run out before your average pull here is over, red with none, "can't see" for
