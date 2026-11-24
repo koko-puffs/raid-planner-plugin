@@ -118,6 +118,9 @@ public static class SettingsParts
             case SettingsTab.Cooldowns:
                 Icons.Draw(dl, Icon.Shield, pos, size, color);
                 break;
+            case SettingsTab.Profiles:
+                Icons.Draw(dl, Icon.Layers, pos, size, color);
+                break;
             case SettingsTab.Windows:
                 Icons.Draw(dl, Icon.Move, pos, size, color);
                 break;

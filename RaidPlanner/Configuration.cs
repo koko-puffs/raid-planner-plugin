@@ -9,7 +9,7 @@ namespace RaidPlanner;
 
 /// <summary>The plugin's settings, kept by Dalamud with the plugin's config.</summary>
 [Serializable]
-public sealed class Configuration : IPluginConfiguration
+public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
 {
     /// <summary>The settings' version: 2 since 0.6.0 (<see cref="Migrate"/>).</summary>
     public int Version { get; set; } = UploadPrefs.Current;
@@ -264,6 +264,34 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public float WindowScaleWas { get; set; }
 
+    // Settings profiles (0.9.0; Settings → Profiles, UI.Model.ProfileLayer).
+
+    /// <summary>The profiles, in the order Settings lists them (the first used in a kind of duty is its). None at first.</summary>
+    public List<UI.Model.SettingsProfile> Profiles { get; set; } = new();
+
+    /// <summary>The profile in effect now (its id), or null for your usual settings.</summary>
+    public string? ProfileActive { get; set; }
+
+    /// <summary>
+    /// While a profile is in effect: your usual values of the fields it changes (theirs are on this configuration then),
+    /// kept with the settings so they come back after a crash or a reload (<see cref="UI.Model.ProfileLayer.Recover"/>).
+    /// </summary>
+    public Dictionary<string, string> ProfileBackup { get; set; } = new();
+
+    /// <summary>
+    /// The plan window's place and size as last drawn (screen px; 0.9.0, kept by the plan window so a profile's Window
+    /// places can have its own). <see cref="PlanPlaced"/> false until it's been drawn.
+    /// </summary>
+    public float PlanPlaceX { get; set; }
+
+    public float PlanPlaceY { get; set; }
+
+    public float PlanPlaceW { get; set; }
+
+    public float PlanPlaceH { get; set; }
+
+    public bool PlanPlaced { get; set; }
+
     /// <summary>The plan picked by hand for a duty (by its ContentFinderCondition), shown there again next time.</summary>
     public Dictionary<uint, string> PlanForDuty { get; set; } = new();
 
@@ -358,5 +386,10 @@ public sealed class Configuration : IPluginConfiguration
         return changed;
     }
 
-    public void Save() => Services.PluginInterface.SavePluginConfig(this);
+    /// <summary>Saves the settings; what was changed meanwhile in a field the profile in effect changes is kept in it first (<see cref="UI.Model.ProfileLayer.Capture"/>).</summary>
+    public void Save()
+    {
+        UI.Model.ProfileLayer.Capture(this, this);
+        Services.PluginInterface.SavePluginConfig(this);
+    }
 }

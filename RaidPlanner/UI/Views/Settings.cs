@@ -286,6 +286,12 @@ public sealed partial class MainWindow
             return;
         }
         var tab = settingsTab;
+        // 0.9.0: Profiles draws its own head (New profile at its right) and cards.
+        if (tab == SettingsTab.Profiles)
+        {
+            DrawProfiles();
+            return;
+        }
         DrawPageHead(tab);
         Kit.Gap(18);
 
@@ -312,7 +318,7 @@ public sealed partial class MainWindow
             switch (tab, section.Title)
             {
                 case (SettingsTab.Meter, "How it looks"):
-                    SettingsParts.SectionHead("##sh-look", section.Title);
+                    SettingsParts.SectionHead("##sh-look", section.Title, ProfileNoteFor(SettingId.MeterSize) ?? ProfileNoteFor(SettingId.MeterTheme));
                     DrawLookPanel();
                     break;
                 case (SettingsTab.Plans, "On-screen callouts"):

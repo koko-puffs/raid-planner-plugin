@@ -2001,6 +2001,67 @@ meter keeps 20% at least, as Settings does; saved once the knob is let go). The 
 `MeterClickThrough` and `MeterBackground`; the overlays' their `OverlaySettings`. The plan window has none of them:
 it says to drag its edges to size it.
 
+## Profiles (`UI/Model/Profiles.cs`, `UI/Model/DutyKinds.cs`, `UI/Views/Profiles.cs`, `UI/ProfileNotice.cs`; since 0.9.0)
+
+A setup for each kind of duty: going in puts its profile in effect, leaving puts your usual settings back. What a
+profile doesn't change stays your usual setting, and a new profile changes nothing (it's a copy of your usual setup
+until you turn its rows on). There are no profiles at first.
+
+**Settings → Profiles** lists them as cards, in order: the name (**Now** on the one in effect), the duties it's used
+in, a chip for each thing it changes ("Meter Detailed", "Callouts 3 at once", "Own window places"), Edit; **Usual**
+(your settings as they are, Now when no profile is) always last, not edited there; **New profile** at the right of the
+head. A profile's page: back, its name big, **Delete** (it asks first; in effect, your usual settings come back);
+_Name_; _Used in_, a chip a kind of duty (one profile a kind: a kind another profile has is dimmed, its tooltip says
+whose; the first in the list wins if a file ever has two); _What it changes_, a row a setting with a switch at the
+right. Off, the row is dimmed and says "usual". Turned on, it starts at your usual value (`ProfileLayer.Override`),
+and its control (Off/On, Compact/Detailed, a stepper for the theme, the count, the size) edits the profile's own.
+
+**What a profile can change** (`ProfileItems.All`, a line each: a configuration field by its path, the Settings rows it
+shadows, its chip's words): the meter shown, its size, its theme, hidden out of combat, kept open in duties; the
+callouts shown, how many at once, smaller; the plan window in duties; the party cooldowns shown; **Window places**;
+the windows' size (fit, or 80–200%). Window places is many fields (`ProfileItems.PlaceFields`): the meter's anchor
+and the height you gave it, each overlay's anchor, corner and width (`OverlaySettings`), and the plan window's place
+and size, which the plan window keeps in the settings as it's drawn since 0.9.0 (`PlanPlaceX`…`PlanPlaced`, saved as
+you let go; ImGui's own memory of it isn't the profile's). The meter's width is ImGui's and isn't in it. A new overlay's
+place is one more `Overlay("…")` line there; a new setting, one more line in `All`.
+
+**Which kind a duty is** (`DutyKinds.Of`, tested; read by `GameData.Facts`): the zone's ContentFinderCondition's
+ContentType row, its `HighEndDuty` flag, its English name and an alliance (the alliance roulette, or a
+ContentMemberType of three parties). Ultimate: ContentType 28. Criterion: 30 ("V&C Dungeon Finder") when high-end,
+"Another …" or "(Savage)"; else a Variant dungeon, Dungeons. Extreme: a trial (4) high-end or named "(Extreme)" or
+"(Unreal)"; other trials are Normal raids. Savage: a raid (5) high-end or named "(Savage)" or "(Chaotic)", 37 [verify:
+the Chaotic alliance raid's row], and a field operation's Savage duty (Delubrum Reginae). Alliance raids: other raids of
+three parties. Normal raids: the rest of 5. Dungeons: 2, guildhests (3), deep dungeons (21). Open world: no duty, and
+the field operations (26, 29, 38, and the zones of intended use 41, 48, 61). Other duties: the rest (PvP, quest
+battles, treasure dungeons…). Outside a duty-finder zone but bound by a duty (a quest's), it's Other.
+
+**The layer** (`ProfileLayer`, tested). The plugin reads the configuration's fields directly everywhere, so a profile
+is laid over it: put in effect (`Activate`), each field it changes is kept aside (`ProfileBackup`: your usual values)
+and set to the profile's (`ProfileFields`: by path, as invariant text, by reflection; a path that isn't a setting, or a
+value of the wrong kind, changes nothing). While it's in effect, a change to one of its fields, from anywhere (Settings,
+the meter's menu, Arrange windows, a drag), is the profile's: `Configuration.Save` copies them into it first
+(`Capture`), and so does going out of effect. A change to any other field is your usual settings', as ever. Going out
+(`Deactivate`) captures, then puts your usual values back. `ProfileActive` and `ProfileBackup` are saved with the
+settings, so a crash or a reload while one is in effect is undone as the plugin loads (`Recover`, before anything reads
+the settings); the duty you're in puts the profile back silently. Unloading takes it out and saves, so the file never
+holds a profile's values as yours (an older version reading it would keep them). A row turned on or off while in effect
+is kept aside or put back at once; turned on while another profile is in effect, it starts at your usual value, not the
+live one; a profile saved before a field was added to one of its rows gets that field from your settings as it comes in.
+
+**Switching** (`ProfileSwitcher`, tested; asked each frame by the plugin with the zone and its kind): the first profile
+used in the kind is put in effect, or your usual settings back; not while Arrange windows is on (its Cancel puts back
+what it found) nor before you're logged in. Then the settings are saved and, when Window places is involved, the plan
+window put at its place (`PlanWindow.PutAt`; the meter and the overlays follow their anchors by themselves). Going in,
+**the notice** (`ProfileNotice`, its own window near the top of the screen, centred): the layers icon, "Ultimate
+profile: meter Detailed, callouts 3 at once and 2 more" (`ProfileItems.Summary`) and **Undo**, which takes the profile
+out until you leave that zone; 7 seconds, waiting while the mouse is on it, fading out. Leaving, "Back to your usual
+settings" for a moment. Neither shows for a profile that changes nothing, nor for the switch made as the plugin loads.
+It takes no focus, makes no sounds and reads no keys.
+
+**Elsewhere**: a Settings row a profile in effect sets says so under it in ember ("The Ultimate profile sets this here;
+changes go to it."), as does Damage meter's _How it looks_ head and _Arrange windows_ for Window places; Home's chips
+end with "Profile: Ultimate" while one is in effect (it opens Profiles).
+
 ## Layout
 
 ```
@@ -2038,8 +2099,8 @@ RaidPlanner/
               settings (Overlay), Arrange windows' state, places and layout (ArrangeWindows), Settings'
               pages, rows, search and the Features cards' tags (SettingsIndex), 0.8.0's main parts (Features), the setup guide's rules (SetupGuide), a pull in a sentence
               (PullGist), pulls by night (PullNights), the plan's next step (PlanProgress),
-              /raidcodex's words (Commands), SVG
-              paths, dashes), tested
+              /raidcodex's words (Commands), settings profiles and their layer (Profiles) and the duty kinds
+              (DutyKinds), SVG paths, dashes), tested; Views/Profiles.cs and ProfileNotice (0.9.0)
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
               themes) and their OFL licences, embedded in the DLL (the licences beside it)
 RaidPlanner.Tests/  xunit tests for Core and UI/Model
@@ -2223,6 +2284,16 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### 0.9.0 (not released yet)
+
+- **Settings profiles**: Settings → Profiles keeps a setup for each kind of duty (ultimates, savage, extreme,
+  criterion, alliance raids, normal raids, dungeons, the open world, other duties). Going in puts its profile in
+  effect, with a short notice and Undo; leaving puts your usual settings back. A profile changes only what you turn on
+  in it, starting from your usual setting: the meter (shown, size, theme, out of combat, between pulls), the callouts
+  (shown, how many, smaller), the plan window, the party cooldowns, the windows' size, and its own window places
+  (Arrange windows in its duties moves those). Changes made in a duty to what its profile changes are the profile's.
+  Kept safe across a crash or a reload. Home says which profile is in effect.
 
 ### 0.8.3 (not released yet)
 

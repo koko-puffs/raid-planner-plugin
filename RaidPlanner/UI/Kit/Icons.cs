@@ -89,6 +89,9 @@ public enum Icon
     Copy,
     Volume,
     Hourglass,
+
+    /// <summary>0.9.0: settings profiles (Settings → Profiles, the notice as one comes into effect, Home's chip).</summary>
+    Layers,
 }
 
 /// <summary>
@@ -222,6 +225,12 @@ public static class Icons
             "M16 9a5 5 0 0 1 0 6", "M19.364 18.364a9 9 0 0 0 0-12.728",
         }, false),
         [Icon.Hourglass] = (new[] { "M5 22h14", "M5 2h14", "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22", "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" }, false),
+        [Icon.Layers] = (new[]
+        {
+            "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+            "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+            "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+        }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

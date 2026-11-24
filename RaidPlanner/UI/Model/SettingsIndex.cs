@@ -23,6 +23,9 @@ namespace RaidPlanner.UI
         /// <summary>The party cooldown tracker (0.4.0).</summary>
         Cooldowns,
 
+        /// <summary>0.9.0: a setup for each kind of duty (<see cref="Model.SettingsProfile"/>).</summary>
+        Profiles,
+
         /// <summary>0.8.0: where the overlays sit, and Arrange windows.</summary>
         Windows,
         Account,
@@ -131,6 +134,9 @@ namespace RaidPlanner.UI.Model
         Codex,
         Diagnostics,
         SetupGuide,
+
+        /// <summary>0.9.0: Settings → Profiles (what a search finds; the page draws its own cards).</summary>
+        Profiles,
     }
 
     /// <summary>
@@ -162,6 +168,7 @@ namespace RaidPlanner.UI.Model
             SettingsTab.Meter => "Damage meter",
             SettingsTab.Plans => "Plan and callouts",
             SettingsTab.Cooldowns => "Party cooldowns",
+            SettingsTab.Profiles => "Profiles",
             SettingsTab.Windows => "Windows",
             SettingsTab.Account => "Account and privacy",
             _ => "Advanced",
@@ -175,6 +182,7 @@ namespace RaidPlanner.UI.Model
             SettingsTab.Meter => "What the meter shows and how it looks. Where it sits:",
             SettingsTab.Plans => "Your static's plan during the fight: the board, and the next steps called out on screen. Where they sit:",
             SettingsTab.Cooldowns => "Your party's raid buffs and mitigation, and when each is ready again. Where it sits:",
+            SettingsTab.Profiles => "A setup for each kind of duty. Going in switches to it; leaving goes back. What a profile doesn’t change stays as your usual settings.",
             SettingsTab.Windows => "How big the windows are, where each sits, and whether it can be moved or clicked through.",
             SettingsTab.Account => "Your Raid Codex account, and what the plugin shares with the site.",
             _ => "Rarely needed: for checking what the plugin reads, and a few odd ends.",
@@ -267,6 +275,9 @@ namespace RaidPlanner.UI.Model
             new(SettingId.CdHideReady, Cds, "More", "Hide those ready", "Only what's recharging is listed.", "hide those ready", More: true),
             new(SettingId.CdGauge, Cds, "More", "Limit break gauge", "Its bars as the last row.", "limit break gauge", More: true),
             new(SettingId.CdCompact, Cds, "More", "Smaller rows", "Smaller rows and words.", "smaller rows", More: true),
+
+            // Profiles (0.9.0): the page draws its own cards; this row is what a search finds.
+            new(SettingId.Profiles, SettingsTab.Profiles, "Profiles", "Profiles", "A setup for each kind of duty: ultimates, savage, dungeons, the open world.", Action: true),
 
             // Windows.
             new(SettingId.WindowFit, Win, "Size", "Fit to my screen", "Bigger windows on a big screen: 150% on 4K."),
