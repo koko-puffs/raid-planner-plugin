@@ -2007,8 +2007,12 @@ _Yours too_ (on) lists your own.
   `GetMaxCharges(id, 0)`.
 - **The others'** (`CooldownBook`, game-free and tested): each (member, cooldown) keeps its charges
   and when the charge being recharged began; charges come back one a recast, one at a time. The
-  recast is the sheet's base, or for a role action you have too (Reprisal, Addle, Feint, Swiftcast…)
-  the game's for you; until a use comes more than a second before the recast says it could
+  recast is the sheet's base with the traits at the member's level the sheet doesn't know (since 0.9.0,
+  `CooldownCatalog.RecastAt`, from the official Job Guide: Enhanced Swiftcast, Lv. 94, 60 → 40 s; Enhanced
+  Tactician, Troubadour and Shield Samba, Lv. 88, 120 → 90 s; a level not known is taken to be the top), or for a
+  role action you have too (Reprisal, Addle, Feint, Swiftcast…) and they're at your level, the game's for you; the
+  row counts down by the same recast the use went in with (before 0.9.0 the row used the sheet's, so a healer's
+  view of another's Swiftcast said 60 s for good); until a use comes more than a second before the recast says it could
   (SPEC4 §2.13: a trait, a level the sheet doesn't know), when the time since the recharge began is
   learned as their recast. A use within a second of their last of the same cooldown is the same one
   seen twice (a pet's echo). One they haven't used since the tracker began is taken to be ready, and
@@ -2562,6 +2566,11 @@ entry).
   (shown, how many, smaller), whose deaths are recapped, the plan window, the party cooldowns, the windows' size, and its own window places
   (Arrange windows in its duties moves those). Changes made in a duty to what its profile changes are the profile's.
   Kept safe across a crash or a reload. Home says which profile is in effect.
+
+- **The cooldown tracker's recasts at level 100**: the others' Swiftcast counts down from 40 s, and a machinist's
+  Tactician, a bard's Troubadour and a dancer's Shield Samba from 90 s (the traits at Lv. 94 and 88 the game's Action
+  sheet doesn't carry), from their first use rather than once learned; synced below those levels, the sheet's. A
+  Swiftcast seen with your own role's recast now counts down by it too (it said 60 s for good before).
 
 - **The meter for healers**: the Healing tab's bars show the healing that landed and, striped after it, what your shields
   absorbed (an estimate from the barrier the game shows before each hit, credited to whoever put the shield on; never

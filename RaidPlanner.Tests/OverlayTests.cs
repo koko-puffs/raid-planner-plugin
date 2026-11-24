@@ -80,6 +80,39 @@ public class CooldownTests
         Assert.Equal(90, book.State(3, "Troubadour", 190, 120, 1).Recast, 6);
     }
 
+    [Theory]
+    // The Job Guide's traits the Action sheet doesn't know: Enhanced Swiftcast (Lv. 94), Enhanced Tactician / Troubadour / Shield Samba (Lv. 88).
+    [InlineData("Swiftcast", 60, 100, 40)]
+    [InlineData("Swiftcast", 60, 94, 40)]
+    [InlineData("Swiftcast", 60, 90, 60)]
+    [InlineData("Swiftcast", 60, 0, 40)]
+    [InlineData("Tactician", 120, 100, 90)]
+    [InlineData("Tactician", 120, 80, 120)]
+    [InlineData("Troubadour", 120, 88, 90)]
+    [InlineData("Shield Samba", 120, 87, 120)]
+    [InlineData("Shield Samba", 120, 90, 90)]
+    [InlineData("Battle Voice", 120, 100, 120)]
+    [InlineData("Reprisal", 60, 100, 60)]
+    public void A_trait_shortens_the_sheets_recast_from_its_level(string key, double sheet, int level, double recast) =>
+        Assert.Equal(recast, CooldownCatalog.RecastAt(key, sheet, level));
+
+    [Fact]
+    public void Anothers_row_counts_down_by_the_recast_their_level_has()
+    {
+        // A level 100 MCH's Tactician: 90 s (Enhanced Tactician), not the sheet's 120, from their first use; a level 80 one's the sheet's.
+        var party = new[] { new CooldownMember(1, "MT", "PLD", 1, true, 100), new CooldownMember(5, "R1", "MCH", 3, false, 100), new CooldownMember(6, "R2", "MCH", 3, false, 80) };
+        CooldownAction? Sheet(string key) => key == "Tactician" ? new CooldownAction(key, 16889, key, 0, 120, 1, 56) : null;
+        var book = new CooldownBook();
+        foreach (var m in party.Skip(1)) book.Use(m.Id, "Tactician", 0, CooldownCatalog.RecastAt("Tactician", 120, m.Level), 1);
+        var lines = CooldownView.Lines(party, Sheet, null, book, _ => null, 60);
+        var r1 = lines.Single(l => l.Who.Slot == "R1");
+        Assert.Equal(30, r1.ReadyIn, 6);
+        Assert.Equal(90, r1.Recast, 6);
+        Assert.Equal(60, lines.Single(l => l.Who.Slot == "R2").ReadyIn, 6);
+        // The counter given by the game side wins (the recast their uses went into the book with).
+        Assert.Equal(15, CooldownView.Lines(party, Sheet, null, book, _ => null, 60, recastOf: (_, _) => 75).Single(l => l.Who.Slot == "R1").ReadyIn, 6);
+    }
+
     [Fact]
     public void The_same_use_seen_twice_is_one()
     {

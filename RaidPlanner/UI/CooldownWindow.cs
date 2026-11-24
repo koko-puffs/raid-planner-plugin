@@ -101,7 +101,7 @@ public sealed class CooldownWindow : OverlayWindow
         {
             linesAt = now;
             lines = CooldownView.Lines(game.Party, game.Action, Config.CooldownPicks, game.Book, game.Own, now, Config.CooldownsMine, Config.CooldownsHideReady,
-                Planned(game));
+                Planned(game), game.RecastOf);
         }
         gauge = Config.CooldownsGauge ? Gauge?.Invoke() : null;
         return lines.Count > 0 || gauge != null;

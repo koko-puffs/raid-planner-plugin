@@ -33,6 +33,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     private readonly List<CooldownMember> party = new();
     private readonly List<Partier> partiers = new();
     private readonly Dictionary<uint, int> levels = new();
+    private int myLevel;
     private bool listening;
     private bool disposed;
     private double nextParty;
@@ -96,8 +97,16 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         return a;
     }
 
-    /// <summary>The recast the others' uses are counted by: for a role action you have too, the game's for you (your role's traits at this level), else the sheet's.</summary>
-    private double RecastFor(string key, CooldownAction a) => roleRecast.TryGetValue(key, out var r) && r > 0 ? r : a.Recast;
+    /// <summary>
+    /// The recast the others' uses are counted by, at their level: for a role action you have too and they're at your level, the game's
+    /// for you (your role's traits at this level), else the sheet's with the traits that level has (<see cref="CooldownCatalog.RecastAt"/>).
+    /// The rows count down by the same (<see cref="RecastOf"/>), so a use and its countdown agree.
+    /// </summary>
+    private double RecastFor(string key, CooldownAction a, int level) =>
+        roleRecast.TryGetValue(key, out var r) && r > 0 && (level <= 0 || level == myLevel) ? r : CooldownCatalog.RecastAt(key, a.Recast, level);
+
+    /// <summary>The recast a member's row counts down by (the one their uses go into the book with).</summary>
+    public double RecastOf(CooldownMember m, CooldownAction a) => RecastFor(a.Key, a, m.Level);
 
     /// <summary>The tracker's key for an Action sheet row (null: not a tracked cooldown, or the sheet isn't read yet). Since 0.5.0, for the plan's cooldowns.</summary>
     public string? KeyOf(uint action) => Ready && lookup.Result.KeyOf.TryGetValue(action, out var key) ? key : null;
@@ -114,7 +123,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         {
             if (!Ready || !lookup.Result.KeyOf.TryGetValue(action, out var key)) return;
             if (Action(key) is not { } a) return;
-            Book.Use(member, key, t, RecastFor(key, a), a.Charges);
+            Book.Use(member, key, t, RecastFor(key, a, levels.TryGetValue(member, out var lv) ? lv : 0), a.Charges);
         }
         catch (Exception ex)
         {
@@ -186,6 +195,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         }
         // Yours from your character (the level you're synced to).
         levels[meId] = myLevel;
+        this.myLevel = myLevel;
         party.Clear();
         foreach (var (who, slot) in Roles.Assign(partiers))
             // A key in the levels is a known entity id (yours always is).

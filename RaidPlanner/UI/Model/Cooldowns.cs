@@ -140,6 +140,29 @@ public static class CooldownCatalog
 
     public static CooldownSpec? Find(string key) => ByKey.TryGetValue(key, out var s) ? s : null;
 
+    /// <summary>
+    /// The traits that shorten a tracked cooldown's recast, which the Action sheet doesn't know (it has the action's own,
+    /// before any trait): the cooldown, the level the trait comes at, the recast (s) from then. From the official Job Guide
+    /// (Dawntrail 7.x): Enhanced Swiftcast (the healers' and casters' role trait, Lv. 94, 60 → 40 s), Enhanced Tactician,
+    /// Enhanced Troubadour, Enhanced Shield Samba (Lv. 88, 120 → 90 s). No other tracked cooldown has one.
+    /// </summary>
+    private static readonly (string Key, int Level, double Recast)[] Traits =
+    {
+        ("Swiftcast", 94, 40), ("Tactician", 88, 90), ("Troubadour", 88, 90), ("Shield Samba", 88, 90),
+    };
+
+    /// <summary>
+    /// A cooldown's recast for a member at <paramref name="level"/> (synced; 0 when not known, taken to be the top level):
+    /// the sheet's, or shorter once a trait (<see cref="Traits"/>) has it so.
+    /// </summary>
+    public static double RecastAt(string key, double sheet, int level)
+    {
+        foreach (var (k, lv, recast) in Traits)
+            if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase) && (level <= 0 || level >= lv) && recast < sheet)
+                return recast;
+        return sheet;
+    }
+
     /// <summary>A kind in Settings' words.</summary>
     public static string KindWord(CooldownKind kind) => kind switch
     {
@@ -381,8 +404,11 @@ public static class CooldownView
     /// </remarks>
     public static List<CooldownLine> Lines(IReadOnlyList<CooldownMember> party, Func<string, CooldownAction?> action, IReadOnlyDictionary<string, bool>? picks,
         CooldownBook book, Func<string, OwnCooldown?> own, double now, bool you = true, bool hideReady = false,
-        Func<CooldownMember, CooldownSpec, CooldownAction, (PlannedUse Use, double In)?>? planned = null)
+        Func<CooldownMember, CooldownSpec, CooldownAction, (PlannedUse Use, double In)?>? planned = null,
+        Func<CooldownMember, CooldownAction, double>? recastOf = null)
     {
+        // The recast the others' are counted by: the one their uses went into the book with (the game side's), else the sheet's at their level.
+        recastOf ??= (m, a) => CooldownCatalog.RecastAt(a.Key, a.Recast, m.Level);
         var lines = new List<CooldownLine>();
         foreach (var spec in CooldownCatalog.All)
         {
@@ -406,7 +432,7 @@ public static class CooldownView
                         true, false, true);
                 else
                 {
-                    var s = book.State(m.Id, spec.Key, now, a.Recast, a.Charges);
+                    var s = book.State(m.Id, spec.Key, now, recastOf(m, a), a.Charges);
                     line = new CooldownLine(m, spec, a, s.ReadyIn, s.NextIn, s.Charges, s.MaxCharges, s.Recast, false, s.Learned, s.Seen);
                 }
                 if (planned?.Invoke(m, spec, a) is { } p) line = line with { Planned = p };
