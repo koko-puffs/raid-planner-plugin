@@ -82,6 +82,11 @@ the plugin names each tick after the caster's latest DoT on the target.
 - A wipe and a clear: each should end one encounter on the meter, and the recording should end with the duty's
   result.
 - A wipe and restart: the cooldown tracker should reset everyone's cooldowns.
+- The opener's first hit: on the site, the pull's damage for each player against the meter's (and ACT's) for the same pull.
+  The recording starts on the frame the game says you're in combat, which may come after the first hit has landed; if
+  the site is short by about one hit (the opener) for whoever hit first, that's why (the precast is in `combat.pre`
+  either way). An HQ tincture's _Medicated_ in the same pull: its status row's `n` (above 10000 for HQ, if the game adds
+  10000 as it's thought to; the site keeps the row either way since 0.9.0).
 
 ## 10. Your gear, the party and worlds
 

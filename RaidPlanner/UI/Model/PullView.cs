@@ -57,10 +57,11 @@ public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double>
         var waymarks = r.Events.OfType<WaymarksEvent>().LastOrDefault()?.Marks.Count ?? 0;
         var tethers = r.Events.OfType<TetherEvent>().Count(t => t.On);
         double? wipeAt = wipeDeaths.Count > 0 ? wipeDeaths.Min(d => d.T) : null;
-        return new PullView(rows, PhaseStarts(r.Events.OfType<TargetEvent>()), deaths, waymarks, tethers, wipe) { WipeAt = wipeAt };
+        return new PullView(rows, PullStats.PhaseStarts(r), deaths, waymarks, tethers, wipe) { WipeAt = wipeAt };
     }
 
     /// <summary>
+    /// (A pull's page uses <see cref="PullStats.PhaseStarts"/> since 0.9.0, as the site and the replay do: far mobs left out.)
     /// Where phases began (the first at 0): each time every enemy that had been targetable was gone
     /// for <see cref="PhaseGap"/> seconds or more, and then one became targetable (again, or a new one).
     /// </summary>
