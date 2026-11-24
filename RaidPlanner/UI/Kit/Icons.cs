@@ -89,6 +89,11 @@ public enum Icon
     Copy,
     Volume,
     Hourglass,
+
+    /// <summary>0.9.0: Replay's transport (the step before and after) and its dock filling the window and back.</summary>
+    SkipBack,
+    SkipForward,
+    Minimize,
 }
 
 /// <summary>
@@ -222,6 +227,10 @@ public static class Icons
             "M16 9a5 5 0 0 1 0 6", "M19.364 18.364a9 9 0 0 0 0-12.728",
         }, false),
         [Icon.Hourglass] = (new[] { "M5 22h14", "M5 2h14", "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22", "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" }, false),
+        // 0.9.0: Replay.
+        [Icon.SkipBack] = (new[] { "M19 20 9 12 19 4 19 20Z", "M5 19V5" }, false),
+        [Icon.SkipForward] = (new[] { "M5 4 15 12 5 20 5 4Z", "M19 5V19" }, false),
+        [Icon.Minimize] = (new[] { "M4 14h6v6", "M20 10h-6V4", "M14 10l7-7", "M3 21l7-7" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();
