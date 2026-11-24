@@ -16,8 +16,8 @@ public enum RecapKind
 
 /// <summary>
 /// A line of the death recap's card: how long before the death (<see cref="Offset"/>, seconds, 0 or less), what it was and from
-/// whom (a heal's healer, a barrier's), its amount (a hit negative; a barrier's isn't known: 0), the HP after it, and whether
-/// it's the killing blow.
+/// whom (a heal's healer, a barrier's), its amount (a hit negative; a barrier's isn't known: 0), the HP after it (no more than
+/// their max HP; −1 when the HP before wasn't known), and whether it's the killing blow.
 /// </summary>
 public sealed record RecapRow(double Offset, string What, string? Who, long Amount, long HpAfter, RecapKind Kind, bool Killing);
 
@@ -75,6 +75,7 @@ public static class DeathRecapView
     public static RecapCard Card(int fightId, int index, DeathEntry d, string job, string role, bool you)
     {
         var killing = MeterView.KillingLine(d);
+        var maxHp = MeterView.RecapMax(d);
         var rows = new List<RecapRow>();
         for (var i = 0; i < d.Recap.Count; i++)
         {
@@ -83,7 +84,9 @@ public static class DeathRecapView
             // The last seconds, and the killing blow whenever it came.
             if (offset < -Seconds - 1e-9 && i != killing) continue;
             var kind = l.Amount < 0 ? RecapKind.Hit : l.Amount > 0 ? RecapKind.Heal : l.Note.StartsWith("Shield", StringComparison.Ordinal) ? RecapKind.Shield : RecapKind.Hit;
-            var after = Math.Max(0, l.HpBefore + l.Amount);
+            // A heal's amount has its overheal in it: never past their max HP. The HP before not known (−1): nor after.
+            var after = l.HpBefore < 0 ? -1 : Math.Max(0, l.HpBefore + l.Amount);
+            if (maxHp > 0 && after > maxHp) after = maxHp;
             if (i == killing) after = 0;
             rows.Add(new RecapRow(Math.Min(0, offset), l.What, WhoOf(l), l.Amount, after, kind, i == killing));
         }
@@ -93,7 +96,7 @@ public static class DeathRecapView
         var words = up.Where(m => m.Kind != MitigationRole.Shield).Select(m => m.Key).Concat(up.Where(m => m.Kind == MitigationRole.Shield).Select(m => m.Key)).ToList();
         var missing = tank && d.MitigationKnown ? Mitigations.MissingFor(job, d.Mitigation) : new List<string>();
         return new RecapCard(fightId, index, d.PartyId, d.Name, d.Slot, job, role, you, d.At, d.Phase, d.KilledBy, d.Amount, d.Overkill, d.Hit, rows, words,
-            d.MitigationKnown, d.MitigationKnown && !Mitigations.AnyMitigation(d.Mitigation), missing, d.HadWeakness, MeterView.RecapMax(d));
+            d.MitigationKnown, d.MitigationKnown && !Mitigations.AnyMitigation(d.Mitigation), missing, d.HadWeakness, maxHp);
     }
 
     /// <summary>A heal's healer ("Koko"), a barrier's ("Shield from Koko"); a hit's note ("Critical") isn't a who.</summary>

@@ -75,6 +75,10 @@ public class ProfileTests
     [InlineData(4u, true, false, "The Byakko Unreal", DutyKind.Extreme)]
     [InlineData(4u, false, false, "Containment Bay Z1T9 (Unreal)", DutyKind.Extreme)]
     [InlineData(4u, false, false, "Worqor Lar Dor", DutyKind.NormalRaid)]
+    // The sheet's Extreme trials named "The Minstrel's Ballad" say neither "(Extreme)" nor high-end (7.x's EX2, EX3).
+    [InlineData(4u, false, false, "the Minstrel's Ballad: Sphene's Burden", DutyKind.Extreme)]
+    [InlineData(4u, false, false, "the Minstrel's Ballad: Necron's Embrace", DutyKind.Extreme)]
+    [InlineData(4u, false, false, "the Navel (Hard)", DutyKind.NormalRaid)]
     [InlineData(30u, false, false, "Another Aloalo Island", DutyKind.Criterion)]
     [InlineData(30u, true, false, "Another Aloalo Island (Savage)", DutyKind.Criterion)]
     [InlineData(30u, false, false, "The Sil'dihn Subterrane", DutyKind.Dungeon)]

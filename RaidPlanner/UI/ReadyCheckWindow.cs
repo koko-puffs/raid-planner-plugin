@@ -284,6 +284,10 @@ public sealed class ReadyCheckWindow : OverlayWindow
             ly += S(CompactLineCss);
         }
         if (Kit.Pointed(min, max))
-            Kit.Tooltip(c.Average is { } a ? $"{c.Headline}. {a} Your gear is fine." : $"{c.Headline}. Your gear is fine.");
+        {
+            // Your gear is fine only when its condition was read (a read that failed says nothing of it).
+            var gear = you.GearLowest != null ? " Your gear is fine." : string.Empty;
+            Kit.Tooltip(c.Average is { } a ? $"{c.Headline}. {a}{gear}" : $"{c.Headline}.{gear}");
+        }
     }
 }

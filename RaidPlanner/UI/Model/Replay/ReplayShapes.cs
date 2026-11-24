@@ -146,6 +146,97 @@ public static class ReplayShapes
     }
 
     /// <summary>
+    /// The lines in a pull that run through their caster, not only forward from it (the site's <c>throughLines</c>, by
+    /// action): the game's data says a line's reach, never whether it starts at its caster or runs across it (Seiryu's
+    /// Fortune-blade Sigil: helpers on the arena's middle lines, each line the arena's whole width). Read from the pull:
+    /// who stood behind a caster, within its line's width, as it went off: hit there by that line, it runs through;
+    /// untouched there, it doesn't; with no one ever there, a helper standing inside the arena whose line is longer than
+    /// the arena is wide runs through it. Floor lines only (no role), measured from where each cast began; hits that face
+    /// their way only (plugin 0.2.1 on). A place not known (NaN) is left to the frames' (the site takes it as behind).
+    /// </summary>
+    public static HashSet<uint> ThroughLines(Recording r, ArenaChoice arena)
+    {
+        var found = new HashSet<uint>();
+        if (!HitsFaceTheirWay(r)) return found;
+        var party = new HashSet<int>(r.Party.Select(p => p.Id));
+        var helpers = new HashSet<int>(r.Actors.Where(a => a.Kind == ActorKind.Helper).Select(a => a.Id));
+        var half = arena.Width / 2;
+        var frames = r.PartyPositions ? r.Frames : (IReadOnlyList<RaidPlanner.Core.Frame>)Array.Empty<RaidPlanner.Core.Frame>();
+        RaidPlanner.Core.Frame? FrameAt(double t)
+        {
+            int a = 0, b = frames.Count - 1;
+            if (b < 0) return null;
+            while (a < b)
+            {
+                var m = (a + b) >> 1;
+                if (frames[m].T < t) a = m + 1;
+                else b = m;
+            }
+            var f = frames[a];
+            var g = a > 0 ? frames[a - 1] : f;
+            var best = Math.Abs(g.T - t) < Math.Abs(f.T - t) ? g : f;
+            return Math.Abs(best.T - t) <= 0.6 ? best : null;
+        }
+        var castsOf = new Dictionary<(int, uint), List<CastEvent>>();
+        foreach (var c in r.Events.OfType<CastEvent>())
+        {
+            if (!castsOf.TryGetValue((c.Source, c.Action), out var list)) castsOf[(c.Source, c.Action)] = list = new List<CastEvent>();
+            list.Add(c);
+        }
+        var votes = new Dictionary<uint, (int Through, int Forward, int Inside, int Seen)>();
+        var places = new Dictionary<int, (float X, float Z)>();
+        foreach (var h in r.Events.OfType<HitEvent>())
+        {
+            if (party.Contains(h.Source) || !float.IsFinite(h.Rotation)) continue;
+            ReplayShape? shape = null;
+            if (!r.Duty.Field && Fixes.TryGetValue(h.Action, out var fix)) shape = fix;
+            else if (r.Actions.TryGetValue(h.Action, out var a)) shape = FromGame(a);
+            if (shape is not { Kind: ShapeKind.Rect } || shape.Back > 0 || shape.Front <= 0 || shape.Role != MechRole.None) continue;
+            if (!castsOf.TryGetValue((h.Source, h.Action), out var casts)) continue;
+            var cast = casts.FirstOrDefault(c => h.T >= c.T + c.Duration - 1 && h.T <= c.T + c.Duration + 2.5);
+            if (cast == null) continue;
+            var v = votes.GetValueOrDefault(h.Action);
+            v.Seen++;
+            var len = shape.Front;
+            var w = shape.Width / 2;
+            var fx = MathF.Sin(h.Rotation);
+            var fz = MathF.Cos(h.Rotation);
+            places.Clear();
+            if (FrameAt(h.T) is { } frame)
+                foreach (var (id, at) in frame.At)
+                    if (party.Contains(id))
+                        places[id] = (at.X, at.Z);
+            for (var j = 0; j < h.Targets.Count; j++)
+            {
+                var id = h.Targets[j];
+                if (!party.Contains(id) || h.Px == null || h.Pz == null || j >= h.Px.Count || j >= h.Pz.Count) continue;
+                if (float.IsFinite(h.Px[j]) && float.IsFinite(h.Pz[j])) places[id] = (h.Px[j], h.Pz[j]);
+            }
+            foreach (var (id, (x, z)) in places)
+            {
+                var dx = x - cast.X;
+                var dz = z - cast.Z;
+                var along = dx * fx + dz * fz;
+                var side = MathF.Abs(dx * fz - dz * fx);
+                if (side > w - 0.5f || along > -1.5f || along < -len) continue;
+                if (h.Targets.Contains(id)) v.Through++;
+                else v.Forward++;
+            }
+            var fromMiddle = MathF.Sqrt((cast.X - arena.Cx) * (cast.X - arena.Cx) + (cast.Z - arena.Cz) * (cast.Z - arena.Cz));
+            if (helpers.Contains(h.Source) && len >= arena.Width * 0.95f && fromMiddle <= half - 3) v.Inside++;
+            votes[h.Action] = v;
+        }
+        foreach (var (action, v) in votes)
+            if ((v.Through > 0 && v.Through >= v.Forward) || (v.Forward == 0 && v.Inside * 2 > v.Seen))
+                found.Add(action);
+        return found;
+    }
+
+    /// <summary>A line that runs through its caster (<see cref="ThroughLines"/>): centred on it, the same length (the site's <c>throughShape</c>).</summary>
+    public static ReplayShape? Through(ReplayShape? shape, bool through) =>
+        !through || shape is not { Kind: ShapeKind.Rect } || shape.Back > 0 ? shape : shape with { Front = shape.Front / 2, Back = shape.Front / 2, Hitbox = false };
+
+    /// <summary>
     /// What the plugin can tell of a circle on players' role from the pull itself (in the site's place, the encounter
     /// data's): for each enemy action drawn as a circle (cast type 2, 6 or 7, smaller than the arena), the times it went
     /// off (its hits within 0.3 s of each other): one or two hits each on two people or more is a stack; two hits or more

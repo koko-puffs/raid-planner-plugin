@@ -55,7 +55,7 @@ public static class DutyKinds
     /// <summary>Variant and Criterion dungeons ("V&amp;C Dungeon Finder").</summary>
     public const uint VariantCriterion = 30;
 
-    /// <summary>The Chaotic alliance raid [verify: 37 in 7.1's sheet], and the Occult Crescent (38).</summary>
+    /// <summary>The Chaotic alliance raid (37, "Chaotic Alliance Raid" on the sheet), and the Occult Crescent (38).</summary>
     public const uint Chaotic = 37, OccultCrescent = 38;
 
     /// <summary>The field operations' open zones, by TerritoryIntendedUse (GameData's FieldUses): Eureka, Bozja and Zadnor, the Occult Crescent.</summary>
@@ -92,9 +92,11 @@ public static class DutyKinds
     /// <summary>
     /// Which kind a duty is, from the game's data; null facts: not in a duty (the open world). The ContentType row first
     /// (ultimates, criterion, trials, raids, dungeons), then within trials and raids the HighEndDuty flag and the English
-    /// name's "(Savage)", "(Extreme)", "(Unreal)", "(Chaotic)" (either is enough), and the alliance roulette or three
-    /// parties for an alliance raid. The field operations' open zones are the open world, their raids in their own instance
-    /// alliance raids [verify: those instances' intended use isn't the open zones'], their Savage duty Savage.
+    /// name's "(Savage)", "(Extreme)", "(Unreal)", "(Chaotic)" (either is enough; the Extreme trials named "The Minstrel's
+    /// Ballad: …" say neither, nor are they flagged high-end), and the alliance roulette or three parties for an alliance
+    /// raid. The field operations' open zones are the open world (the Baldesion Arsenal, Castrum Lacus Litore, Dalriada and
+    /// the Forked Tower are inside them: no zone of their own), Delubrum Reginae in its own zone (intended use 52) an
+    /// alliance raid, its Savage (53) Savage.
     /// </summary>
     public static DutyKind Of(DutyFacts? facts)
     {
@@ -108,7 +110,7 @@ public static class DutyKinds
             case VariantCriterion:
                 return d.HighEnd || name.StartsWith("Another ", StringComparison.OrdinalIgnoreCase) || Named("(Savage)") ? DutyKind.Criterion : DutyKind.Dungeon;
             case Trials:
-                return d.HighEnd || Named("(Extreme)") || Named("(Unreal)") ? DutyKind.Extreme : DutyKind.NormalRaid;
+                return d.HighEnd || Named("(Extreme)") || Named("(Unreal)") || Named("Minstrel's Ballad") ? DutyKind.Extreme : DutyKind.NormalRaid;
             case Raids:
                 if (Named("(Savage)") || Named("(Chaotic)") || d.HighEnd) return DutyKind.Savage;
                 return d.Alliance ? DutyKind.Alliance : DutyKind.NormalRaid;
@@ -121,8 +123,8 @@ public static class DutyKinds
             case Eureka:
             case Bozja:
             case OccultCrescent:
-                // The open zones themselves are the open world; a field operation's raid in its own instance (Delubrum
-                // Reginae, the Baldesion Arsenal, Castrum Lacus Litore, Dalriada…) is an alliance raid, its Savage one Savage.
+                // The open zones themselves are the open world (and the raids inside them); a field operation's raid in its
+                // own zone (Delubrum Reginae) is an alliance raid, its Savage one Savage.
                 if (Named("(Savage)")) return DutyKind.Savage;
                 return FieldUses.Contains(d.IntendedUse) ? DutyKind.OpenWorld : DutyKind.Alliance;
         }

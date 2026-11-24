@@ -256,10 +256,10 @@ public sealed class DeathRecapWindow : OverlayWindow
             var barX = right - barW;
             var barY = y + rowH / 2 - S(2);
             dl.AddRectFilled(new Vector2(barX, barY), new Vector2(right, barY + S(4)), Palette.U32(Palette.Track), S(2));
-            var f = hpMax > 0 ? Math.Clamp(r.HpAfter / (float)hpMax, 0, 1) : 0;
+            var f = hpMax > 0 && r.HpAfter > 0 ? Math.Clamp(r.HpAfter / (float)hpMax, 0, 1) : 0;
             if (f > 0) dl.AddRectFilled(new Vector2(barX, barY), new Vector2(barX + barW * f, barY + S(4)), Palette.U32(f < 0.3f ? Palette.Warn : Palette.Ready), S(2));
             if (Kit.Pointed(new Vector2(barX - S(4), y), new Vector2(right, y + rowH)))
-                Kit.Tooltip($"{Format.Thousands(r.HpAfter)} HP after it{(hpMax > 0 ? $" of {Format.Thousands(hpMax)}" : string.Empty)}");
+                Kit.Tooltip(r.HpAfter < 0 ? "Their HP then wasn't seen" : $"{Format.Thousands(r.HpAfter)} HP after it{(hpMax > 0 ? $" of {Format.Thousands(hpMax)}" : string.Empty)}");
             var amount = DeathRecapView.Amount(r);
             var aw = amount.Length > 0 ? Txt.LineRight(dl, barX - S(10), y, amount, Face.MonoSemibold, 12, r.Kind == RecapKind.Hit ? Palette.DangerSoft : r.Kind == RecapKind.Heal ? Palette.Ready : Palette.Warn, LineCss) : 0;
             var wx = ix + icon + S(8);

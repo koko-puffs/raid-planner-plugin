@@ -1163,7 +1163,10 @@ above, 18 below), a footer on the basalt band where a screen has one.
     100 within 15 yalms, its size how far the party and the mechanics went (20 to 80 across), square when people stood
     in its corners; a plan of yours for the duty (the one open, its arena with a centre: a real arena's polygons) is
     used in its place. Shapes from the game's data (`ReplayShapes.FromGame`: cast types 1–13, a cone's angle from its
-    omen's `fanNNN`, the site's few fixes for Seiryu); the site also reads a mechanic's role from BossMod's encounter
+    omen's `fanNNN`, the site's few fixes for Seiryu); a floor line that runs through its caster (`ThroughLines`, the
+    site's `throughLines`: someone behind its caster within its width hit by it as it went off, and no more left
+    untouched there; or, no one ever there, a helper inside the arena whose line is longer than the arena is wide)
+    drawn centred on it, the same length; the site also reads a mechanic's role from BossMod's encounter
     data, which the plugin hasn't, so a circle put on players is told a stack or a spread from who its hits landed on
     (`InferRoles`, the timeline's rule). The steps (`ReplayLanes.StepsOf`, as the site's plan made from a pull has
     them): "Pull" at 0, then a step each time something goes off on the plugin's timeline, mechanics within 1.5 s
@@ -2152,8 +2155,9 @@ would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.A
   last 6 seconds": each hit, heal and barrier from six seconds before (the killing blow whenever it came), its time
   before the death ("−4.1 s"), a mark (a sword red, a heart green, a shield amber), what it was and from whom (a
   heal's healer, a barrier's: their first name; none with _Jobs only_), its amount (a barrier's isn't known:
-  "shield") and the HP after it as a small bar against their max HP (its number in the tooltip), the killing blow on a
-  red wash. "Up at the hit:" the mitigations up as chips (theirs first, then the party's on the boss, the barriers
+  "shield") and the HP after it as a small bar against their max HP (its number in the tooltip; a heal's amount has
+  its overheal in it, so the HP after it is never more than their max; when the HP before wasn't seen, none, and the
+  tooltip says so), the killing blow on a red wash. "Up at the hit:" the mitigations up as chips (theirs first, then the party's on the boss, the barriers
   last), "Nothing", or "Not seen: they were out of sight"; for a tank, the big cooldowns of their job that weren't
   up, red: "No Rampart, Guardian or Hallowed Ground" (`Mitigations.MissingFor`); "Had Weakness" (amber) when they
   died with Weakness or Brink of Death on. Its foot: **Open in the meter** (the opened-up meter on that death:
@@ -2267,12 +2271,15 @@ place is one more `Overlay("…")` line there; a new setting, one more line in `
 **Which kind a duty is** (`DutyKinds.Of`, tested; read by `GameData.Facts`): the zone's ContentFinderCondition's
 ContentType row, its `HighEndDuty` flag, its English name and an alliance (the alliance roulette, or a
 ContentMemberType of three parties). Ultimate: ContentType 28. Criterion: 30 ("V&C Dungeon Finder") when high-end,
-"Another …" or "(Savage)"; else a Variant dungeon, Dungeons. Extreme: a trial (4) high-end or named "(Extreme)" or
-"(Unreal)"; other trials are Normal raids. Savage: a raid (5) high-end or named "(Savage)" or "(Chaotic)", 37 [verify:
-the Chaotic alliance raid's row], and a field operation's Savage duty (Delubrum Reginae). Alliance raids: other raids of
-three parties, and a field operation's other raids in their own instance (Delubrum Reginae, the Baldesion Arsenal,
-Castrum Lacus Litore, Dalriada; 26, 29, 38 outside the open zones) [verify: their instances' intended use]. Normal
-raids: the rest of 5. Dungeons: 2, guildhests (3), deep dungeons (21). Open world: no duty, and the field operations'
+"Another …" or "(Savage)"; else a Variant dungeon, Dungeons. Extreme: a trial (4) high-end or named "(Extreme)",
+"(Unreal)" or "The Minstrel's Ballad: …" (the sheet's Extremes of that name, Sphene's Burden and Necron's Embrace
+among them, say neither and aren't flagged high-end); other trials are Normal raids. Savage: a raid (5) high-end or
+named "(Savage)" or "(Chaotic)", 37 (the sheet's "Chaotic Alliance Raid"), and a field operation's Savage duty
+(Delubrum Reginae (Savage), intended use 53). Alliance raids: other raids of three parties, and a field operation's
+raid in a zone of its own (Delubrum Reginae, intended use 52; 26, 29, 38 outside the open zones). The Baldesion
+Arsenal, Castrum Lacus Litore, Dalriada and the Forked Tower have no zone of their own (they're in the open zones'),
+so they're the open world. Rows checked against the game's ContentType and ContentFinderCondition sheets (xivapi,
+24 November 2026). Normal raids: the rest of 5. Dungeons: 2, guildhests (3), deep dungeons (21). Open world: no duty, and the field operations'
 open zones (the zones of intended use 41, 48, 61). Other duties: the rest (PvP, quest
 battles, treasure dungeons…). Outside a duty-finder zone but bound by a duty (a quest's), it's Other.
 
@@ -2538,20 +2545,23 @@ entry).
   does: the arena with the party by job, the enemies, their mechanics as they're cast and land, tethers, markers,
   waymarks, HP and deaths; down the right each boss's HP and cast, the party's HP, barriers and debuffs, and what
   just happened; along the bottom Play and the pull's steps, the bosses' buffs, the party's debuffs and the deaths,
-  pressed or dragged to go anywhere in it, and grown to fill the window.
+  pressed or dragged to go anywhere in it, and grown to fill the window. A line that runs through its caster (Seiryu's
+  sigils) is drawn across it, as the Raid Codex draws it, not only in front.
 
 - **A ready check card**: as the game's ready check starts, a card beside the party list says who's fed and for how
   long (amber when their food would run out before your average pull here is over, red with none, "can't see" for
   someone out of range), "7 of 8 fed · one runs out mid-pull" over your average pull, and yours: tinctures, food and
   a warning when your gear's under 20%. When everyone's fed and your gear's fine it's one line. It goes when the pull
   starts or 30 seconds after the check; its pin keeps it. It only reads the ready check, never answers it. Settings →
-  Plan and callouts → _Show at ready checks_ (on).
+  Plan and callouts → _Show at ready checks_ (on). Its one line no longer says your gear is fine when it couldn't be
+  read.
 - **A death recap**: when you die (or anyone, as Settings → Damage meter → _Recap deaths of_ says), a card from the
   meter's own recap: what killed you and by how much over, whether it was a tank buster or a raid-wide, the last six
   seconds' hits, heals and shields with your HP after each, what mitigation was up (and for a tank, the big cooldowns
   that weren't), Weakness, and Open in the meter. It goes after 8 seconds, held while you point at it; its pin keeps
   it. A wipe's deaths are one line each, newest on top; press one to open it. The meter listens with it on, even with
-  its window off.
+  its window off. A heal's line never says more HP after it than your max (its overheal left out), and a line whose HP
+  wasn't seen says so rather than 0.
 - Both are in Arrange windows and on Settings → Windows (show, lock, click-through, grows, background), each with a
   sample.
 
@@ -2561,7 +2571,8 @@ entry).
   in it, starting from your usual setting: the meter (shown, size, theme, out of combat, between pulls), the callouts
   (shown, how many, smaller), whose deaths are recapped, the plan window, the party cooldowns, the windows' size, and its own window places
   (Arrange windows in its duties moves those). Changes made in a duty to what its profile changes are the profile's.
-  Kept safe across a crash or a reload. Home says which profile is in effect.
+  Kept safe across a crash or a reload. Home says which profile is in effect. The Extreme trials named "The
+  Minstrel's Ballad" (Sphene's Burden, Necron's Embrace) are Extreme, not Normal raids.
 
 - **The meter for healers**: the Healing tab's bars show the healing that landed and, striped after it, what your shields
   absorbed (an estimate from the barrier the game shows before each hit, credited to whoever put the shield on; never
