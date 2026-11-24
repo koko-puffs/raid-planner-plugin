@@ -35,12 +35,15 @@ public static class PullStats
     /// <summary>
     /// When each phase began, in seconds (the first at 0): every enemy that had been targetable gone
     /// for 8 seconds or more, then one targetable (the site's <c>phaseStarts</c>, 50 at most after the first).
+    /// Since 0.9.0, as the site's: an enemy not in the party's fight that mostly stood far from it (<see cref="Strays"/>:
+    /// a mob someone else fought in a field zone, a far trash pack) going and coming isn't a phase.
     /// </summary>
     public static List<double> PhaseStarts(Recording r)
     {
         var up = new HashSet<int>();
         var seen = new HashSet<int>();
-        var targets = r.Events.OfType<TargetEvent>().OrderBy(e => e.T).ToList();
+        var strays = Strays(r);
+        var targets = r.Events.OfType<TargetEvent>().Where(e => !strays.Contains(e.Actor)).OrderBy(e => e.T).ToList();
         // An enemy's first event says what it was before: going untargetable means it was targetable.
         foreach (var e in targets)
             if (seen.Add(e.Actor) && !e.On)
@@ -63,6 +66,108 @@ public static class PullStats
         }
         return starts;
     }
+
+    /// <summary>A boss further than this from the nearest of the party (yalms, most of the pull) isn't in their fight (the site's <c>BOSS_NEAR</c>).</summary>
+    public const double BossNear = 40;
+
+    /// <summary>Further than this from the fight's middle (yalms, most of the pull), an enemy not in the fight is someone else's (the site's <c>FIGHT_REACH</c>).</summary>
+    public const double FightReach = 60;
+
+    /// <summary>
+    /// The enemies that weren't in the party's fight and mostly stood further than <see cref="FightReach"/> from its middle (the
+    /// site's <c>fightOf(rec).strays</c>, the same rule): an enemy is in the fight when it hit one of the party, cast at one, put
+    /// a status on one, killed one or was tethered to one; a boss also when it mostly stood within <see cref="BossNear"/> of the
+    /// party (always, when the party's places weren't kept); with none, every enemy is. The middle is where the party mostly stood
+    /// (each axis's median), else the fight's enemies; none (no frames) has no strays. Since 0.9.0.
+    /// </summary>
+    public static HashSet<int> Strays(Recording r)
+    {
+        var party = r.Party.Select(p => p.Id).ToHashSet();
+        var known = r.Actors.Select(a => a.Id).ToHashSet();
+        bool Enemy(int id) => known.Contains(id) && !party.Contains(id);
+        var actors = new HashSet<int>();
+        foreach (var e in r.Events)
+        {
+            switch (e)
+            {
+                case HitEvent h when Enemy(h.Source) && h.Targets.Any(party.Contains):
+                    actors.Add(h.Source);
+                    break;
+                case CastEvent c when Enemy(c.Source) && party.Contains(c.Target):
+                    actors.Add(c.Source);
+                    break;
+                case TetherEvent { On: true } t:
+                    if (party.Contains(t.From) && Enemy(t.To)) actors.Add(t.To);
+                    if (party.Contains(t.To) && Enemy(t.From)) actors.Add(t.From);
+                    break;
+                case StatusEvent s when Enemy(s.Source) && party.Contains(s.On):
+                    actors.Add(s.Source);
+                    break;
+                case DeathEvent d when Enemy(d.From):
+                    actors.Add(d.From);
+                    break;
+            }
+        }
+        // The party's places are in the frames (the site's hasPartyPositions).
+        var placed = r.PartyPositions && r.Frames.Any(f => f.At.Keys.Any(k => k < 100));
+        foreach (var a in r.Actors)
+        {
+            if (a.Kind != ActorKind.Boss || actors.Contains(a.Id) || party.Contains(a.Id)) continue;
+            if (!placed)
+            {
+                actors.Add(a.Id);
+                continue;
+            }
+            var apart = new List<double>();
+            foreach (var f in r.Frames)
+            {
+                if (!f.At.TryGetValue(a.Id, out var b)) continue;
+                var nearest = double.PositiveInfinity;
+                foreach (var m in r.Party)
+                    if (f.At.TryGetValue(m.Id, out var q))
+                        nearest = Math.Min(nearest, Distance(q.X - b.X, q.Z - b.Z));
+                if (nearest < double.PositiveInfinity) apart.Add(nearest);
+            }
+            if (apart.Count == 0 || Median(apart) <= BossNear) actors.Add(a.Id);
+        }
+        if (actors.Count == 0)
+            foreach (var a in r.Actors)
+                if (!party.Contains(a.Id)) actors.Add(a.Id);
+        var xs = new List<double>();
+        var zs = new List<double>();
+        foreach (var f in r.Frames)
+            foreach (var (id, p) in f.At)
+                if (placed ? party.Contains(id) : actors.Contains(id))
+                {
+                    xs.Add(p.X);
+                    zs.Add(p.Z);
+                }
+        var strays = new HashSet<int>();
+        if (xs.Count == 0) return strays;
+        var (cx, cz) = (Median(xs), Median(zs));
+        var far = new Dictionary<int, List<double>>();
+        foreach (var f in r.Frames)
+            foreach (var (id, p) in f.At)
+            {
+                if (party.Contains(id) || actors.Contains(id)) continue;
+                if (!far.TryGetValue(id, out var list)) far[id] = list = new List<double>();
+                list.Add(Distance(p.X - cx, p.Z - cz));
+            }
+        foreach (var (id, list) in far)
+            if (Median(list) > FightReach) strays.Add(id);
+        return strays;
+    }
+
+    /// <summary>The middle of a list (the upper of the two for an even count), as the site's <c>median</c>.</summary>
+    private static double Median(List<double> list)
+    {
+        if (list.Count == 0) return 0;
+        list.Sort();
+        return list[list.Count / 2];
+    }
+
+    /// <summary>A distance on the ground (the site's <c>Math.hypot</c>).</summary>
+    private static double Distance(double dx, double dz) => Math.Sqrt(dx * dx + dz * dz);
 
     /// <summary>
     /// The HP % left (0–100, two decimals) of the fight's main boss at the pull's end: of the bosses,

@@ -137,7 +137,10 @@ Every frame while it goes (on the framework thread):
   pull's furthest phase counts one more each time every enemy that had been targetable was gone for
   8 seconds or more (`PhaseGap`) and then one became targetable, again or for the first time (a new
   boss). A shorter while away (a boss jumping off for a mechanic) isn't a phase. It's the site's
-  rule (`phaseStarts`, `PHASE_GAP`), so the two count the same.
+  rule (`phaseStarts`, `PHASE_GAP`), so the two count the same. Worked out again from a kept pull's events
+  (`PullStats.PhaseStarts`: the Replay's phases), since 0.9.0 it leaves out, as the site does (`fightOf(rec).strays`), an
+  enemy not in the party's fight that mostly stood more than 60 yalms from its middle (`PullStats.Strays`: a mob someone
+  else fought in a field zone, a far trash pack): its going and coming isn't a phase.
 
 And from three hooks, on while a pull goes and (since 0.3.0) whenever the meter wants them
 (FFXIVClientStructs' addresses, kept current with each Dalamud release; each detour calls the game's
@@ -2130,8 +2133,8 @@ party list). The plugin only ever reads the game's ready check, never answers it
   are; "· one out of sight" when nobody's short but someone can't be seen), and "Your average pull here is 6:40."
   under it when there's one.
 - **You** (in a well under the rows; `ReadyCheckReader.You`, every two seconds): the tinctures in your four
-  inventory pages (Medicine whose use gives Medicated, so not potions or elixirs [verify: the item action's first
-  value is the status it gives]), the meals (the Meal category), and your equipped gear's lowest condition
+  inventory pages (Medicine, ItemUICategory 44, whose use gives Medicated, so not potions or elixirs: the item action's first
+  value is the status it gives, 49 on a tincture's, as the sheets have it), the meals (the Meal category, 46), and your equipped gear's lowest condition
   (Dalamud's `IGameInventory`, condition 30,000 is 100%, the soul crystal left out [verify: the scale]): "Gear 84%"
   quietly, or under **20%** (`ReadyCheckView.GearLow`) an amber line "Gear 18%: repair soon" ("Gear 0%: broken,
   repair it"), always.
@@ -2593,6 +2596,9 @@ entry).
   you held the boss your own mitigation was up, the tank busters on you and how many met nothing, self-healing, and every
   buster and raid-wide on you with what was up (your mitigation, the party's, shields, Reprisal, Addle, Feint or Dismantle
   on the enemy) and a tag: Mitigated, Light, Unmitigated or Died.
+- **A far-off mob isn't a phase**: the phases worked out from a kept pull (the Replay's) leave out an enemy that wasn't in
+  the party's fight and mostly stood more than 60 yalms from it, as the site does (`PullStats.Strays`); before, such a mob
+  going out of sight and back could start a phase. The ready check's meal and tincture rows are checked against the sheets.
 
 ### 0.8.3 (not released yet)
 
