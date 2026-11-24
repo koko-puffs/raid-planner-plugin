@@ -1512,7 +1512,7 @@ public sealed class MeterDetailWindow : Window
             // The HP before, and its bar: low in warn, out in danger.
             var bx = right - hpW;
             var vy = y + (rowH - S(11) - S(4) - S(4)) / 2;
-            PlateArt.LineRight(dl, right, vy, Format.Thousands(l.HpBefore), F.Tiny, I.Muted, 11);
+            PlateArt.LineRight(dl, right, vy, l.HpBefore < 0 ? "–" : Format.Thousands(l.HpBefore), F.Tiny, I.Muted, 11); // −1: not seen
             var barY = vy + S(11) + S(4);
             dl.AddRectFilled(new Vector2(bx, barY), new Vector2(right, barY + S(4)), Palette.U32(Rgb.A(I.Text, 0.08f)), S(2));
             var f = max > 0 ? Math.Clamp(l.HpBefore / (float)max, 0, 1) : 0;
