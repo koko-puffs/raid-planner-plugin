@@ -409,6 +409,10 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         var pull = recordedPull > 0 ? recordedPull : ownPull + 1;
         ownPull = Math.Max(ownPull + (recordedPull > 0 ? 0 : 1), recordedPull);
         var f = new Fight(nextId++, pull, duty, content, t) { OwnCount = recordedPull <= 0 };
+        // The members' status lists are read only during an encounter, so what's kept is the last encounter's last frame:
+        // not what they carry now. Let go (since 0.9.0's review), so an enemy's hit that starts this one isn't credited to
+        // barriers long gone; this encounter's first frame reads them afresh (until then, only the barriers seen put on in the second before it count).
+        worn.Clear();
         foreach (var (who, slot) in Roles.Assign(party.Select(p => new Partier(p.Id, p.Job, p.Role)).ToList()))
             f.Add(party.First(p => p.Id == (uint)who.Key), slot);
         foreach (var p in party)

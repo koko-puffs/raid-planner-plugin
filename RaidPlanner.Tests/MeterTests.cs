@@ -251,6 +251,29 @@ public class CombatParserTests
         Assert.True(CombatParser.WantsCaster(b.EffectsOf(0)));
     }
 
+    /// <summary>
+    /// 0.9.0's review: an area attack's lifesteal is a heal on the caster from each enemy it hit, all in one message whose HP was
+    /// read once, before any of them. Each was measured from that one reading, so three 5,000 heals on a caster missing 6,000 were
+    /// 15,000 healed and no overheal; the game can put back only the 6,000. Each heal now finds the HP the ones before it left.
+    /// </summary>
+    [Fact]
+    public void Several_heals_on_one_in_a_message_find_the_hp_the_earlier_left()
+    {
+        var p = Parser(out var heard);
+        var drain = new[] { E(3, value: 4000), E(4, p4: 0x80, value: 5000) };
+        var b = Batch(1, Tank, 101, 0, (Boss, drain, -1, -1, true), (901, drain, -1, -1, true), (902, drain, -1, -1, true));
+        b.CasterHp = 74_000;
+        b.CasterMaxHp = 80_000;
+        p.Action(b);
+        var heals = heard.Effects.Where(e => e.Kind == FxKind.Heal).ToList();
+        Assert.Equal(new long[] { 74_000, 79_000, 80_000 }, heals.Select(h => h.HpBefore));
+        Assert.Equal(new long[] { 0, 4_000, 5_000 }, heals.Select(h => h.Overheal));
+        Assert.Equal(6_000, heals.Sum(h => h.Amount - h.Overheal));
+        // A heal on someone else in the same message is measured from their own reading; the next message starts afresh.
+        p.Action(Batch(2, Healer, 135, 0, (Tank, new[] { E(4, value: 3000) }, 70_000, 80_000, false), (Dps, new[] { E(4, value: 3000) }, 70_000, 80_000, false)));
+        Assert.All(heard.Effects.Skip(heard.Effects.Count - 2), h => Assert.Equal(70_000, h.HpBefore));
+    }
+
     [Fact]
     public void Heals_count_what_was_missing_and_mp_is_never_healing()
     {

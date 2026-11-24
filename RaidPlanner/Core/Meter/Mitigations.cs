@@ -44,7 +44,8 @@ public sealed record MitigationSpec(string Key, MitigationRole Kind, IReadOnlyLi
 /// (<see cref="CombatLists"/>): the game side finds their rows on the Status sheet read in English and reads which are on each
 /// party member (and, on the bosses, the party's Reprisal, Addle, Feint and Dismantle) every frame of an encounter. A set of
 /// them is a bit mask (<see cref="All"/>'s order: at most 64), so a frame's reading makes nothing. Level 100 jobs.
-/// The Status sheet's names are the game's own [verify: each name as the sheet has it].
+/// The Status sheet's names are the game's own: each checked against the English sheet (xivapi's ffxiv-datamining Status.csv,
+/// November 2026) in 0.9.0's review, where only The Blackest Night's was wrong (its status is "Blackest Night").
 /// </summary>
 public static class Mitigations
 {
@@ -109,7 +110,8 @@ public static class Mitigations
         // Barriers.
         Shield("Divine Veil", "PLD"),
         Shield("Shake It Off", "WAR"),
-        Shield("The Blackest Night", "DRK"),
+        // The status is "Blackest Night" (the action is The Blackest Night): until 0.9.0's review only the action's name, found nowhere.
+        Shield("The Blackest Night", "DRK", "Blackest Night"),
         Shield("Divine Benison", "WHM", "Divine Benison", "Divine Caress"),
         Shield("Galvanize", "SCH", "Galvanize", "Catalyze", "Seraphic Veil"),
         Shield("Intersection", "AST"),

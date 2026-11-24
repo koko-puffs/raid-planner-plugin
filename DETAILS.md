@@ -1354,7 +1354,8 @@ ids (the party list's; since 0.5.0, outside a duty, a cross-world party's group:
 recorded; just you alone), read four times a second: **cross-world parties count in the meter
 everywhere** (before 0.5.0, outside a duty only your own numbers were). Damage between party members isn't kept,
 nor anything between two others; a barrier (a status named on `CombatLists.ShieldNames`, found on the
-English Status sheet) is a shield put on, never healing. A tick (actor control 1541 a DoT's, 1540 a HoT's, since 0.8.2; 23 before) goes to the party
+English Status sheet: the statuses' names, not the actions', so The Blackest Night's is "Blackest Night"; since 0.9.0 also
+Guardian's Will, Brutal Shell and The Spire) is a shield put on, never healing. A tick (actor control 1541 a DoT's, 1540 a HoT's, since 0.8.2; 23 before) goes to the party
 member the game names (a pet's owner); a damage tick that names no one, on an enemy, is shared
 between the party members with one of the jobs' DoTs (`CombatLists.DotNames`) on it then (the tick's
 own status when it names one): a whole share each, the remainder to the first in the party list (the
@@ -1395,7 +1396,11 @@ party's row is the sum of the rows, the limit break's included):
 - **Healing**: what each heal (and HoT tick) restored: the heal less its **overheal**, what went past
   the HP the target was missing when the heal was announced, or the tick came (it reads a little
   high when a hit is on its way, as ACT's does; the recording keeps a tick's HP, `combat.tick.h`, so
-  the summary and the site measure a HoT's tick the same). HPS is that over the encounter's length;
+  the summary and the site measure a HoT's tick the same). The HP is read once a message, so since 0.9.0 a second
+  heal on the same one in a message (an area attack's lifesteal, a heal from each enemy hit; Clemency on oneself)
+  is measured from the HP the earlier ones left, up to their max (`CombatParser`; it's the HP before kept with it,
+  `combat.fx` `h`, so the summary and the site measure it the same): before, each was measured from the one reading,
+  and three 5,000 heals on someone missing 6,000 were 15,000 healed. HPS is that over the encounter's length;
   overheal % is overheal over all healed. Shields aren't healing; lifesteal goes to whoever drew it; MP never. The
   healers' limit break's healing is the limit break's, never the party's (it has no row on the Healing tab, and the
   site leaves it out), so the party's healing is its rows' (since 0.7.4).
@@ -1449,7 +1454,9 @@ bar; none outside a party that fills one.
   needed. It's **credited** to whoever's barrier was on them: their status list read each frame during an encounter (the
   barriers by name, `CombatLists.ShieldNames` and the death recap's catalogue's, each with its source; a pet's is its owner's), shared
   evenly between several (`GuardRules.Split`); for a member whose list isn't read (out of sight), the barriers party
-  members put on them in the last 30 s (their actions' effects). A barrier of no one in the party (or none named) is no
+  members put on them in the last 30 s (their actions' effects). The lists kept are let go as an encounter begins (since
+  0.9.0's review: they're read only during one, so what was kept was the last encounter's, and an enemy's hit that began
+  the next was credited to barriers long gone); until its first frame reads them, it's the barriers put on. A barrier of no one in the party (or none named) is no
   one's. Never part of Healing (as before, and as the site counts it): it's beside it.
 - **Heals cast** (`MeterProtection.GcdHeals`, `OgcdHeals`): each use of a heal or barrier once, however many it landed on
   (its effects come at one time), on or off the GCD (`CombatKinds.Gcd`); pets' and the limit break's left out. Each heal's
@@ -2178,8 +2185,9 @@ would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.A
   Barrier, Temperance, Aquaveil, Sacred Soil, Fey Illumination, Expedient, Collective Unconscious, Exaltation, Neutral
   Sect, The Bole, Sun Sign, Kerachole, Holos, Taurochole), the barriers (Divine Veil, Shake It Off, The Blackest Night,
   Divine Benison, Galvanize, Intersection, the Sage's, Radiant Aegis, Improvised Finish, Tempera Coat, Stem the Tide,
-  Shade Shift, Arcane Crest, Manaward) and those on the enemy (Reprisal, Addle, Feint, Dismantle) [verify:
-  each status's name as the sheet has it]. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
+  Shade Shift, Arcane Crest, Manaward) and those on the enemy (Reprisal, Addle, Feint, Dismantle); each status's name
+  checked against the English Status sheet in 0.9.0's review (xivapi's ffxiv-datamining `Status.csv`), where only The
+  Blackest Night's was wrong: its status is "Blackest Night", the action's name no status has. A set of them is a 64-bit mask, so a frame's reading makes nothing. The
   meter's game side reads each party member's (during an encounter, each frame, with Weakness: `PartyState.Mitigation`)
   and the party's on the enemies (four times a second, with their targetability: `MeterSession.EnemyMitigation`); a
   death keeps theirs as last read alive (the frame they're seen dead has lost them) with the enemies' then
@@ -2599,6 +2607,14 @@ entry).
 - **A far-off mob isn't a phase**: the phases worked out from a kept pull (the Replay's) leave out an enemy that wasn't in
   the party's fight and mostly stood more than 60 yalms from it, as the site does (`PullStats.Strays`); before, such a mob
   going out of sight and back could start a phase. The ready check's meal and tincture rows are checked against the sheets.
+- **The Dark Knight's The Blackest Night is a barrier now**: its status is named "Blackest Night" in the game, and the
+  plugin looked for the action's name, so it was never a barrier: not in shields absorbed, never "up" on the Mitigation
+  tab or in the death recap, and recorded as a plain status. Guardian's Will (Guardian's barrier), Brutal Shell's barrier
+  and The Spire's are barriers too now.
+- **Lifesteal on an area attack isn't overcounted**: an attack that heals you for each enemy it hits (an area
+  weaponskill under Bloodbath) had every one of those heals measured against your HP before the first, so a pack of
+  enemies could heal you for more than you were missing with no overheal. Each now counts from the HP the ones
+  before it left, on the meter and in recordings.
 
 ### 0.8.3 (not released yet)
 

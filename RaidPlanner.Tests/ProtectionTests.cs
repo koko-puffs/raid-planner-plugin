@@ -165,6 +165,36 @@ public class ProtectionTests
         Assert.Equal(12_000, s.Current!.Party.Absorbed);
     }
 
+    /// <summary>
+    /// 0.9.0's review: the members' status lists are read only during an encounter, so the one kept between encounters is the
+    /// last encounter's last frame. An enemy's hit that starts the next one (before its first frame reads them afresh) was
+    /// credited to the barriers on that old list, gone long since.
+    /// </summary>
+    [Fact]
+    public void A_status_list_from_the_last_encounter_isnt_taken_for_what_they_carry_now()
+    {
+        var s = New(out var p);
+        s.Frame(0, Party(), true);
+        p.Action(CombatParserTests.Batch(9, Dps, 100, 0, (Boss, new[] { Dmg(5000) }, -1, -1, true)));
+        s.Wearing(Tank);
+        s.Wears(Tank, Galvanize, Healer);
+        s.Frame(10, Party(), true);
+        for (var t = 11.0; t <= 16.0 + 1e-9; t += 1) s.Frame(t, Party(), false);
+        Assert.False(s.InEncounter);
+        // A minute later the boss's hit begins the next one, on a barrier the healer's Galvanize from then isn't.
+        Hit(p, 70, Buster, (Tank, 40_000, 100_000, 10));
+        s.Frame(70.1, Party(tank: 60_000), true);
+        Assert.True(s.InEncounter);
+        var e = s.Current!;
+        Assert.Equal(0, e.Rows.Single(r => r.Slot == "H1").Absorbed);
+        // Read afresh in the encounter, a barrier of the healer's is the healer's again.
+        s.Wearing(Tank);
+        s.Wears(Tank, Galvanize, Healer);
+        Hit(p, 72, Buster, (Tank, 40_000, 60_000, 10));
+        s.Frame(72.1, Party(tank: 20_000), true);
+        Assert.Equal(10_000, s.Current!.Rows.Single(r => r.Slot == "H1").Absorbed);
+    }
+
     [Fact]
     public void A_heal_cast_counts_once_however_many_it_lands_on_and_off_the_gcd_is_told()
     {
@@ -321,5 +351,26 @@ public class ProtectionTests
         Assert.Equal(0.5, tank.Uptime!.Value, 6);
         var dps = s.Protection(e.Id, e.Rows.Single(r => r.Slot == "R1").PartyId)!;
         Assert.Null(dps.Uptime);
+    }
+
+    /// <summary>
+    /// 0.9.0's review: the barriers go by the Status sheet's names (xivapi's English Status.csv): The Blackest Night's status
+    /// is "Blackest Night" (1178), which until then wasn't a barrier anywhere (the action's name, no status's, was listed), so
+    /// a DRK's barrier was never credited, never "up", and wasn't in the death recap; and Guardian's Will (3830), Brutal
+    /// Shell (1898) and The Spire (3892), each "a … barrier is nullifying damage", weren't listed at all.
+    /// </summary>
+    [Fact]
+    public void The_barriers_go_by_the_Status_sheets_names()
+    {
+        foreach (var name in new[] { "Blackest Night", "Guardian's Will", "Brutal Shell", "The Spire" })
+        {
+            Assert.Contains(name, CombatLists.ShieldNames);
+            Assert.Equal(MitigationKind.Shield, CombatLists.MitigationOf(name));
+        }
+        var tbn = Mitigations.Names().Single(n => n.Name == "Blackest Night").Index;
+        Assert.Equal("The Blackest Night", Mitigations.All[tbn].Key);
+        Assert.Equal(MitigationRole.Shield, Mitigations.All[tbn].Kind);
+        // Guardian's own mitigation stays mitigation; its barrier is the barrier.
+        Assert.Equal(MitigationKind.Mitigation, CombatLists.MitigationOf("Guardian"));
     }
 }

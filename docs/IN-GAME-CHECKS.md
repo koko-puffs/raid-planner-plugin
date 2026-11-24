@@ -36,7 +36,8 @@ the plugin names each tick after the caster's latest DoT on the target.
 - Pets and summons: Summoner, Scholar's fairy, Machinist's Automaton Queen, Dark Knight's Living Shadow,
   Ninja's Bunshin. All should count for their owner.
 - Vengeance or Damnation (the tank's reflect), Bloodbath (healing its user); Holmgang or Hallowed Ground taking
-  nothing.
+  nothing. Bloodbath (or Abyssal Drain) on an area attack into a pack while a little hurt: the battle log's heal
+  for each enemy hit, and the meter's overheal for it taking the HP the earlier heals left (since 0.9.0's review).
 - Limit breaks 1, 2 and 3, and a healer's LB3 raising the party.
 
 ## 3. Deaths, raises and Weakness
@@ -152,6 +153,9 @@ The meter estimates what a barrier soaked from the barrier the game shows on a m
   of max HP a hit).
 - Two barriers on one player from two healers (Galvanize and Haima): each healer gets some.
 - A Seraph's or a fairy's barrier (Seraphic Veil, Consolation): credited to the Scholar.
+- The tanks' own barriers (since 0.9.0's review, by the Status sheet's names): a Dark Knight's The Blackest Night
+  ("Blackest Night"), a Paladin's Guardian (Guardian's Will), a Gunbreaker's Brutal Shell, and an Astrologian's The
+  Spire on someone: each credited to whoever put it on, and listed as up on the Mitigation tab.
 - A raid-wide just after a party barrier (Succor, Panhaima): every member's hit shares the barrier as the game shows it.
 - The opened-up Mitigation tab on a tank: the busters listed are the boss's busters (not auto-attacks), what's listed
   as up matches what was on (Rampart, Guardian, Reprisal on the boss), and "Mitigation up" looks right for a tank who
