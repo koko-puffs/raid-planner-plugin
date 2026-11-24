@@ -24,6 +24,9 @@ public sealed partial class MainWindow
 
     private volatile PullState? pullView;
 
+    /// <summary>The pull's two views (0.9.0): what happened, and the pull played back.</summary>
+    private static readonly string[] PullModes = { "Summary", "Replay" };
+
     private void LoadPull(RecordingInfo info)
     {
         if (pullView?.File == info.File) return;
@@ -86,19 +89,40 @@ public sealed partial class MainWindow
         Kit.Reserve(ep, w, Kit.EyebrowH);
         Kit.Gap(10);
 
-        // PULL 12 [WIPE] ……… 6:31
+        // PULL 12 [WIPE] ……… 6:31 [Summary | Replay] (0.9.0: the pull played back, Replay.cs)
         var at = Kit.At;
         var (tag, kind) = OutcomeTag(info.Outcome);
         var length = Format.Clock(info.Duration);
         var lengthW = Txt.Width(length, Face.MonoSemibold, 18);
         var rowH = S(26);
         var title = $"Pull {Math.Max(1, info.Pull)}";
-        var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12);
+        var modeW = Kit.SegmentedWidth(PullModes);
+        // On the Raid Codex: a link to it there beside the switch, while Replay is shown (its summary has its own).
+        const string openSite = "Open on the Raid Codex";
+        var sentId = pullReplay ? (store.Find(info.File) ?? info).SentId : null;
+        var openW = sentId != null ? Kit.ButtonWidth(openSite, BtnSize.Sm, Icon.ExternalLink, Btn.Quiet) + S(8) : 0;
+        var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12) - modeW - S(16) - openW;
         var line = Kit.CalloutLines(title, 22, room, 1)[0];
         var tw = Txt.Line(dl, at, line, Face.Callout, 22, Palette.White, 26);
         Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
-        Txt.LineRight(dl, at.X + w, at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
+        Txt.LineRight(dl, at.X + w - modeW - S(16) - openW, at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
+        if (sentId != null
+            && Kit.Button("##pull-open-site", new Vector2(at.X + w - modeW - openW, at.Y + (rowH - S(HSm)) / 2), openSite, Btn.Quiet, BtnSize.Sm, Icon.ExternalLink))
+            Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
+        var mode = Kit.Segmented("##pull-mode", new Vector2(at.X + w - modeW, at.Y + (rowH - S(HSm)) / 2), PullModes, pullReplay ? 1 : 0);
+        if (mode != (pullReplay ? 1 : 0))
+        {
+            pullReplay = mode == 1;
+            replayPlaying = false;
+            ImGui.SetScrollY(0);
+        }
         Kit.Reserve(at, w, rowH);
+        if (pullReplay)
+        {
+            DrawReplay(info);
+            Frame.EndBody();
+            return;
+        }
         Kit.Gap(10);
 
         var state = pullView;

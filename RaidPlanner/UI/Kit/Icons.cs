@@ -96,6 +96,10 @@ public enum Icon
     Wrench,
     /// <summary>0.9.0: settings profiles (Settings → Profiles, the notice as one comes into effect, Home's chip).</summary>
     Layers,
+    /// <summary>0.9.0: Replay's transport (the step before and after) and its dock filling the window and back.</summary>
+    SkipBack,
+    SkipForward,
+    Minimize,
 }
 
 /// <summary>
@@ -243,6 +247,10 @@ public static class Icons
             "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
             "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
         }, false),
+        // 0.9.0: Replay.
+        [Icon.SkipBack] = (new[] { "M19 20 9 12 19 4 19 20Z", "M5 19V5" }, false),
+        [Icon.SkipForward] = (new[] { "M5 4 15 12 5 20 5 4Z", "M19 5V19" }, false),
+        [Icon.Minimize] = (new[] { "M4 14h6v6", "M20 10h-6V4", "M14 10l7-7", "M3 21l7-7" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

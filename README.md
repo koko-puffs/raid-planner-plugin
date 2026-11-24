@@ -28,6 +28,7 @@ Record the fights you're in, then make them into plans on
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
 - **Or saves it as a file** to import on the site yourself (Import, on the Raid Codex's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
+- **Replays a pull** on its arena, as the Raid Codex does: the party, the mechanics, HP, debuffs and deaths, with Play.
 - **Shows your plan in the duty.** A small window with the step's callout, its board and its notes,
   which moves along with the pull by itself, and who uses which cooldown in it. Each step said in chat
   a few seconds before it comes, and the next few on screen, counting down to each (with yours: "You:
@@ -40,6 +41,8 @@ Record the fights you're in, then make them into plans on
   open it up for every column and a death's recap, see the fight's events (raises, interrupts,
   potions, limit breaks, tank swaps) and the limit break gauge, and copy it as text for chat. A
   cross-world party counts too, outside duties as well (on a target dummy with a friend).
+- **For healers and tanks**: the Healing tab shows overheal and what your shields absorbed (an estimate); opened up,
+  your heals by ability, and a Mitigation tab with every tank buster and raid-wide and what was up for it.
 - **A party cooldown tracker**: your party's raid buffs, mitigation and Swiftcast, each with the
   time until it's ready (yours from the game's own timers, the others' from when they used them), and
   a cooldown your plan has someone use soon outlined ("planned in 8 s").
