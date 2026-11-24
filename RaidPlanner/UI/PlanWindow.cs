@@ -153,8 +153,10 @@ public sealed class PlanWindow : Window
             ImGui.SetNextWindowPos(put.Pos, ImGuiCond.Always);
             if (put.Size is { } size && size.X > 0 && size.Y > 0)
             {
-                // Dalamud sets the size after this, from Size (CSS px), so it's given there for one frame.
-                Size = Theme.UnitsOfScreen(size);
+                // Kept in CSS px (KeepPlace): on screen at the scale now; a scale that then moves (a profile's window
+                // size) grows or shrinks it once, as any window. Dalamud sets the size after this, from Size, so it's
+                // given there for one frame.
+                Size = Theme.UnitsOfScreen(size * follower.Seen);
                 SizeCondition = ImGuiCond.Always;
                 sizedOnce = true;
             }
@@ -221,8 +223,10 @@ public sealed class PlanWindow : Window
     /// Its place and size kept in the settings as drawn (0.9.0: a profile's Window places gives it its own, and puts it
     /// back with <see cref="PutAt"/>), saved once you let go of it rather than every frame of a drag.
     /// </summary>
-    private void KeepPlace(Vector2 pos, Vector2 size)
+    private void KeepPlace(Vector2 pos, Vector2 drawnSize)
     {
+        // The size in CSS px, at the scale it was drawn at: put back at another scale, it's that scale's.
+        var size = drawnSize / MathF.Max(0.01f, follower.Seen);
         static bool Moved(float a, float b) => MathF.Abs(a - b) > 0.5f;
         if (!config.PlanPlaced || Moved(config.PlanPlaceX, pos.X) || Moved(config.PlanPlaceY, pos.Y) || Moved(config.PlanPlaceW, size.X) || Moved(config.PlanPlaceH, size.Y))
         {

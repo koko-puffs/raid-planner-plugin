@@ -627,7 +627,9 @@ public static class ReplayIcons
         }
         var tone = s.Cat == 2 ? Palette.Hex(0xa8342e) : s.Cat == 1 ? Palette.Hex(0x2f62b8) : Palette.Hex(0x55555e);
         dl.AddRectFilled(min, max, Palette.U32(tone), S(1.5f));
-        var letter = s.Name.Length > 0 ? Letters[char.ToUpperInvariant(s.Name[0]) & 0x7f] ??= char.ToUpperInvariant(s.Name[0]).ToString() : "?";
+        var first = s.Name.Length > 0 ? char.ToUpperInvariant(s.Name[0]) : '?';
+        // Kept for plain letters only: another script's has its own string (rare: only when the icon can't be drawn).
+        var letter = first < 128 ? Letters[first] ??= first.ToString() : first.ToString();
         var size = Txt.Measure(letter, Face.SansSemibold, 10);
         Txt.Draw(dl, (min + max) / 2 - size / 2, letter, Face.SansSemibold, 10, Palette.White);
         if (s.Stacks >= 2) Count(dl, max, s.Stacks);

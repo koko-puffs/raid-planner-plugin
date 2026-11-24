@@ -70,7 +70,7 @@ public sealed class ReadyCheckWindow : OverlayWindow
             return false;
         }
         var fight = InCombat?.Invoke() == true;
-        if (watch.Frame(now, reader.Checking(), fight))
+        if (watch.Frame(now, reader.Awaiting(), fight))
         {
             // A new ready check: everything read afresh, the average pull too.
             membersAt = youAt = double.NegativeInfinity;

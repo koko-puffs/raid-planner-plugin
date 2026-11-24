@@ -104,15 +104,17 @@ public sealed partial class MainWindow
         Kit.Gap(14);
         var at = Kit.At;
         var w = Kit.Width;
-        var room = MathF.Max(S(420), Frame.RoomLeft());
         var lanes = Lanes(m, LaneWidth(w));
-        var dockH = replayExpanded ? room : S(ReplayLanes.DockPx(lanes.BossRows, lanes.PartyRows));
+        var dockPx = S(ReplayLanes.DockPx(lanes.BossRows, lanes.PartyRows));
+        // At least room for the smallest board over the dock: a short window scrolls rather than drawing the board over the title.
+        var room = MathF.Max(MathF.Max(S(420), dockPx + S(14) + S(200)), Frame.RoomLeft());
+        var dockH = replayExpanded ? room : dockPx;
         var mainH = room - dockH - S(14);
         if (!replayExpanded)
         {
             var panelW = S(332);
             var boardRoom = w - panelW - S(24);
-            var size = MathF.Max(S(200), MathF.Min(boardRoom, mainH));
+            var size = MathF.Max(S(120), MathF.Min(boardRoom, mainH));
             var boardMin = new Vector2(at.X + (boardRoom - size) / 2, at.Y + (mainH - size) / 2);
             ReplayBoard.BoardSize = size;
             ReplayBoard.Draw(Kit.Dl, boardMin, size, m, sc, replayFocus);
@@ -215,7 +217,7 @@ public sealed partial class MainWindow
         return p;
     }
 
-    private static string Pct(float share) => share < 0 ? "–" : Percents[(int)MathF.Round(Math.Clamp(share, 0, 1) * 100)];
+    private static string Pct(float share) => share < 0 ? "–" : Percents[(int)MathF.Round(Math.Clamp(share, 0, 1) * 100, MidpointRounding.AwayFromZero)];
 
     /// <summary>A member's name as the panel says it (their character's, else their spot).</summary>
     private static string NameOf(ReplayModel m, int id) => m.Track.Entity(id) is { Kind: EntityKind.Party } e ? e.Name : m.Track.Entity(id)?.Name ?? "someone";
@@ -850,7 +852,7 @@ public sealed partial class MainWindow
         foreach (var d in m.Deaths)
         {
             var dx = MathF.Round(X(d.T));
-            dl.AddRectFilled(new Vector2(dx - 1, stepsTop - S(2)), new Vector2(dx + 1, stepsBottom + S(2)), Palette.U32(Palette.Rgba(255, 90, 90, 0.55f)));
+            dl.AddRectFilled(new Vector2(dx - S(1), stepsTop - S(2)), new Vector2(dx + S(1), stepsBottom + S(2)), Palette.U32(Palette.Rgba(255, 90, 90, 0.55f)));
         }
         // Past where the pull ended, when the steps go on: hatched behind a dashed line.
         var endX = X(m.Track.End);
@@ -886,6 +888,18 @@ public sealed partial class MainWindow
                         var (name, bars, rows) = lanes.Members[i];
                         ly = Lane(cdl, gx, lx, ly, name, true, bars, Math.Max(1, rows), i % 2 == 1, held);
                     }
+                    // The lanes' own seek (the child takes the pointer from the body's), and the play head through them.
+                    var (_, laneOver, laneHeld) = Kit.Hit("##replay-lanes-seek", new Vector2(lx - S(8), start.Y), new Vector2(lw + S(16), MathF.Max(1, ly - start.Y)));
+                    if (laneHeld)
+                    {
+                        var f = Math.Clamp((ImGui.GetMousePos().X - lx) / MathF.Max(1, lw), 0, 1);
+                        ReplaySeek(m, Math.Min(m.Track.End, f * total));
+                    }
+                    if (laneOver || laneHeld) ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEw);
+                    var chx = MathF.Round(X(replayT));
+                    var cBottom = MathF.Max(ly, start.Y + laneBottom - y);
+                    cdl.AddRectFilled(new Vector2(chx - S(2), start.Y), new Vector2(chx + S(2), cBottom), Palette.U32(Palette.Rgba(0, 0, 0, 0.6f)), S(1));
+                    cdl.AddRectFilled(new Vector2(chx - S(1), start.Y), new Vector2(chx + S(1), cBottom), Palette.U32(Palette.White), S(1));
                     ImGui.SetCursorScreenPos(start);
                     ImGui.Dummy(new Vector2(1, ly - start.Y));
                 }
@@ -948,8 +962,8 @@ public sealed partial class MainWindow
 
         // The play head, white, through every lane under the tag.
         var hx = MathF.Round(headX);
-        dl.AddRectFilled(new Vector2(hx - 2, top + S(20)), new Vector2(hx + 2, rulerBottom), Palette.U32(Palette.Rgba(0, 0, 0, 0.6f)), S(1));
-        dl.AddRectFilled(new Vector2(hx - 1, top + S(20)), new Vector2(hx + 1, rulerBottom), Palette.U32(Palette.White), S(1));
+        dl.AddRectFilled(new Vector2(hx - S(2), top + S(20)), new Vector2(hx + S(2), rulerBottom), Palette.U32(Palette.Rgba(0, 0, 0, 0.6f)), S(1));
+        dl.AddRectFilled(new Vector2(hx - S(1), top + S(20)), new Vector2(hx + S(1), rulerBottom), Palette.U32(Palette.White), S(1));
     }
 
     private List<double>? rulerTimes;

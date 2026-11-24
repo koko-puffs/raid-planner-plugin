@@ -36,6 +36,7 @@ public class ProfileTests
         public float MeterAnchorY { get; set; }
         public bool MeterAnchored { get; set; }
         public MeterGrows MeterAnchorFor { get; set; } = MeterGrows.Down;
+        public MeterGrows MeterGrows { get; set; } = MeterGrows.Down;
         public float MeterHeight { get; set; }
         public float PlanPlaceX { get; set; }
         public float PlanPlaceY { get; set; }
@@ -80,10 +81,9 @@ public class ProfileTests
     [InlineData(2u, false, false, "Alexandria", DutyKind.Dungeon)]
     [InlineData(3u, false, false, "Basic Training: Enemy Parties", DutyKind.Dungeon)]
     [InlineData(21u, false, false, "The Palace of the Dead (Floors 1-10)", DutyKind.Dungeon)]
-    [InlineData(26u, false, false, "The Forbidden Land, Eureka Anemos", DutyKind.OpenWorld)]
-    [InlineData(29u, false, false, "The Bozjan Southern Front", DutyKind.OpenWorld)]
     [InlineData(29u, true, true, "Delubrum Reginae (Savage)", DutyKind.Savage)]
-    [InlineData(38u, false, false, "The Occult Crescent", DutyKind.OpenWorld)]
+    [InlineData(29u, false, true, "Delubrum Reginae", DutyKind.Alliance)]
+    [InlineData(26u, false, false, "The Baldesion Arsenal", DutyKind.Alliance)]
     [InlineData(6u, false, false, "The Palaistra", DutyKind.Other)]
     [InlineData(7u, false, false, "A quest battle", DutyKind.Other)]
     [InlineData(9u, false, false, "The Lost Canals of Uznair", DutyKind.Other)]
@@ -97,6 +97,10 @@ public class ProfileTests
         Assert.Equal(DutyKind.Other, DutyKinds.Of(new DutyFacts(0, false, false, string.Empty)));
         // A field operation's open zone by its intended use, even with no ContentType.
         Assert.Equal(DutyKind.OpenWorld, DutyKinds.Of(new DutyFacts(0, false, false, string.Empty, 48)));
+        // The field operations' open zones (their intended use) are the open world; their raids in their own instance aren't.
+        Assert.Equal(DutyKind.OpenWorld, DutyKinds.Of(new DutyFacts(26, false, false, "The Forbidden Land, Eureka Anemos", 41)));
+        Assert.Equal(DutyKind.OpenWorld, DutyKinds.Of(new DutyFacts(29, false, false, "The Bozjan Southern Front", 48)));
+        Assert.Equal(DutyKind.OpenWorld, DutyKinds.Of(new DutyFacts(38, false, false, "The Occult Crescent", 61)));
     }
 
     [Fact]

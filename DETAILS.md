@@ -2257,9 +2257,11 @@ shadows, its chip's words): the meter shown, its size, its theme, hidden out of 
 callouts shown, how many at once, smaller; whose deaths the death recap shows; the plan window in duties; the party
 cooldowns shown; **Window places**;
 the windows' size (fit, or 80–200%). Window places is many fields (`ProfileItems.PlaceFields`): the meter's anchor
-and the height you gave it, each overlay's anchor, corner and width (`OverlaySettings`), and the plan window's place
-and size, which the plan window keeps in the settings as it's drawn since 0.9.0 (`PlanPlaceX`…`PlanPlaced`, saved as
-you let go; ImGui's own memory of it isn't the profile's). The meter's width is ImGui's and isn't in it. A new overlay's
+and the height you gave it and which way it grows, each overlay's anchor, corner, width and which way it grows
+(`OverlaySettings`; an anchor is only good with its Grows, so they go together), and the plan window's place and size,
+which the plan window keeps in the settings as it's drawn since 0.9.0 (`PlanPlaceX`…`PlanPlaced`, saved as you let
+go; its size in CSS px, so a profile's own window size grows or shrinks it once, not again at each switch; ImGui's own
+memory of it isn't the profile's). The meter's width is ImGui's and isn't in it. A new overlay's
 place is one more `Overlay("…")` line there; a new setting, one more line in `All`.
 
 **Which kind a duty is** (`DutyKinds.Of`, tested; read by `GameData.Facts`): the zone's ContentFinderCondition's
@@ -2268,8 +2270,10 @@ ContentMemberType of three parties). Ultimate: ContentType 28. Criterion: 30 ("V
 "Another …" or "(Savage)"; else a Variant dungeon, Dungeons. Extreme: a trial (4) high-end or named "(Extreme)" or
 "(Unreal)"; other trials are Normal raids. Savage: a raid (5) high-end or named "(Savage)" or "(Chaotic)", 37 [verify:
 the Chaotic alliance raid's row], and a field operation's Savage duty (Delubrum Reginae). Alliance raids: other raids of
-three parties. Normal raids: the rest of 5. Dungeons: 2, guildhests (3), deep dungeons (21). Open world: no duty, and
-the field operations (26, 29, 38, and the zones of intended use 41, 48, 61). Other duties: the rest (PvP, quest
+three parties, and a field operation's other raids in their own instance (Delubrum Reginae, the Baldesion Arsenal,
+Castrum Lacus Litore, Dalriada; 26, 29, 38 outside the open zones) [verify: their instances' intended use]. Normal
+raids: the rest of 5. Dungeons: 2, guildhests (3), deep dungeons (21). Open world: no duty, and the field operations'
+open zones (the zones of intended use 41, 48, 61). Other duties: the rest (PvP, quest
 battles, treasure dungeons…). Outside a duty-finder zone but bound by a duty (a quest's), it's Other.
 
 **The layer** (`ProfileLayer`, tested). The plugin reads the configuration's fields directly everywhere, so a profile

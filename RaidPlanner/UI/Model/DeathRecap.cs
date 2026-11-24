@@ -242,7 +242,8 @@ public sealed class DeathRecapQueue
     public void Restart()
     {
         started = false;
-        Clear();
+        // Pinned cards stay (the UI hidden for a cutscene, say): only the pin lets them go.
+        if (!Pinned) Clear();
     }
 
     /// <summary>Puts cards in place of the shown ones (a sample), shown until they go as any would.</summary>

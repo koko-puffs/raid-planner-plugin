@@ -292,8 +292,9 @@ public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
     public Dictionary<string, string> ProfileBackup { get; set; } = new();
 
     /// <summary>
-    /// The plan window's place and size as last drawn (screen px; 0.9.0, kept by the plan window so a profile's Window
-    /// places can have its own). <see cref="PlanPlaced"/> false until it's been drawn.
+    /// The plan window's place (screen px) and size (CSS px, so a profile's own window size doesn't grow or shrink it
+    /// again) as last drawn (0.9.0, kept by the plan window so a profile's Window places can have its own).
+    /// <see cref="PlanPlaced"/> false until it's been drawn.
     /// </summary>
     public float PlanPlaceX { get; set; }
 

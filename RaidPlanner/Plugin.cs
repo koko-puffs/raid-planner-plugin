@@ -181,6 +181,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (profileSwitcher.Undo() is { } undone) ProfileSwitched(undone);
             };
             window.DutyKindHere = () => profileSwitcher.Kind;
+            window.PlanPlaceBack = PutPlanBack;
             // The plan window where the settings say (ImGui remembers it where a profile may have had it as the game closed).
             PutPlanBack();
             // The tracker listens to the recorder's parser and keeps its hooks on while it's shown.

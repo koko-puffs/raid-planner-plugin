@@ -93,7 +93,8 @@ public static class DutyKinds
     /// Which kind a duty is, from the game's data; null facts: not in a duty (the open world). The ContentType row first
     /// (ultimates, criterion, trials, raids, dungeons), then within trials and raids the HighEndDuty flag and the English
     /// name's "(Savage)", "(Extreme)", "(Unreal)", "(Chaotic)" (either is enough), and the alliance roulette or three
-    /// parties for an alliance raid. The field operations' open zones are the open world; their Savage duty is Savage.
+    /// parties for an alliance raid. The field operations' open zones are the open world, their raids in their own instance
+    /// alliance raids [verify: those instances' intended use isn't the open zones'], their Savage duty Savage.
     /// </summary>
     public static DutyKind Of(DutyFacts? facts)
     {
@@ -120,7 +121,10 @@ public static class DutyKinds
             case Eureka:
             case Bozja:
             case OccultCrescent:
-                return Named("(Savage)") ? DutyKind.Savage : DutyKind.OpenWorld;
+                // The open zones themselves are the open world; a field operation's raid in its own instance (Delubrum
+                // Reginae, the Baldesion Arsenal, Castrum Lacus Litore, Dalriada…) is an alliance raid, its Savage one Savage.
+                if (Named("(Savage)")) return DutyKind.Savage;
+                return FieldUses.Contains(d.IntendedUse) ? DutyKind.OpenWorld : DutyKind.Alliance;
         }
         if (FieldUses.Contains(d.IntendedUse)) return DutyKind.OpenWorld;
         return DutyKind.Other;

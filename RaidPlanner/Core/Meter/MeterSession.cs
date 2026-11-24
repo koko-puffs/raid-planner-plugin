@@ -303,11 +303,24 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         if (enemy == 0) return;
         if (!enemyWorn.TryGetValue(enemy, out var e))
         {
-            if (enemyWorn.Count > 64) enemyWorn.Clear();
+            // Many enemies (a field operation's crowds): the ones not read for 10 s go, not every one each pass.
+            if (enemyWorn.Count >= 64) DropStaleEnemies();
+            if (enemyWorn.Count >= 256) enemyWorn.Clear();
             e = (now, new List<Worn>(4));
         }
         e.List.Clear();
         enemyWorn[enemy] = (now, e.List);
+    }
+
+    private readonly List<uint> staleEnemies = new();
+
+    private void DropStaleEnemies()
+    {
+        staleEnemies.Clear();
+        foreach (var (id, e) in enemyWorn)
+            if (now - e.At > 10)
+                staleEnemies.Add(id);
+        foreach (var id in staleEnemies) enemyWorn.Remove(id);
     }
 
     /// <summary>A status on an enemy that a party member (<paramref name="source"/>, 0 not one) put on: Reprisal, Addle, Feint, Dismantle are kept.</summary>

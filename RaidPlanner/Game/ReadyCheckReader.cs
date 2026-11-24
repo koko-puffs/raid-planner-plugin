@@ -40,23 +40,24 @@ public sealed unsafe class ReadyCheckReader
         this.prep = prep;
     }
 
-    /// <summary>Whether a ready check is going on: someone's answer is still awaited.</summary>
-    public bool Checking()
+    /// <summary>How many answers a ready check still awaits (0: none going on).</summary>
+    public int Awaiting()
     {
         try
         {
-            if (!Services.ClientState.IsLoggedIn) return false;
+            if (!Services.ClientState.IsLoggedIn) return 0;
             var agent = AgentReadyCheck.Instance();
-            if (agent == null) return false;
+            if (agent == null) return 0;
+            var n = 0;
             foreach (var entry in agent->ReadyCheckEntries)
                 if (entry.ContentId != 0 && entry.Status == ReadyCheckStatus.AwaitingResponse)
-                    return true;
-            return false;
+                    n++;
+            return n;
         }
         catch (Exception ex)
         {
             Failed(ex);
-            return false;
+            return 0;
         }
     }
 

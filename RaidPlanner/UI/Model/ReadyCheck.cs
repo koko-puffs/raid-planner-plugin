@@ -161,6 +161,7 @@ public sealed class ReadyCheckWatch
     public const double Longest = 60;
 
     private bool was;
+    private int wasAwaiting;
     private double startedAt = double.NaN;
     private double endedAt = double.NaN;
 
@@ -180,10 +181,17 @@ public sealed class ReadyCheckWatch
     /// A frame at <paramref name="now"/> (seconds, a steady clock): whether a ready check is going on as the game says, and whether
     /// the party's in combat. True on the frame one starts (the card's facts are read again then).
     /// </summary>
-    public bool Frame(double now, bool checking, bool inCombat)
+    public bool Frame(double now, bool checking, bool inCombat) => Frame(now, checking ? 1 : 0, inCombat);
+
+    /// <summary>
+    /// As <see cref="Frame(double, bool, bool)"/>, with how many answers are awaited: more awaited than the frame before is a new
+    /// check too, so one the game left "awaiting" (someone who never answered) doesn't hide every check after it.
+    /// </summary>
+    public bool Frame(double now, int awaiting, bool inCombat)
     {
         var started = false;
-        if (checking && !was)
+        var checking = awaiting > 0;
+        if (checking && (!was || awaiting > wasAwaiting))
         {
             startedAt = now;
             endedAt = double.NaN;
@@ -194,6 +202,7 @@ public sealed class ReadyCheckWatch
             }
         }
         was = checking;
+        wasAwaiting = awaiting;
         var on = checking && now - startedAt <= Longest;
         if (Checking && !on) endedAt = now;
         Checking = on;

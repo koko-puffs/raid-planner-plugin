@@ -216,7 +216,7 @@ public static class ProfileItems
 
     /// <summary>An overlay's place (<see cref="OverlaySettings"/>): its anchor, which corner that is, and its width.</summary>
     private static string[] Overlay(string field) =>
-        new[] { field + ".AnchorX", field + ".AnchorY", field + ".Anchored", field + ".AnchorFor", field + ".Width" };
+        new[] { field + ".AnchorX", field + ".AnchorY", field + ".Anchored", field + ".AnchorFor", field + ".Width", field + ".Grows" };
 
     /// <summary>
     /// Window places' fields: the meter's anchor and the height you gave it, each overlay's anchor and width, the plan
@@ -224,7 +224,7 @@ public static class ProfileItems
     /// </summary>
     public static readonly IReadOnlyList<string> PlaceFields = new[]
         {
-            new[] { "MeterAnchorX", "MeterAnchorY", "MeterAnchored", "MeterAnchorFor", "MeterHeight" },
+            new[] { "MeterAnchorX", "MeterAnchorY", "MeterAnchored", "MeterAnchorFor", "MeterHeight", "MeterGrows" },
             Overlay("CalloutOverlay"),
             Overlay("Cooldowns"),
             Overlay("ReadyCheck"),
@@ -254,7 +254,8 @@ public static class ProfileItems
             SettingId.DeathRecapWho),
         Switch("cooldowns", "Party cooldowns", "Shown in these duties.", "Cooldowns.Show", "Party cooldowns on", "Party cooldowns off", SettingId.CdShow),
         new ProfileItem(PlacesId, "Window places", "Its own places for every window: Arrange windows in these duties moves these.", ProfileControl.Places,
-            PlaceFields, new[] { SettingId.Arrange }) { On = "Own window places" },
+            PlaceFields, new[] { SettingId.Arrange, SettingId.MeterGrows, SettingId.CalloutGrows, SettingId.CdGrows, SettingId.ReadyCheckGrows,
+                SettingId.DeathRecapGrows }) { On = "Own window places" },
         new ProfileItem("size", "Window size", "Every window's, beside Dalamud's scale.", ProfileControl.Size, new[] { "WindowSize" },
             new[] { SettingId.WindowFit, SettingId.WindowScale }),
     };

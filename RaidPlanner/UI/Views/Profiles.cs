@@ -23,6 +23,9 @@ public sealed partial class MainWindow
     /// <summary>The kind of duty you're in (set by the plugin), for the profile cards' "Now".</summary>
     public Func<DutyKind>? DutyKindHere { get; set; }
 
+    /// <summary>Puts the plan window where the settings say (after a profile's window places come out of effect here).</summary>
+    public Action? PlanPlaceBack { get; set; }
+
     /// <summary>The profile being edited (its id), or null for the list.</summary>
     private string? profileEditing;
 
@@ -225,9 +228,11 @@ public sealed partial class MainWindow
     private void DeleteProfile(SettingsProfile p)
     {
         var title = ProfileItems.Title(p);
+        var wasActive = ReferenceEquals(ProfileLayer.Active(config), p);
         ProfileLayer.Delete(config, config, p);
         profileEditing = null;
         config.Save();
+        if (wasActive) PlanPlaceBack?.Invoke();
         Notify($"{title} deleted", ToastKind.Ok, Icon.Trash);
     }
 
@@ -299,6 +304,8 @@ public sealed partial class MainWindow
             if (on) ProfileLayer.Follow(config, config, p, item);
             else ProfileLayer.Override(config, config, p, item);
             config.Save();
+            // Window places changed for the profile in effect: the plan window goes where they now say (the others follow by themselves).
+            if (item.Id == ProfileItems.PlacesId && ReferenceEquals(ProfileLayer.Active(config), p)) PlanPlaceBack?.Invoke();
         }
         Kit.Reserve(at, w, h);
     }

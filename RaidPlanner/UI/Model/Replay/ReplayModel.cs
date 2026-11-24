@@ -168,7 +168,7 @@ public sealed class ReplayModel
         if (outcome == Outcome.Clear) return $"{pull} · {(deaths > 0 ? Words.Count(deaths, "death") : "nobody died")}";
         var parts = new List<string> { pull };
         if (!string.IsNullOrWhiteSpace(at)) parts.Add($"at {at}");
-        if (outcome == Outcome.Wipe && boss is { } b && double.IsFinite(b)) parts.Add($"the boss at {Math.Round(b).ToString(CultureInfo.InvariantCulture)}%");
+        if (outcome == Outcome.Wipe && boss is { } b && double.IsFinite(b)) parts.Add($"the boss at {Math.Round(b, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture)}%");
         return string.Join(" · ", parts);
     }
 
