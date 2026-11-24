@@ -266,10 +266,13 @@ public sealed class ReplayTrack
         var lastFrame = rec.Frames.Count > 0 ? rec.Frames[^1].T : 0;
         var end = Math.Max(rec.Duration, lastFrame);
         var roles = ReplayShapes.InferRoles(rec);
+        var arena = ReplayArena.Guess(rec);
+        // A line that runs through its caster is drawn centred on it (the site's actionShape: throughShape of shapeFor).
+        var through = ReplayShapes.ThroughLines(rec, arena);
         var shapes = new Dictionary<uint, ReplayShape?>();
         ReplayShape? ShapeOf(uint a)
         {
-            if (!shapes.TryGetValue(a, out var s)) shapes[a] = s = ReplayShapes.Of(rec, a, roles);
+            if (!shapes.TryGetValue(a, out var s)) shapes[a] = s = ReplayShapes.Through(ReplayShapes.Of(rec, a, roles), through.Contains(a));
             return s;
         }
         string Name(uint a) => ReplayShapes.ActionName(rec.Actions, a);
@@ -590,7 +593,6 @@ public sealed class ReplayTrack
             }
 
         // How far each knockback reaches: its own circle, else the arena.
-        var arena = ReplayArena.Guess(rec);
         float HitboxOf(int id) => index.TryGetValue(id, out var i) ? entities[i].Hitbox : 0;
         foreach (var c in casts)
             if (c.Shape is { } sh && (sh.Kind == ShapeKind.Knockback || sh.Role == MechRole.Knockback))

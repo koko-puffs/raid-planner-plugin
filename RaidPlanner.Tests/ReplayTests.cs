@@ -218,6 +218,27 @@ public class ReplayTests
     }
 
     [Fact]
+    public void A_floor_line_that_hit_someone_behind_its_caster_runs_through_it()
+    {
+        // The site's throughLines: MT stands behind the helper (it faces south, MT is north of it), H2 in front.
+        Recording Line(params int[] hit) => Pull(p =>
+        {
+            p.Actions[9] = new ActionInfo("Fortune-blade Sigil", 12, 40, 8, "", 3);
+            p.Events.Add(new CastEvent(10, 150, 9, 3, 100, 100, 0, 0, null, null));
+            p.Events.Add(new HitEvent(13.1, 150, 9, 100, 100, 0, 100, 100, hit));
+        });
+        var through = ReplayTrack.Build(Line(1));
+        Assert.Equal((20f, 20f, false), (through.Casts[0].Shape!.Front, through.Casts[0].Shape!.Back, through.Casts[0].Shape!.Hitbox));
+        var t = new ReplayScene(through, Frame);
+        t.At(12);
+        var tele = t.Teles.Single();
+        Assert.Equal((BoardKind.Rect, 0f, 0f, 400f), (tele.Kind, tele.X, tele.Y, tele.Length));
+        // MT behind and untouched: it only goes forward.
+        var forward = ReplayTrack.Build(Line(2)).Casts[0].Shape!;
+        Assert.Equal((40f, 0f), (forward.Front, forward.Back));
+    }
+
+    [Fact]
     public void Turns_a_casts_telegraph_with_its_caster()
     {
         var r = Pull(p =>

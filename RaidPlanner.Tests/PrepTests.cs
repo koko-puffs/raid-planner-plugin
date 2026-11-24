@@ -161,6 +161,22 @@ public class PrepTests
     }
 
     [Fact]
+    public void A_lines_hp_after_is_never_past_their_max_and_unknown_when_the_hp_before_was()
+    {
+        // A heal's amount has its overheal in it (the meter's recap keeps the whole heal): 150,000 of 152,000 healed for 41,230.
+        var d = new DeathEntry(1, "MT", "Velka Moor", 252, "Latent Defect", 182_400, 41_200, false, new[]
+        {
+            new RecapLine(247.9, "Tetragrammaton", 41_230, 150_000, "Koko Nyan"),
+            new RecapLine(249.0, "Auto-attack", -9_000, -1, string.Empty),
+            new RecapLine(252.0, "Latent Defect", -182_400, 141_200, string.Empty),
+        }, 152_000);
+        var c = DeathRecapView.Card(3, 0, d, "PLD", "tank", true);
+        Assert.Equal(152_000, c.Rows[0].HpAfter);
+        Assert.Equal(-1, c.Rows[1].HpAfter);
+        Assert.Equal(0, c.Rows[2].HpAfter);
+    }
+
+    [Fact]
     public void The_cards_words()
     {
         Assert.Equal("−5.8 s", DeathRecapView.Offset(-5.8));
