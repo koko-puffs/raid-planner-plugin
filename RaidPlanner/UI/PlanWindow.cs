@@ -121,7 +121,11 @@ public sealed class PlanWindow : Window
     private bool sizedOnce;
 
     /// <summary>Puts it here at its next frame (screen px), and this size when given.</summary>
+    /// <summary>Puts it at <paramref name="pos"/> (screen px) with <paramref name="size"/> in CSS px (as <see cref="Configuration.PlanPlaceW"/>).</summary>
     public void PutAt(Vector2 pos, Vector2? size) => putAt = (pos, size);
+
+    /// <summary>The scale its drawn size (<see cref="Drawn"/>, screen px) is at: screen px over CSS px.</summary>
+    public float DrawnScale => follower.Seen;
 
     /// <summary>Reset places (Arrange windows): at the right of the screen, centred down it (<see cref="ArrangeLayout.PlanFirst"/>), its size kept.</summary>
     public void ResetPlace()

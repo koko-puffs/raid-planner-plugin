@@ -154,8 +154,8 @@ The meter estimates what a barrier soaked from the barrier the game shows on a m
 - Two barriers on one player from two healers (Galvanize and Haima): each healer gets some.
 - A Seraph's or a fairy's barrier (Seraphic Veil, Consolation): credited to the Scholar.
 - The tanks' own barriers (since 0.9.0's review, by the Status sheet's names): a Dark Knight's The Blackest Night
-  ("Blackest Night"), a Paladin's Guardian (Guardian's Will), a Gunbreaker's Brutal Shell, and an Astrologian's The
-  Spire on someone: each credited to whoever put it on, and listed as up on the Mitigation tab.
+  ("Blackest Night"), a Paladin's Guardian (Guardian's Will), and an Astrologian's The Spire on someone (a Gunbreaker's
+  Brutal Shell is left out on purpose): each credited to whoever put it on, and listed as up on the Mitigation tab.
 - A raid-wide just after a party barrier (Succor, Panhaima): every member's hit shares the barrier as the game shows it.
 - The opened-up Mitigation tab on a tank: the busters listed are the boss's busters (not auto-attacks), what's listed
   as up matches what was on (Rampart, Guardian, Reprisal on the boss), and "Mitigation up" looks right for a tank who

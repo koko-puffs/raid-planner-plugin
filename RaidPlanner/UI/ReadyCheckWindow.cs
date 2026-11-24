@@ -33,7 +33,7 @@ public sealed class ReadyCheckWindow : OverlayWindow
     private bool previewPinned;
 
     public ReadyCheckWindow(Configuration config, Fonts fonts, ReadyCheckReader? reader)
-        : base("Ready check###RaidPlannerReadyCheck", config, fonts, () => config.ReadyCheck, 340, new Vector2(0.3f, 0.3f), ArrangePart.ReadyCheck) => this.reader = reader;
+        : base("Ready check###RaidPlannerReadyCheck", config, fonts, () => config.ReadyCheck, 340, new Vector2(0.27f, 0.3f), ArrangePart.ReadyCheck) => this.reader = reader;
 
     /// <summary>The party's in combat (set by the plugin): the pull has started.</summary>
     public Func<bool>? InCombat { get; set; }

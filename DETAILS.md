@@ -1355,7 +1355,7 @@ recorded; just you alone), read four times a second: **cross-world parties count
 everywhere** (before 0.5.0, outside a duty only your own numbers were). Damage between party members isn't kept,
 nor anything between two others; a barrier (a status named on `CombatLists.ShieldNames`, found on the
 English Status sheet: the statuses' names, not the actions', so The Blackest Night's is "Blackest Night"; since 0.9.0 also
-Guardian's Will, Brutal Shell and The Spire) is a shield put on, never healing. A tick (actor control 1541 a DoT's, 1540 a HoT's, since 0.8.2; 23 before) goes to the party
+Guardian's Will and The Spire; not Brutal Shell's, kept up through every combo, as on the site) is a shield put on, never healing. A tick (actor control 1541 a DoT's, 1540 a HoT's, since 0.8.2; 23 before) goes to the party
 member the game names (a pet's owner); a damage tick that names no one, on an enemy, is shared
 between the party members with one of the jobs' DoTs (`CombatLists.DotNames`) on it then (the tick's
 own status when it names one): a whole share each, the remainder to the first in the party list (the
@@ -1599,7 +1599,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   dashes; between pulls in a duty it stays open on the pull just done (since 0.8.2, _Keep it open in duties_,
   `MeterOpenInDuties`, on at first); out of duties, or with that off, it folds to one line between pulls (the last
   fight's length and tag, "Pull 12 · party 163,188", a chevron that opens it again), or hides with _Hide out of
-  combat_. A new pull shows itself, whatever was picked before it.
+  combat_ (which holds in a duty too until there's a pull to keep open). A new pull shows itself, whatever was picked before it.
   Pressing a row opens the meter opened up on that player; a death, on its recap.
 - **Events** (0.4.0; `IMeterSource.Events`, the session's newest 200 a fight): the fight's events as a
   feed, the newest where the top player goes (at the top highest first, at the bottom lowest first; _Order_), a 23px row each: the time in mono
@@ -2611,8 +2611,8 @@ entry).
   going out of sight and back could start a phase. The ready check's meal and tincture rows are checked against the sheets.
 - **The Dark Knight's The Blackest Night is a barrier now**: its status is named "Blackest Night" in the game, and the
   plugin looked for the action's name, so it was never a barrier: not in shields absorbed, never "up" on the Mitigation
-  tab or in the death recap, and recorded as a plain status. Guardian's Will (Guardian's barrier), Brutal Shell's barrier
-  and The Spire's are barriers too now.
+  tab or in the death recap, and recorded as a plain status. Guardian's Will (Guardian's barrier) and The Spire's are
+  barriers too now (Brutal Shell's isn't: a Gunbreaker keeps it up through every combo).
 - **Neutral Sect's barrier is a barrier**: on the party it was counted as mitigation (its absorbed part no one's), and the
   Astrologian's own Neutral Sect (healing up) counted as mitigation up for them; now the party's is a barrier, credited to
   the Astrologian, and theirs is nothing.

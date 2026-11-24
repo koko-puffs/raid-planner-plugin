@@ -178,6 +178,8 @@ public sealed class Plugin : IDalamudPlugin
             windows.AddWindow(profileNotice);
             profileNotice.Undo = () =>
             {
+                // Not while windows are arranged: Arrange windows' Cancel would put the profile's places into your usual ones.
+                if (ArrangeMode.On) return;
                 if (profileSwitcher.Undo() is { } undone) ProfileSwitched(undone);
             };
             window.DutyKindHere = () => profileSwitcher.Kind;

@@ -28,7 +28,7 @@ public sealed class DeathRecapWindow : OverlayWindow
     private double lastLook = double.NegativeInfinity;
 
     public DeathRecapWindow(Configuration config, Fonts fonts)
-        : base("Death recap###RaidPlannerDeathRecap", config, fonts, () => config.DeathRecap, 440, new Vector2(0.72f, 0.18f), ArrangePart.DeathRecap)
+        : base("Death recap###RaidPlannerDeathRecap", config, fonts, () => config.DeathRecap, 440, new Vector2(0.8f, 0.18f), ArrangePart.DeathRecap)
     {
     }
 

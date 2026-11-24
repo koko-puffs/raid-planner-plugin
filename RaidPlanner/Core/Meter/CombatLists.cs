@@ -22,15 +22,18 @@ public static class CombatLists
     /// put on, as a shield (<c>fx</c> kind 3) rather than a status (kind 4). The names are the Status
     /// sheet's, not the actions': The Blackest Night's barrier is "Blackest Night" (rows 1178, 1308; until
     /// 0.9.0 it was listed as the action's name, which no status has, so it was never a barrier). Since 0.9.0
-    /// also the level 100 barriers that were missing: Guardian's Will (Guardian's), Brutal Shell's and the
-    /// Spire card's (each "A … barrier is nullifying damage" on the sheet).
+    /// also two level 100 barriers that were missing: Guardian's Will (Guardian's) and the Spire card's (each "A … barrier is
+    /// nullifying damage" on the sheet). Brutal Shell's barrier (1898) is left out on purpose, as on the site: a Gunbreaker
+    /// keeps it up through every combo, so as a barrier it would have them "covered" and every buster "mitigated" on it.
+    /// The meter's other barriers (Stem the Tide, Tempera Coat, Neutral Sect's, Shade Shift, Arcane Crest, Manaward) are
+    /// <see cref="Mitigations"/>' and not here: the recording's fx kinds stay as they were for them.
     /// </summary>
     public static readonly IReadOnlyList<string> ShieldNames = new[]
     {
         "Galvanize", "Catalyze", "Seraphic Veil", "Eukrasian Diagnosis", "Eukrasian Prognosis", "Differential Diagnosis",
         "Haima", "Haimatinon", "Panhaima", "Panhaimatinon", "Holosakos", "Divine Benison", "Divine Caress", "Intersection",
         "Divine Veil", "Shake It Off", "Blackest Night", "Improvised Finish", "Radiant Aegis", "Stoneskin",
-        "Guardian's Will", "Brutal Shell", "The Spire",
+        "Guardian's Will", "The Spire",
     };
 
     /// <summary>
@@ -117,7 +120,7 @@ public static class CombatLists
     // ---------------------------------------------------------------------------------------------
     // Since 0.9.0: what the meter's Mitigation tab and its shields absorbed read off the status lists (statuses' English
     // names, level 100; a name the sheet doesn't have finds nothing): the invulnerabilities here, the rest from the death
-    // recap's catalogue (Mitigations), so the two agree. Only the meter asks: the recording's lists are as before.
+    // recap's catalogue (Mitigations), so the two agree. Only the meter asks (the recording's own lists are ShieldNames' above).
 
     /// <summary>The tanks' invulnerabilities.</summary>
     public static readonly IReadOnlyList<string> InvulnerableNames = new[] { "Hallowed Ground", "Holmgang", "Living Dead", "Walking Dead", "Superbolide" };

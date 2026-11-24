@@ -356,17 +356,22 @@ public class ProtectionTests
     /// <summary>
     /// 0.9.0's review: the barriers go by the Status sheet's names (xivapi's English Status.csv): The Blackest Night's status
     /// is "Blackest Night" (1178), which until then wasn't a barrier anywhere (the action's name, no status's, was listed), so
-    /// a DRK's barrier was never credited, never "up", and wasn't in the death recap; and Guardian's Will (3830), Brutal
-    /// Shell (1898) and The Spire (3892), each "a … barrier is nullifying damage", weren't listed at all.
+    /// a DRK's barrier was never credited, never "up", and wasn't in the death recap; and Guardian's Will (3830) and The Spire
+    /// (3892), each "a … barrier is nullifying damage", weren't listed at all. Brutal Shell's (1898) is left out on purpose: a
+    /// Gunbreaker keeps it up through every combo, and it would make every buster on them "mitigated".
     /// </summary>
     [Fact]
     public void The_barriers_go_by_the_Status_sheets_names()
     {
-        foreach (var name in new[] { "Blackest Night", "Guardian's Will", "Brutal Shell", "The Spire" })
+        foreach (var name in new[] { "Blackest Night", "Guardian's Will", "The Spire" })
         {
             Assert.Contains(name, CombatLists.ShieldNames);
             Assert.Equal(MitigationKind.Shield, CombatLists.MitigationOf(name));
+            // The death recap's catalogue has each too (so the recap and the Mitigation tab say the same was up).
+            Assert.Contains(Mitigations.Names(), n => n.Name == name && Mitigations.All[n.Index].Kind == MitigationRole.Shield);
         }
+        Assert.DoesNotContain("Brutal Shell", CombatLists.ShieldNames);
+        Assert.Equal(MitigationKind.None, CombatLists.MitigationOf("Brutal Shell"));
         var tbn = Mitigations.Names().Single(n => n.Name == "Blackest Night").Index;
         Assert.Equal("The Blackest Night", Mitigations.All[tbn].Key);
         Assert.Equal(MitigationRole.Shield, Mitigations.All[tbn].Kind);

@@ -172,7 +172,8 @@ public sealed class ArrangeWindow : Window
                     break;
                 case ArrangePart.Plan:
                     config.PlanWindowLocked = was.Locked;
-                    if (was.Anchored) plan.PutAt(new Vector2(was.AnchorX, was.AnchorY), new Vector2(was.Width, was.Height));
+                    // Its size as drawn is in screen px; PutAt takes CSS px (since 0.9.0), so it isn't grown by the scale.
+                    if (was.Anchored) plan.PutAt(new Vector2(was.AnchorX, was.AnchorY), new Vector2(was.Width, was.Height) / MathF.Max(0.01f, plan.DrawnScale));
                     break;
                 default:
                     was.PutBack(Overlay(part).Settings());

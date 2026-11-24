@@ -262,7 +262,8 @@ public sealed partial class MeterWindow : Window
         if (!config.ShowMeter) return false;
         if (!config.MeterEverywhere && InDuty?.Invoke() != true) return false;
         var m = Source?.Invoke();
-        if (config.MeterHideOutOfCombat && !OpenBetweenPulls && m is { InEncounter: false, Waiting: false }) return false;
+        // Kept open in duties on the last pull: before any pull there's nothing to keep open, so Hide it out of combat holds.
+        if (config.MeterHideOutOfCombat && !(OpenBetweenPulls && m?.Current != null) && m is { InEncounter: false, Waiting: false }) return false;
         return true;
     }
 

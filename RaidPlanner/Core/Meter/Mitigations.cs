@@ -120,6 +120,8 @@ public static class Mitigations
         Shield("Panhaima", "SGE", "Panhaima", "Panhaimatinon", "Holosakos"),
         Shield("Radiant Aegis", "SMN"),
         Shield("Improvised Finish", "DNC"),
+        Shield("Guardian's Will", "PLD"),
+        Shield("The Spire", "AST"),
         Shield("Tempera Coat", "PCT", "Tempera Coat", "Tempera Grassa"),
         Shield("Stem the Tide", "WAR"),
         Shield("Shade Shift", "NIN"),
