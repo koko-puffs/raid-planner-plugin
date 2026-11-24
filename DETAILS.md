@@ -1448,7 +1448,9 @@ bar; none outside a party that fills one.
   needed. It's **credited** to whoever's barrier was on them: their status list read each frame during an encounter (the
   barriers by name, `CombatLists.ShieldNames` and the death recap's catalogue's, each with its source; a pet's is its owner's), shared
   evenly between several (`GuardRules.Split`); for a member whose list isn't read (out of sight), the barriers party
-  members put on them in the last 30 s (their actions' effects). A barrier of no one in the party (or none named) is no
+  members put on them in the last 30 s (their actions' effects). The lists kept are let go as an encounter begins (since
+  0.9.0's review: they're read only during one, so what was kept was the last encounter's, and an enemy's hit that began
+  the next was credited to barriers long gone); until its first frame reads them, it's the barriers put on. A barrier of no one in the party (or none named) is no
   one's. Never part of Healing (as before, and as the site counts it): it's beside it.
 - **Heals cast** (`MeterProtection.GcdHeals`, `OgcdHeals`): each use of a heal or barrier once, however many it landed on
   (its effects come at one time), on or off the GCD (`CombatKinds.Gcd`); pets' and the limit break's left out. Each heal's
