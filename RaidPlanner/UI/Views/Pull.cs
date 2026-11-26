@@ -13,7 +13,7 @@ namespace RaidPlanner.UI;
 /// A pull's own screen (0.8.0, the mock-ups' plug-main "A pull"), under the tabs (the Pulls tab's): All pulls to go
 /// back, Save as file and Delete (asked first); the eyebrow (when, the duty), the pull's number as a callout with its
 /// outcome and length; the pull in a sentence; the pull to its own scale (its phases, a skull at each death); its
-/// upload (On your Raid Codex since 23:49 with Open in Review, or the send); and what happened: a row a mechanic
+/// upload (On your Raid Codex since 23:49 with Open the pull, or the send); and what happened: a row a mechanic
 /// (mono time on the rail, the mechanic drawn small in a square well, what it asks before what it is, "×12"), deaths
 /// as red rows with who died to what. The pull is read from its file on a worker, once.
 /// </summary>
@@ -23,9 +23,6 @@ public sealed partial class MainWindow
     private sealed record PullState(string File, PullView? View, string? Problem);
 
     private volatile PullState? pullView;
-
-    /// <summary>The pull's two views (0.9.0): what happened, and the pull played back.</summary>
-    private static readonly string[] PullModes = { "Summary", "Replay" };
 
     private void LoadPull(RecordingInfo info)
     {
@@ -89,40 +86,29 @@ public sealed partial class MainWindow
         Kit.Reserve(ep, w, Kit.EyebrowH);
         Kit.Gap(10);
 
-        // PULL 12 [WIPE] ……… 6:31 [Summary | Replay] (0.9.0: the pull played back, Replay.cs)
+        // PULL 12 [WIPE] ……… 6:31 [Open on the site] (0.9.1: the pull's replay is the site's; the plugin's went, so the two never
+        // drift apart).
         var at = Kit.At;
         var (tag, kind) = OutcomeTag(info.Outcome);
         var length = Format.Clock(info.Duration);
         var lengthW = Txt.Width(length, Face.MonoSemibold, 18);
         var rowH = S(26);
         var title = $"Pull {Math.Max(1, info.Pull)}";
-        var modeW = Kit.SegmentedWidth(PullModes);
-        // On the Raid Codex: a link to it there beside the switch, while Replay is shown (its summary has its own).
-        const string openSite = "Open on the Raid Codex";
-        var sentId = pullReplay ? (store.Find(info.File) ?? info).SentId : null;
-        var openW = sentId != null ? Kit.ButtonWidth(openSite, BtnSize.Sm, Icon.ExternalLink, Btn.Quiet) + S(8) : 0;
-        var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12) - modeW - S(16) - openW;
+        const string openSite = "Open on the site";
+        var sentId = (store.Find(info.File) ?? info).SentId;
+        var openW = Kit.ButtonWidth(openSite, BtnSize.Sm, Icon.ExternalLink);
+        var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12) - openW - S(16);
         var line = Kit.CalloutLines(title, 22, room, 1)[0];
         var tw = Txt.Line(dl, at, line, Face.Callout, 22, Palette.White, 26);
         Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
-        Txt.LineRight(dl, at.X + w - modeW - S(16) - openW, at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
-        if (sentId != null
-            && Kit.Button("##pull-open-site", new Vector2(at.X + w - modeW - openW, at.Y + (rowH - S(HSm)) / 2), openSite, Btn.Quiet, BtnSize.Sm, Icon.ExternalLink))
-            Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
-        var mode = Kit.Segmented("##pull-mode", new Vector2(at.X + w - modeW, at.Y + (rowH - S(HSm)) / 2), PullModes, pullReplay ? 1 : 0);
-        if (mode != (pullReplay ? 1 : 0))
-        {
-            pullReplay = mode == 1;
-            replayPlaying = false;
-            ImGui.SetScrollY(0);
-        }
+        Txt.LineRight(dl, at.X + w - openW - S(16), at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
+        if (Kit.Button("##pull-open-site", new Vector2(at.X + w - openW, at.Y + (rowH - S(HSm)) / 2), openSite, Btn.Outline, BtnSize.Sm, Icon.ExternalLink, 0,
+                sentId == null, sentId != null
+                    ? "Its replay on the Raid Codex: where everyone stood, what went off, who died to what."
+                    : "On the site once it's uploaded or sent (below). Its replay is there.")
+            && sentId != null)
+            Dalamud.Utility.Util.OpenLink(SiteLink.PullUrl(sentId, "replay"));
         Kit.Reserve(at, w, rowH);
-        if (pullReplay)
-        {
-            DrawReplay(info);
-            Frame.EndBody();
-            return;
-        }
         Kit.Gap(10);
 
         var state = pullView;
@@ -141,7 +127,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// The pull's upload: on your Raid Codex, a box with a tick, since when, and Open in Review as the telegraph (Send
+    /// The pull's upload: on your Raid Codex, a box with a tick, since when, and Open the pull as the telegraph (Send
     /// another copy under it); else where Upload my logs stands with it, and the send as it's always been (link, send,
     /// sending, failed).
     /// </summary>
@@ -155,7 +141,7 @@ public sealed partial class MainWindow
             var at = Kit.At;
             var w = Kit.Width;
             var dl = Kit.Dl;
-            const string open = "Open in Review";
+            const string open = "Open the pull";
             var bw = Kit.ButtonWidth(open, BtnSize.Sm, Icon.ExternalLink, Btn.Tele);
             var h = S(HSm);
             Kit.Tick(dl, new Vector2(at.X + S(8), at.Y + h / 2), 16);
@@ -163,7 +149,7 @@ public sealed partial class MainWindow
             var tx = at.X + S(16) + S(10);
             Txt.Line(dl, new Vector2(tx, at.Y), Txt.Fit(text, Face.Sans, 13, at.X + w - bw - S(12) - tx), Face.Sans, 13, Palette.Text, HSm);
             if (Kit.Button("##pull-review", new Vector2(at.X + w - bw, at.Y), open, Btn.Tele, BtnSize.Sm, Icon.ExternalLink))
-                Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
+                Dalamud.Utility.Util.OpenLink(PullUrl(sentId));
             Kit.Reserve(at, w, h);
             Kit.EndPanel();
             Kit.Gap(8);

@@ -307,12 +307,13 @@ public static class SiteLink
         : token.Length <= 8 ? new string('•', 8)
         : (token.StartsWith("rpp_", StringComparison.Ordinal) ? "rpp_" : string.Empty) + new string('•', 8) + token[^4..];
 
-    /// <summary>Where a sent pull opens: the Raid Codex, with it ready to make into a plan.</summary>
-    public static string OpenUrl(string id) => $"{CodexUrl}?from-game={Uri.EscapeDataString(id)}";
-
-    /// <summary>A sent pull in Review on a plan (Open in Review, when the plugin has that duty's plan).</summary>
-    public static string ReviewUrl(string planId, string sentId) =>
-        $"{CodexUrl}/plan/{Uri.EscapeDataString(planId)}/review?pull={Uri.EscapeDataString(sentId)}";
+    /// <summary>
+    /// A pull of yours on the site by its id (the one a send or an upload gives back): its night's report with the pull picked
+    /// (the site's <c>/raid-codex/pulls/:id</c>, which finds the night), on <paramref name="view"/> when given (its Replay,
+    /// <c>replay</c>). Open the pull, and Open on the site, go here (0.9.1; Review on a plan, or From the game, before).
+    /// </summary>
+    public static string PullUrl(string id, string? view = null) =>
+        $"{CodexUrl}/pulls/{Uri.EscapeDataString(id)}" + (view != null ? $"?view={Uri.EscapeDataString(view)}" : string.Empty);
 
     public static bool IsUuid(string? id) => id != null && Uuid.IsMatch(id);
 

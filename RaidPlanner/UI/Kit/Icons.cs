@@ -10,7 +10,6 @@ namespace RaidPlanner.UI;
 public enum Icon
 {
     Play,
-    Pause,
     Square,
     Eye,
     List,
@@ -83,7 +82,6 @@ public enum Icon
     Shield,
     PanelRight,
     RefreshCw,
-    Maximize,
     Zap,
     ArrowLeftRight,
     Copy,
@@ -96,10 +94,6 @@ public enum Icon
     Wrench,
     /// <summary>0.9.0: settings profiles (Settings → Profiles, the notice as one comes into effect, Home's chip).</summary>
     Layers,
-    /// <summary>0.9.0: Replay's transport (the step before and after) and its dock filling the window and back.</summary>
-    SkipBack,
-    SkipForward,
-    Minimize,
 }
 
 /// <summary>
@@ -119,7 +113,6 @@ public static class Icons
     private static readonly Dictionary<Icon, (string[] Paths, bool Filled)> Source = new()
     {
         [Icon.Play] = (new[] { "M7 4 20 12 7 20 7 4Z" }, true),
-        [Icon.Pause] = (new[] { Rect(14, 4, 4, 16, 1), Rect(6, 4, 4, 16, 1) }, false),
         [Icon.Square] = (new[] { Rect(5, 5, 14, 14, 2) }, false),
         [Icon.Eye] = (new[] { "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z", Circle(12, 12, 3) }, false),
         [Icon.List] = (new[] { "M8 6H21", "M8 12H21", "M8 18H21", "M3 6H3.01", "M3 12H3.01", "M3 18H3.01" }, false),
@@ -221,7 +214,6 @@ public static class Icons
         [Icon.Shield] = (new[] { "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" }, false),
         [Icon.PanelRight] = (new[] { Rect(3, 3, 18, 18, 2), "M15 3v18" }, false),
         [Icon.RefreshCw] = (new[] { "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5" }, false),
-        [Icon.Maximize] = (new[] { "M15 3h6v6", "M9 21H3v-6", "M21 3l-7 7", "M3 21l7-7" }, false),
         [Icon.Inbox] = (new[] { "M22 12h-6l-2 3h-4l-2-3H2", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }, false),
         // 0.4.0: the Events tab's marks, Copy as text, the callouts' sound, the cooldown tracker.
         [Icon.Zap] = (new[] { "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" }, false),
@@ -247,10 +239,6 @@ public static class Icons
             "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
             "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
         }, false),
-        // 0.9.0: Replay.
-        [Icon.SkipBack] = (new[] { "M19 20 9 12 19 4 19 20Z", "M5 19V5" }, false),
-        [Icon.SkipForward] = (new[] { "M5 4 15 12 5 20 5 4Z", "M19 5V19" }, false),
-        [Icon.Minimize] = (new[] { "M4 14h6v6", "M20 10h-6V4", "M14 10l7-7", "M3 21l7-7" }, false),
     };
 
     private static readonly Dictionary<Icon, (List<SvgPath.Sub> Subs, bool Filled)> Parsed = new();

@@ -162,13 +162,8 @@ The meter estimates what a barrier soaked from the barrier the game shows on a m
   held the boss the whole time.
 - A raid-wide from an invisible helper: Reprisal, Addle and Feint on the boss still show as up for it.
 
-## 16. Replay in the window (0.9.0)
+## 16. Open on the site (0.9.1; the window's Replay went)
 
-- Open a kept pull and press _Replay_: the board, the right panel and the dock fit at the main window's smallest
-  width (1040) and at a bigger window size (Settings → Windows → Size). Play, the step before and after, and pressing
-  or dragging on the steps and the ruler to seek.
-- Compare one pull with the same pull's replay on the Raid Codex: the party where they stood, the mechanics' shapes
-  and where they point, the bosses' casts and HP, the debuffs with their seconds, the deaths' skulls.
-- The job and status icons (and a status with stacks), the dock grown to fill the window, and a long pull (10 minutes
-  or more) playing smoothly.
-- A pull kept by an older plugin version (before 0.4): it opens and says what it can't show.
+- Open a kept pull that's on your Raid Codex and press _Open on the site_: the browser opens the pull's Replay on the
+  site. Before it's uploaded or sent the button is dimmed and says why.
+- _Open the pull_ (Home's latest pull, a pull's upload box, the toast after a send) opens the pull's page there.

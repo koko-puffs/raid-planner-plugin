@@ -16,7 +16,7 @@ namespace RaidPlanner.UI;
 /// Sending a pull to the Raid Codex, saving it as a file, and linking your account (Settings →
 /// Account), as the mock-ups' "Sending" draws it: not linked, Link your account is the telegraph;
 /// linked, Send to Raid Codex in the same place; sending, the button holds still and dims over a
-/// cast bar, with a quiet Stop; sent, a ready tick and Open in Review; failed, a red box that says
+/// cast bar, with a quiet Stop; sent, a ready tick and Open the pull; failed, a red box that says
 /// what to do and the one button that does it. A send reads the pull's file and posts it from a
 /// worker. The token is never logged.
 /// </summary>
@@ -119,7 +119,7 @@ public sealed partial class MainWindow
                     if (result.Sent)
                     {
                         var id = result.Id!;
-                        Notify("Sent to your Raid Codex", ToastKind.Ok, action: "Open", onAction: () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, id)));
+                        Notify("Sent to your Raid Codex", ToastKind.Ok, action: "Open", onAction: () => Dalamud.Utility.Util.OpenLink(PullUrl(id)));
                     }
                     else if (result.Why != "Stopped.")
                     {
@@ -142,16 +142,8 @@ public sealed partial class MainWindow
         });
     }
 
-    /// <summary>
-    /// Where Open in Review goes: the plan for the pull's duty in Review on that pull, or From the game
-    /// (the site's dialog for a sent pull) when the plugin has no plan for that duty.
-    /// </summary>
-    private string ReviewUrl(RecordingInfo info, string sentId)
-    {
-        if (plans.Plan is { Game: { } g } plan && string.Equals(g.Duty, info.Duty, StringComparison.OrdinalIgnoreCase))
-            return SiteLink.ReviewUrl(plan.Id, sentId);
-        return SiteLink.OpenUrl(sentId);
-    }
+    /// <summary>Where Open the pull goes: the pull's own page on the site (its night's report, the pull picked).</summary>
+    private static string PullUrl(string sentId) => SiteLink.PullUrl(sentId);
 
     /// <summary>Saves a copy of a pull's file wherever you like (to import on the site, or to share).</summary>
     private void SaveAs(RecordingInfo info)
@@ -246,15 +238,15 @@ public sealed partial class MainWindow
             return;
         }
 
-        // Sent this session: a ready tick, Open in Review; Send again goes quiet (Save as file when it was made smaller).
+        // Sent this session: a ready tick, Open the pull; Send again goes quiet (Save as file when it was made smaller).
         if (s?.Result is { Sent: true } sent && sent.Id is { } sid)
         {
             var at = Kit.At;
             Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, sent.Thinned ? "Sent, with fewer of the party's places: it was too big whole." : "Sent. It's waiting in your Raid Codex."));
             Kit.Gap(10);
-            var (a, b) = ButtonPair(id, "Open in Review", Btn.Outline, Icon.ExternalLink, sent.Thinned ? "Save as file" : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
+            var (a, b) = ButtonPair(id, "Open the pull", Btn.Outline, Icon.ExternalLink, sent.Thinned ? "Save as file" : "Send again", Btn.Quiet, sent.Thinned ? Icon.Download : Icon.Send,
                 secondTip: sent.Thinned ? saveTip : "It's in your Raid Codex already: this sends another copy.");
-            if (a) Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sid));
+            if (a) Dalamud.Utility.Util.OpenLink(PullUrl(sid));
             if (b)
             {
                 if (sent.Thinned) SaveAs(info);
@@ -268,7 +260,7 @@ public sealed partial class MainWindow
         {
             var at = Kit.At;
             var when = Format.SentLine(store.Find(info.File)?.SentAt ?? info.SentAt ?? info.RecordedAt, DateTimeOffset.Now);
-            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, when, id + "review", "Open in Review", () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId))));
+            Kit.Reserve(at, Kit.Width, SentLine(at, Kit.Width, when, id + "review", "Open the pull", () => Dalamud.Utility.Util.OpenLink(PullUrl(sentId))));
             Kit.Gap(10);
             var (a, b) = ButtonPair(id, "Send again", Btn.Quiet, Icon.Send, save, Btn.Quiet, Icon.Download,
                 firstTip: "It's in your Raid Codex already: this sends another copy.", secondTip: saveTip);
@@ -350,7 +342,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// A pull's upload in one row (Home's latest pull): on your Raid Codex (a tick, when, Open in Review); being sent
+    /// A pull's upload in one row (Home's latest pull): on your Raid Codex (a tick, when, Open the pull); being sent
     /// (the cast bar, Stop); a send that failed (the red box and its one thing to do); waiting to upload; or not
     /// uploaded, with Send (linked) or Link your account.
     /// </summary>
@@ -392,9 +384,9 @@ public sealed partial class MainWindow
             text = s?.Result is { Thinned: true } ? "Uploaded, with fewer of the party's places" : $"Uploaded {Format.Ago(when, DateTimeOffset.Now)}";
             ink = Palette.Muted;
             icon = Icon.Check;
-            button = "Open in Review";
+            button = "Open the pull";
             buttonIcon = Icon.ExternalLink;
-            press = () => Dalamud.Utility.Util.OpenLink(ReviewUrl(info, sentId));
+            press = () => Dalamud.Utility.Util.OpenLink(PullUrl(sentId));
         }
         else
         {

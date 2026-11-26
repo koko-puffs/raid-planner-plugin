@@ -28,7 +28,6 @@ Record the fights you're in, then make them into plans on
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
 - **Or saves it as a file** to import on the site yourself (Import, on the Raid Codex's front page).
 - **Shows a pull's timeline** before you send it: every mechanic in order, with its icon.
-- **Replays a pull** on its arena, as the Raid Codex does: the party, the mechanics, HP, debuffs and deaths, with Play.
 - **Shows your plan in the duty.** A small window with the step's callout, its board and its notes,
   which moves along with the pull by itself, and who uses which cooldown in it. Each step said in chat
   a few seconds before it comes, and the next few on screen, counting down to each (with yours: "You:
@@ -69,8 +68,8 @@ and callouts, the party's cooldowns, your progress), link your account, choose h
 place the windows. You can run it again from Settings → Features.
 
 1. Go into a duty and fight. The server info bar shows **● Rec 2:31** while a pull is recorded.
-2. `/raidcodex`: **Home** says what's on and shows the latest pull in a sentence, with **Open in Review**;
-   **Pulls** lists every pull kept. A pull goes to your Raid Codex as it ends once your account is linked
+2. `/raidcodex`: **Home** says what's on and shows the latest pull in a sentence, with **Open the pull**;
+   **Pulls** lists every pull kept; a pull's **Open on the site** plays it back there. A pull goes to your Raid Codex as it ends once your account is linked
    (Settings → Account and privacy, with a token from the site's Settings → Raid Codex → In-game plugin), or
    **Send to Raid Codex** / **Save as file** on the pull.
 3. On the site: _From the game_ → **Make a plan**. Pick where the party goes (where they stood,

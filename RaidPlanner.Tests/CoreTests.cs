@@ -651,10 +651,10 @@ public class SiteLinkTests
         // 0.5.1: the site's tool moved to /raid-codex (the old /raid-planner addresses redirect).
         Assert.Equal("https://www.kokos-tools.com/raid-codex", SiteLink.CodexUrl);
         Assert.Equal("https://www.kokos-tools.com/raid-codex?settings=raid-plugin", SiteLink.TokensUrl);
-        Assert.Equal("https://www.kokos-tools.com/raid-codex?from-game=a%20b", SiteLink.OpenUrl("a b"));
-        Assert.Equal("https://www.kokos-tools.com/raid-codex/plan/p%2F1/review?pull=s%261",
-            SiteLink.ReviewUrl("p/1", "s&1"));
-        foreach (var url in new[] { SiteLink.CodexUrl, SiteLink.TokensUrl, SiteLink.OpenUrl("x"), SiteLink.ReviewUrl("p", "s") })
+        // 0.9.1: a pull opens on its own page (the site's /pulls/:id finds its night), its Replay by its view.
+        Assert.Equal("https://www.kokos-tools.com/raid-codex/pulls/a%20b", SiteLink.PullUrl("a b"));
+        Assert.Equal("https://www.kokos-tools.com/raid-codex/pulls/s%261?view=replay", SiteLink.PullUrl("s&1", "replay"));
+        foreach (var url in new[] { SiteLink.CodexUrl, SiteLink.TokensUrl, SiteLink.PullUrl("x"), SiteLink.PullUrl("x", "replay") })
             Assert.DoesNotContain("raid-planner", url);
     }
 

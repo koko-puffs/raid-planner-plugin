@@ -14,7 +14,7 @@ namespace RaidPlanner.UI;
 /// Home (0.8.0, the mock-ups' plug-main "Home · ready" and "Home · recording"), under the tabs. Between pulls: the
 /// status card (ready for the next pull, waiting for it, not in a duty, recording off; the duty and the pull's number
 /// when known) with a chip per main part, each opening its settings; the latest pull (its number as a small callout,
-/// the outcome, the length, the pull in one sentence, its upload and Open in Review); the night's earlier pulls as
+/// the outcome, the length, the pull in one sentence, its upload and Open the pull); the night's earlier pulls as
 /// rows, with All pulls. While a pull is recorded: the ember card (REC, Stop and keep it, the clock over a cast bar to
 /// the plan's length, the step it's on and the next), what's being recorded, and the latest pull dimmed under it.
 /// Before the first pull, the Boss asleep and three steps numbered as waymarks.
@@ -309,7 +309,7 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// The latest pull's card: "Pull 12" as a small callout, its outcome and its length in mono; the duty when the
-    /// status card doesn't name it; the pull in a sentence; its upload, with Open in Review. The top part opens the pull.
+    /// status card doesn't name it; the pull in a sentence; its upload, with Open the pull. The top part opens the pull.
     /// </summary>
     private void DrawLatest(RecordingInfo info)
     {
