@@ -7,29 +7,41 @@ using static RaidPlanner.UI.Theme;
 
 namespace RaidPlanner.UI;
 
-/// <summary>A tag's kind (`.rp-tag`): what it says in colour.</summary>
+/// <summary>A tag's tone (`.rp-tag`, the site's Tag): what it says in colour, one meaning each.</summary>
 public enum TagKind
 {
-    /// <summary>A hairline and muted words: "Not kept".</summary>
+    /// <summary>The raised ground, a hairline at 12% and muted words: "Not kept", "Ended".</summary>
     Default,
 
-    /// <summary>A white wash, no edge: "Waiting for the pull", "DoT".</summary>
+    /// <summary>A white wash, no edge: "Preview", "DoT".</summary>
     Plain,
 
-    /// <summary>Ready green with a beating dot: "Linked".</summary>
+    /// <summary>Ready green with a beating dot: something live ("Linked", "Live").</summary>
     Live,
 
-    /// <summary>Ember: what's live ("Now").</summary>
+    /// <summary>Ember: time going by, what's now ("Now").</summary>
     Ember,
 
     /// <summary>Ember with a beating ember dot: a pull being recorded.</summary>
     Rec,
 
-    /// <summary>Danger red: a wipe.</summary>
+    /// <summary>A wipe: neutral, as plain words (red is for deaths and the enrage; the site's since its redesign).</summary>
     Wipe,
 
     /// <summary>White with dark words: a clear.</summary>
     Clear,
+
+    /// <summary>Danger red: the enrage, a death, what went wrong.</summary>
+    Danger,
+
+    /// <summary>Ready green, no dot: it went right ("Ready", "Mitigated").</summary>
+    Ready,
+
+    /// <summary>Amber: worth a look.</summary>
+    Warn,
+
+    /// <summary>A phase (`.rp-tag.ph`): the well and the controls' line, the text colour ("P4").</summary>
+    Phase,
 }
 
 /// <summary>What a mechanic asks (`.rp-intent`), said before what it is, each with its colour and shape.</summary>
@@ -54,7 +66,7 @@ public enum WellKind
 }
 
 /// <summary>
-/// Ready Check's marks: tags (mono capitals in 22px boxes), the ready tick, spots (round, in their
+/// The Raid Codex's marks: tags (mono capitals in 20px boxes), the ready tick, spots (round, in their
 /// role's colour, on a dark halo), intents, the mono eyebrow, square wells, the reticle that closes
 /// in on what's pointed at, the beating dot, cast bars (all time), the callout, and the error and
 /// warning boxes.
@@ -64,43 +76,52 @@ public static partial class Kit
     // ---------------------------------------------------------------------------------------------
     // Tags.
 
-    private const float TagEm = 0.05f;
+    private const float TagEm = 0.06f;
+
+    /// <summary>A tag's height (CSS px): the site's 20.</summary>
+    public const float TagH = 20;
+
+    /// <summary>A tag's words: Geist Mono 600 (the site's 10.5px; 10 here, the size loaded).</summary>
+    private const int TagPx = 10;
 
     private static (Vector4 Fill, Vector4 Edge, Vector4 Ink, Vector4? Dot) TagColors(TagKind kind) => kind switch
     {
-        TagKind.Plain => (Palette.Rgba(255, 255, 255, 0.07f), Vector4.Zero, Palette.Text, null),
+        TagKind.Plain or TagKind.Wipe => (Palette.Rgba(255, 255, 255, 0.07f), Vector4.Zero, Palette.Text, null),
         TagKind.Live => (Palette.ReadyWash, Palette.ReadyLine, Palette.Ready, Palette.Ready),
+        TagKind.Ready => (Palette.ReadyWash, Palette.ReadyLine, Palette.Ready, null),
         TagKind.Ember => (Palette.EmberWash, Palette.EmberLine, Palette.Ember, null),
         TagKind.Rec => (Palette.EmberWash, Palette.EmberLine, Palette.Ember, Palette.Ember),
-        TagKind.Wipe => (Palette.DangerWash, Palette.DangerEdge, Palette.Danger, null),
-        TagKind.Clear => (Palette.White, Vector4.Zero, Palette.OnEmber, null),
-        _ => (Vector4.Zero, Palette.Line2, Palette.Muted, null),
+        TagKind.Danger => (Palette.DangerWash, Palette.DangerLine, Palette.Danger, null),
+        TagKind.Warn => (Palette.WarnWash, Palette.WarnLine, Palette.Warn, null),
+        TagKind.Phase => (Palette.Well, Palette.CtlLine, Palette.Text, null),
+        TagKind.Clear => (Palette.White, Palette.White, Palette.OnReady, null),
+        _ => (Palette.Raised, Palette.Line2, Palette.Muted, null),
     };
 
     public static float TagWidth(string text, TagKind kind) =>
-        S(8) * 2 + (TagColors(kind).Dot != null ? S(6 + 5.6f) : 0) + Txt.SpacedWidth(Txt.Caps(text), TagFace(kind), 11, TagEm);
+        S(7) * 2 + (TagColors(kind).Dot != null ? S(6 + 5) : 0) + Txt.SpacedWidth(Txt.Caps(text), Face.MonoSemibold, TagPx, TagEm);
 
-    private static Face TagFace(TagKind kind) => kind == TagKind.Clear ? Face.MonoSemibold : Face.Mono;
-
-    /// <summary>A tag (`.rp-tag`): mono capitals, 11px at +0.05em, in a box 22 tall (or <paramref name="height"/>) with 6px corners. Returns its width.</summary>
-    public static float Tag(ImDrawListPtr dl, Vector2 pos, string text, TagKind kind, float height = 22)
+    /// <summary>
+    /// A tag (`.rp-tag`): Geist Mono 600 capitals at +0.06em, in a box 20 tall (or <paramref name="height"/>) with 4px corners,
+    /// 7px in, in its tone's wash, line and words (a live one with its beating dot). Returns its width.
+    /// </summary>
+    public static float Tag(ImDrawListPtr dl, Vector2 pos, string text, TagKind kind, float height = TagH)
     {
         var (fill, edge, ink, dot) = TagColors(kind);
         var caps = Txt.Caps(text);
         var w = TagWidth(text, kind);
         var h = S(height);
-        var r = S(Palette.RadiusXs);
+        var r = S(Palette.RadiusTag);
         if (fill.W > 0) dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(fill), r);
         if (edge.W > 0) dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
-        var x = pos.X + S(8);
+        var x = pos.X + S(7);
         if (dot is { } d)
         {
             BeatDot(dl, new Vector2(x + S(3), pos.Y + h / 2), d, true);
-            x += S(6 + 5.6f);
+            x += S(6 + 5);
         }
-        var face = TagFace(kind);
-        var th = Txt.Natural(face, 11);
-        Txt.Spaced(dl, new Vector2(x, pos.Y + (h - th) / 2), caps, face, 11, ink, TagEm);
+        var th = Txt.Natural(Face.MonoSemibold, TagPx);
+        Txt.Spaced(dl, new Vector2(x, pos.Y + (h - th) / 2), caps, Face.MonoSemibold, TagPx, ink, TagEm);
         return w;
     }
 
@@ -249,42 +270,45 @@ public static partial class Kit
     // ---------------------------------------------------------------------------------------------
     // The eyebrow.
 
-    private const float EyebrowEm = 0.09f;
+    private const float EyebrowEm = 0.08f;
 
     /// <summary>
-    /// The eyebrow (`.rp-eyebrow`): mono capitals, 500 11px at +0.09em, faint, cut to fit; a lead
+    /// The eyebrow (`.rp-eyebrow`): mono capitals, 600 11px at +0.08em, faint, cut to fit; above things, never a title. A lead
     /// part in ember before it (`.eyebrow b`: the step's number). Returns its width.
     /// </summary>
     public static float Eyebrow(ImDrawListPtr dl, Vector2 pos, string text, string? lead = null, float maxWidth = 0, Vector4? color = null)
     {
         var x = pos.X;
-        if (lead != null) x += Txt.Spaced(dl, new Vector2(x, pos.Y), Txt.Caps(lead), Face.Mono, 11, Palette.Ember, EyebrowEm) + S(11 * EyebrowEm);
+        if (lead != null) x += Txt.Spaced(dl, new Vector2(x, pos.Y), Txt.Caps(lead), Face.MonoSemibold, 11, Palette.Ember, EyebrowEm) + S(11 * EyebrowEm);
         var caps = Txt.Caps(text);
         if (maxWidth > 0)
         {
             var room = maxWidth - (x - pos.X);
-            if (Txt.SpacedWidth(caps, Face.Mono, 11, EyebrowEm) > room) caps = FitSpaced(caps, Face.Mono, 11, EyebrowEm, room);
+            if (Txt.SpacedWidth(caps, Face.MonoSemibold, 11, EyebrowEm) > room) caps = FitSpaced(caps, Face.MonoSemibold, 11, EyebrowEm, room);
         }
-        x += Txt.Spaced(dl, new Vector2(x, pos.Y), caps, Face.Mono, 11, color ?? Palette.Faint, EyebrowEm);
+        x += Txt.Spaced(dl, new Vector2(x, pos.Y), caps, Face.MonoSemibold, 11, color ?? Palette.Faint, EyebrowEm);
         return x - pos.X;
     }
 
     public static float EyebrowWidth(string text, string? lead = null) =>
-        Txt.SpacedWidth(Txt.Caps(text), Face.Mono, 11, EyebrowEm) + (lead != null ? Txt.SpacedWidth(Txt.Caps(lead), Face.Mono, 11, EyebrowEm) + S(11 * EyebrowEm) : 0);
+        Txt.SpacedWidth(Txt.Caps(text), Face.MonoSemibold, 11, EyebrowEm) + (lead != null ? Txt.SpacedWidth(Txt.Caps(lead), Face.MonoSemibold, 11, EyebrowEm) + S(11 * EyebrowEm) : 0);
 
     /// <summary>The eyebrow's line (its font's own).</summary>
-    public static float EyebrowH => Txt.Natural(Face.Mono, 11);
+    public static float EyebrowH => Txt.Natural(Face.MonoSemibold, 11);
 
     /// <summary>Letter-spaced text cut to a width with "…".</summary>
     public static string FitSpaced(string text, Face face, int px, float em, float width) =>
         Format.Fit(text, s => Txt.SpacedWidth(s, face, px, em), width);
 
-    /// <summary>Mono capitals in a small label (`.fx small`, the meter's column heads): letter-spaced, cut to fit. Returns the width.</summary>
+    /// <summary>
+    /// Mono capitals in a small label (a table's head row, `.tr.hd`: Geist Mono 600, letter-spaced; the facts' labels, the
+    /// meter's column heads), cut to fit. Returns the width.
+    /// </summary>
     public static float Label(ImDrawListPtr dl, Vector2 pos, string text, int px, float em, Vector4 color, float maxWidth = 0)
     {
         var caps = Txt.Caps(text);
-        if (maxWidth > 0 && Txt.SpacedWidth(caps, Face.Mono, px, em) > maxWidth) caps = FitSpaced(caps, Face.Mono, px, em, maxWidth);
-        return Txt.Spaced(dl, pos, caps, Face.Mono, px, color, em);
+        if (maxWidth > 0 && Txt.SpacedWidth(caps, Face.MonoSemibold, px, em) > maxWidth) caps = FitSpaced(caps, Face.MonoSemibold, px, em, maxWidth);
+        return Txt.Spaced(dl, pos, caps, Face.MonoSemibold, px, color, em);
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -163,15 +163,17 @@ public static class SettingsParts
     // Sections.
 
     /// <summary>
-    /// A section's head: its eyebrow (mono capitals, muted) at the left; at the right a faint hint and an optional link
-    /// after it. Leaves 10px under it for the slab. True when the link is pressed.
+    /// A section's head over a panel of its own (a found group's, the cooldowns' kinds): its title as a panel's (Geist 600
+    /// 15px white) at the left; at the right a faint hint and an optional link after it. Leaves 10px under it for the panel.
+    /// A section of rows has its head inside its panel instead (<see cref="Kit.BeginPanel(string, string, string?, float, float, float, string?, Icon?, string?)"/>).
+    /// True when the link is pressed.
     /// </summary>
     public static bool SectionHead(string id, string title, string? hint = null, string? link = null)
     {
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
-        var lineH = S(18);
+        var lineH = S(20);
         var linkW = link != null ? Kit.LinkWidth(link, Icon.ChevronRight) : 0;
         var right = at.X + w - S(2);
         var pressed = false;
@@ -191,7 +193,7 @@ public static class SettingsParts
                 eyebrowRoom -= hw + S(12);
             }
         }
-        Kit.Eyebrow(dl, new Vector2(at.X + S(2), at.Y + (lineH - Kit.EyebrowH) / 2), title, null, eyebrowRoom, Palette.Muted);
+        Txt.Line(dl, new Vector2(at.X + S(2), at.Y), Txt.Fit(title, Face.SansSemibold, 15, MathF.Max(0, eyebrowRoom)), Face.SansSemibold, 15, Palette.White, 20);
         Kit.Reserve(at, w, lineH + S(8));
         return pressed;
     }
@@ -200,8 +202,9 @@ public static class SettingsParts
     // The more row.
 
     /// <summary>
-    /// The row a page's rarely changed settings fold under: 44 tall, a dashed hairline with 14px corners, a chevron
-    /// (down while closed, up while open) and the words naming what's inside, cut to fit. True when pressed.
+    /// The row a page's rarely changed settings fold under (the site's Fold, `.rp-fold`): 44 tall in the well with the
+    /// controls' line and 14px corners, the words naming what's inside (500 13px, cut to fit), and the one chevron at its
+    /// right end, turned up while open; pointed at, a 2.5% wash and white words. True when pressed.
     /// </summary>
     public static bool MoreRow(string id, string words, bool open)
     {
@@ -211,20 +214,16 @@ public static class SettingsParts
         var dl = Kit.Dl;
         var (clicked, hovered, _) = Kit.Hit(id, at, new Vector2(w, h));
         var r = S(Palette.RadiusLg);
-        if (hovered) dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.Hover), r);
-        var outline = Dashes.RoundedRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), r, 6);
-        var edge = Palette.U32(hovered ? Palette.Line3 : Palette.Line2);
-        foreach (var dash in Dashes.Along(outline, S(8), 0.55f))
-            if (dash.Length > 1)
-                dl.AddPolyline(ref dash[0], dash.Length, edge, ImDrawFlags.None, 1f);
-        var ink = hovered ? Palette.White : Palette.Muted;
+        dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(hovered ? Palette.BtnHover : Palette.Well), r);
+        dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(hovered ? Palette.BtnHoverLine : Palette.CtlLine), r, ImDrawFlags.None, 1f);
+        var ink = hovered ? Palette.White : Palette.Text;
         var icon = S(14);
-        var ix = at.X + S(14);
+        var ix = at.X + w - S(16) - icon;
         var iy = at.Y + (h - icon) / 2;
-        if (open) Paths(dl, ChevronUpPaths, new Vector2(ix, iy), icon, ink);
-        else Icons.Draw(dl, Icon.ChevronDown, new Vector2(ix, iy), icon, ink);
-        var tx = ix + icon + S(8);
-        Txt.Line(dl, new Vector2(tx, at.Y), Txt.Fit(words, Face.SansMedium, 13, at.X + w - S(14) - tx), Face.SansMedium, 13, ink, h / S(1));
+        if (open) Paths(dl, ChevronUpPaths, new Vector2(ix, iy), icon, hovered ? Palette.White : Palette.Faint);
+        else Icons.Draw(dl, Icon.ChevronDown, new Vector2(ix, iy), icon, hovered ? Palette.White : Palette.Faint);
+        var tx = at.X + S(20);
+        Txt.Line(dl, new Vector2(tx, at.Y), Txt.Fit(words, Face.SansMedium, 13, ix - S(12) - tx), Face.SansMedium, 13, ink, h / S(1));
         Kit.FocusRing(at, at + new Vector2(w, h), r);
         Kit.Reserve(at, w, h);
         return clicked;
@@ -236,26 +235,26 @@ public static class SettingsParts
     private static (Vector4 Fill, Vector4 Edge, Vector4 Ink) StatusColors(StatusKind kind) => kind switch
     {
         StatusKind.Ready => (Palette.ReadyWash, Palette.ReadyLine, Palette.Ready),
-        StatusKind.Busy => (Palette.EmberWash, Palette.EmberLine, Palette.EmberHi),
+        StatusKind.Busy => (Palette.EmberWash, Palette.EmberLine, Palette.Ember),
         StatusKind.Problem => (Palette.WarnWash, Palette.WarnLine, Palette.Warn),
-        StatusKind.Off => (Vector4.Zero, Palette.Line2, Palette.Faint),
-        _ => (Vector4.Zero, Palette.Line3, Palette.Text),
+        StatusKind.Off => (Palette.Raised, Palette.Line2, Palette.Faint),
+        _ => (Palette.Raised, Palette.Line2, Palette.Muted),
     };
 
-    public static float StatusTagWidth(string text) => S(7) * 2 + Txt.SpacedWidth(Txt.Caps(text), Face.Mono, 10, 0.05f);
+    public static float StatusTagWidth(string text) => S(7) * 2 + Txt.SpacedWidth(Txt.Caps(text), Face.MonoSemibold, 10, 0.06f);
 
-    /// <summary>A status tag (mono capitals 10px, 20 tall, 5px corners) in its kind's colours, cut to <paramref name="maxWidth"/>. Returns its width.</summary>
+    /// <summary>A status tag (the kit's tag: Geist Mono 600 capitals, 20 tall, 4px corners) in its kind's tone, cut to <paramref name="maxWidth"/>. Returns its width.</summary>
     public static float StatusTag(ImDrawListPtr dl, Vector2 pos, string text, StatusKind kind, float maxWidth)
     {
         var (fill, edge, ink) = StatusColors(kind);
         var caps = Txt.Caps(text);
         var w = MathF.Min(StatusTagWidth(text), maxWidth);
-        if (w < StatusTagWidth(text)) caps = Kit.FitSpaced(caps, Face.Mono, 10, 0.05f, w - S(14));
+        if (w < StatusTagWidth(text)) caps = Kit.FitSpaced(caps, Face.MonoSemibold, 10, 0.06f, w - S(14));
         var h = S(20);
-        var r = S(5);
+        var r = S(Palette.RadiusTag);
         if (fill.W > 0) dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(fill), r);
         dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
-        Txt.Spaced(dl, new Vector2(pos.X + S(7), pos.Y + (h - Txt.Natural(Face.Mono, 10)) / 2), caps, Face.Mono, 10, ink, 0.05f);
+        Txt.Spaced(dl, new Vector2(pos.X + S(7), pos.Y + (h - Txt.Natural(Face.MonoSemibold, 10)) / 2), caps, Face.MonoSemibold, 10, ink, 0.06f);
         return w;
     }
 
@@ -265,8 +264,7 @@ public static class SettingsParts
     private static readonly Run[] BoxRun = new Run[1];
 
     /// <summary>
-    /// A well-coloured box with 14px corners and a hairline: an icon, its words (13px muted, wrapped) and one dense
-    /// outlined button at the right (under the words when there isn't room beside them). True when pressed.
+    /// A quiet panel (`.pn.quiet`): an icon, its words (13px muted, wrapped) and one 32px plain button at the right (under the words when there isn't room beside them). True when pressed.
     /// </summary>
     public static bool Box(string id, Icon icon, string words, string button, Icon? buttonIcon = null, bool disabled = false, string? tip = null)
     {
@@ -285,8 +283,8 @@ public static class SettingsParts
         var bh = S(HSm);
         var h = beside ? padY * 2 + MathF.Max(th, bh) : padY * 2 + th + S(10) + bh;
         var r = S(Palette.RadiusLg);
-        dl.AddRectFilled(at, at + new Vector2(w, h), Palette.U32(Palette.Well), r);
-        dl.AddRect(at + new Vector2(0.5f), at + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.Line), r, ImDrawFlags.None, 1f);
+        Kit.PanelGround(dl, at, at + new Vector2(w, h), r);
+        Kit.PanelEdge(dl, at, at + new Vector2(w, h), r, quiet: true);
         var textTop = beside ? at.Y + (h - th) / 2 : at.Y + padY;
         Icons.Draw(dl, icon, new Vector2(at.X + padX, textTop + (S(19.5f) - iconPx) / 2), iconPx, Palette.Muted);
         BoxRun[0] = new Run(words, Face.Sans, 13, Palette.Muted);

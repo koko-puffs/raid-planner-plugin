@@ -305,9 +305,9 @@ public static class MeterThemes
     public static readonly MeterTheme ReadyCheck = new(
         MeterThemeId.ReadyCheck, "Ready Check", "Today's look, sharpened", "The plugin's own look: basalt, white hairlines, ember for you. The default.",
         new ThemeFonts(F(Face.SansMedium, 12), F(Face.MonoSemibold, 12), F(Face.Mono, 10), F(Face.MonoSemibold, 13), F(Face.SansMedium, 11)),
-        new ThemeWindow(Rgb.Hex(0x0d0d10), null, null, 0, 8, 4, Rgb.Rgba(255, 255, 255, 0.09f), 1, null, null, 0,
+        new ThemeWindow(Rgb.Hex(0x0c0c0f), null, null, 0, 8, 4, Rgb.Rgba(255, 255, 255, 0.09f), 1, null, null, 0,
             new[] { new Ring(4, Rgb.Rgba(0, 0, 0, 0.18f)) }, Vector2.Zero, null, 24, 2, 4, 248, 26),
-        new ThemeRow(20, 1, 4, Rgb.Hex(0x18181d), 0.92f, Rgb.Hex(0xf5f5f6), Rgb.Hex(0xa0a0aa), Rgb.Hex(0x7c7c87), Rgb.Hex(0xf5f5f6)),
+        new ThemeRow(20, 1, 4, Rgb.Hex(0x18181d), 0.92f, Rgb.Hex(0xf5f5f6), Rgb.Hex(0xa0a0aa), Rgb.Hex(0x878792), Rgb.Hex(0xf5f5f6)),
         new ThemeBar(BarStyle.Fill, 0.3f, 2),
         new ThemeRoles(Rgb.Hex(0x7c85de), Rgb.Hex(0x47e19e), Rgb.Hex(0xe8402f)),
         Rgb.Hex(0xff8a3d), YouStyle.Notch, Rgb.Hex(0xff5a5a), DeathStyle.Skull,

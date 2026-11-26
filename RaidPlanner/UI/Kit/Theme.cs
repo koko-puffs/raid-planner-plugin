@@ -17,15 +17,19 @@ namespace RaidPlanner.UI;
 /// </summary>
 public static class Theme
 {
-    // Ready Check's control heights (CSS px): --h, --h-sm, --h-lg.
+    // The Raid Codex's control heights (CSS px): --ctl, --ctl-sm, `.btn-lg`; rows (--row, --row-tall) and a table's head row.
     public const float H = 40;
     public const float HSm = 32;
-    public const float HLg = 46;
+    public const float HLg = 48;
+    public const float Row = 44;
+    public const float RowTall = 56;
+    public const float HeadRow = 34;
 
-    // Its motion (seconds): --t-press, --t-step, --t-settle, --t-resolve.
+    // Its motion (seconds, since 0.9.1 the redesign's): --t-press, --t-quick, --t-step, --t-settle, --rp-resolve.
     public const float TPress = 0.09f;
-    public const float TStep = 0.16f;
-    public const float TSettle = 0.28f;
+    public const float TQuick = 0.14f;
+    public const float TStep = 0.18f;
+    public const float TSettle = 0.26f;
     public const float TResolve = 0.42f;
 
     /// <summary>The main window's padding (`.dw-hd`, `.dw-bd`, `.dw-ft`): 20 at the sides.</summary>
@@ -110,7 +114,7 @@ public static class Theme
         C(ImGuiCol.Text, Palette.Text);
         C(ImGuiCol.TextDisabled, Palette.Faint);
         C(ImGuiCol.ChildBg, Vector4.Zero);
-        C(ImGuiCol.PopupBg, Palette.Raised);
+        C(ImGuiCol.PopupBg, Palette.Menu);
         C(ImGuiCol.Border, Palette.Line2);
         C(ImGuiCol.FrameBg, Vector4.Zero);
         C(ImGuiCol.FrameBgHovered, Vector4.Zero);
@@ -120,11 +124,11 @@ public static class Theme
         C(ImGuiCol.Header, Palette.Hover);
         C(ImGuiCol.HeaderHovered, Palette.Hover);
         C(ImGuiCol.HeaderActive, Palette.Picked);
-        C(ImGuiCol.ModalWindowDimBg, Palette.Rgba(4, 4, 5, 0.74f));
+        C(ImGuiCol.ModalWindowDimBg, Palette.Scrim);
         C(ImGuiCol.ScrollbarBg, Vector4.Zero);
-        // The site's scrollbar: #34343a, lighter when pointed at.
-        C(ImGuiCol.ScrollbarGrab, Palette.Hex(0x34343a));
-        C(ImGuiCol.ScrollbarGrabHovered, Palette.Hex(0x4a4a52));
+        // The site's scrollbar: #26262c, lighter when pointed at.
+        C(ImGuiCol.ScrollbarGrab, Palette.Hex(0x26262c));
+        C(ImGuiCol.ScrollbarGrabHovered, Palette.Hex(0x3a3a42));
         C(ImGuiCol.ScrollbarGrabActive, Palette.Muted);
 
         V(ImGuiStyleVar.ItemSpacing, Vector2.Zero);

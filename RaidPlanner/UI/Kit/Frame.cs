@@ -189,9 +189,9 @@ public static class Frame
     private static float footerTop;
 
     /// <summary>
-    /// Draws the toast (`.toast`): raised near-solid with 10px corners and a hairline, its icon in its
-    /// colour, 13px words, its action, and a 2px bar along its foot counting its 2.6 seconds down in
-    /// its colour; it waits while pointed at, and fades over its last 0.3 s. Drawn in a part of the
+    /// Draws the toast (`.rp-toast`): raised with 14px corners and a hairline at 12%, its icon in its
+    /// colour, 13px words, its action, and a 2px life bar along its foot counting its 2.6 seconds down in
+    /// its colour (ember for news); it waits while pointed at, and fades over its last 0.3 s. Drawn in a part of the
     /// window of its own laid over the body, so it never paints over another window over this one.
     /// </summary>
     public static void DrawToast()
@@ -212,15 +212,15 @@ public static class Frame
         var win = ImGui.GetWindowPos();
         var winW = ImGui.GetWindowWidth();
         var bottom = win.Y + ImGui.GetWindowHeight();
-        var padL = S(11.2f);
-        var padR = S(13.6f);
+        var padL = S(14);
+        var padR = S(12);
         var icon = S(Kit.IconPx);
-        var gap = S(10.4f);
+        var gap = S(12);
         var actionW = t.Action != null ? S(6.4f) + Txt.Width(t.Action, Face.SansSemibold, 13) : 0;
         var maxText = MathF.Max(S(60), winW - S(SidePad) * 2 - padL - padR - icon - gap - actionW);
         var text = Txt.Fit(t.Text, Face.Sans, 13, maxText);
         var textW = Txt.Width(text, Face.Sans, 13);
-        var box = new Vector2(padL + icon + gap + textW + actionW + padR, S(9.6f) * 2 + S(19.5f));
+        var box = new Vector2(padL + icon + gap + textW + actionW + padR, S(12) * 2 + S(19.5f));
         var y = top > win.Y && top < bottom ? top - S(10) - box.Y : bottom - box.Y - S(20);
         var pos = new Vector2(MathF.Round(win.X + (winW - box.X) / 2), MathF.Round(y));
 
@@ -236,7 +236,7 @@ public static class Frame
             var old = Palette.Opacity;
             Palette.Opacity = ReducedMotion ? 1 : Math.Clamp(left / 0.3f, 0, 1);
             var dl = ImGui.GetWindowDrawList();
-            var r = S(Palette.RadiusMd);
+            var r = S(Palette.RadiusLg);
             dl.AddRectFilled(pos, pos + box, Palette.U32(Palette.Raised), r);
             dl.AddRect(pos + new Vector2(0.5f), pos + box - new Vector2(0.5f), Palette.U32(Palette.Line2), r, ImDrawFlags.None, 1f);
             var color = t.Kind switch
@@ -263,7 +263,7 @@ public static class Frame
             // The bar along its foot, counting down.
             var frac = Math.Clamp(left / ToastLife, 0, 1);
             dl.PushClipRect(pos, pos + box, true);
-            dl.AddRectFilled(new Vector2(pos.X, pos.Y + box.Y - S(2)), new Vector2(pos.X + box.X * frac, pos.Y + box.Y), Palette.U32(color));
+            dl.AddRectFilled(new Vector2(pos.X, pos.Y + box.Y - S(2)), new Vector2(pos.X + box.X * frac, pos.Y + box.Y), Palette.U32(color), r, ImDrawFlags.RoundCornersBottomLeft);
             dl.PopClipRect();
             Palette.Opacity = old;
         }

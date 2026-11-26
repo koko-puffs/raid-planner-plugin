@@ -19,7 +19,7 @@ public enum Tone
 /// part's icon and its soft well, soft tags (ready green, warn yellow), Home's chips (a small dot, an icon, a name, in
 /// a pill), the guide's progress (five segments with the step names under), the waymark squares numbering steps,
 /// a dashed outline (the guide's picture of your screen), and a pull's row (number, length, when and where it ended,
-/// its outcome, a tick once uploaded, a chevron).
+/// its outcome, a tick once uploaded).
 /// </summary>
 public static partial class Kit
 {
@@ -56,36 +56,24 @@ public static partial class Kit
     // ---------------------------------------------------------------------------------------------
     // Soft tags.
 
-    public static float ToneTagWidth(string text) => S(7) * 2 + Txt.SpacedWidth(Txt.Caps(text), Face.Mono, 10, 0.05f);
+    public static float ToneTagWidth(string text) => TagWidth(text, TagKind.Ready);
 
-    /// <summary>A small tag (mono capitals at 10px, 20 tall) in a soft colour: its wash, its edge, its words. Returns its width.</summary>
-    public static float ToneTag(ImDrawListPtr dl, Vector2 pos, string text, Tone tone, float height = 20)
-    {
-        var (fill, edge, ink) = tone switch
-        {
-            Tone.Warn => (Palette.WarnWash, Palette.WarnLine, Palette.Warn),
-            _ => (Palette.Rgba(61, 220, 132, 0.08f), Palette.ReadyLine, Palette.Ready),
-        };
-        var w = ToneTagWidth(text);
-        var h = S(height);
-        var r = S(5);
-        dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(fill), r);
-        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(edge), r, ImDrawFlags.None, 1f);
-        Txt.Spaced(dl, new Vector2(pos.X + S(7), pos.Y + (h - Txt.Natural(Face.Mono, 10)) / 2), Txt.Caps(text), Face.Mono, 10, ink, 0.05f);
-        return w;
-    }
+    /// <summary>A tag in a soft tone (the kit's tag: <see cref="TagKind.Ready"/> green, <see cref="TagKind.Warn"/> amber). Returns its width.</summary>
+    public static float ToneTag(ImDrawListPtr dl, Vector2 pos, string text, Tone tone, float height = TagH) =>
+        Tag(dl, pos, text, tone == Tone.Warn ? TagKind.Warn : TagKind.Ready, height);
 
     // ---------------------------------------------------------------------------------------------
     // Chips.
 
     public static float ChipWidth(string label, Icon? icon) =>
-        S(9) * 2 + S(6) + S(6) + (icon != null ? S(13) + S(6) : 0) + Txt.Width(label, Face.SansMedium, 12);
+        S(10) * 2 + S(6) + S(6) + (icon != null ? S(13) + S(6) : 0) + Txt.Width(label, Face.SansMedium, 12);
 
-    public static float ChipH => S(26);
+    public static float ChipH => S(HSm);
 
     /// <summary>
-    /// Home's chip: a 26px pill on the well with a hairline, a 6px dot (green on, faint off, yellow waiting), the
-    /// part's icon and its name (dimmer when off). Pointed at, a faint fill and the tip. Returns true when pressed.
+    /// Home's chip (the site's `.chip`): 32 tall with 8px corners on the well with the controls' line, a 6px dot (green on,
+    /// faint off, yellow waiting), the part's icon and its name (fainter when off). Pointed at, a lighter line, white words
+    /// and the tip. Returns true when pressed.
     /// </summary>
     public static bool Chip(string id, Vector2 pos, string label, Vector4 dot, bool on, Icon? icon = null, string? tip = null)
     {
@@ -94,10 +82,10 @@ public static partial class Kit
         var (clicked, hovered, _) = Hit(id, pos, new Vector2(w, h));
         if (tip != null && hovered) Tooltip(tip);
         var dl = Dl;
-        var r = h / 2;
-        dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(hovered ? Palette.Raised : Palette.Well), r);
-        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(hovered ? Palette.Line3 : Palette.Line), r, ImDrawFlags.None, 1f);
-        var x = pos.X + S(9);
+        var r = S(Palette.RadiusSm);
+        dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(Palette.Well), r);
+        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(hovered ? Palette.CtlLineHover : Palette.CtlLine), r, ImDrawFlags.None, 1f);
+        var x = pos.X + S(10);
         dl.AddCircleFilled(new Vector2(x + S(3), pos.Y + h / 2), S(3), Palette.U32(dot), 12);
         x += S(6) + S(6);
         if (icon is { } ic)
@@ -105,7 +93,7 @@ public static partial class Kit
             Icons.Draw(dl, ic, new Vector2(x, pos.Y + (h - S(13)) / 2), S(13), Palette.Muted, 1.9f);
             x += S(13) + S(6);
         }
-        Txt.Line(dl, new Vector2(x, pos.Y), label, Face.SansMedium, 12, on || hovered ? Palette.Text : Palette.Faint, h / S(1));
+        Txt.Line(dl, new Vector2(x, pos.Y), label, Face.SansMedium, 12, hovered ? Palette.White : on ? Palette.Text : Palette.Faint, h / S(1));
         FocusRing(pos, pos + new Vector2(w, h), r);
         return clicked;
     }
@@ -181,7 +169,7 @@ public static partial class Kit
     public readonly record struct PullLine(string Number, string Length, string Sub, string Outcome, TagKind OutcomeKind, bool Uploaded, string? Waiting, bool Best);
 
     /// <summary>A pull's row's height.</summary>
-    public static float PullRowH => S(50);
+    public static float PullRowH => S(RowTall);
 
     /// <summary>
     /// A pull's row (`pull_row`): its number in mono, its length in mono with a Best tag, how long ago and where it
@@ -198,17 +186,15 @@ public static partial class Kit
         var min = at;
         var max = at + new Vector2(w, h);
         if (!first) Rule(dl, min.X, max.X, min.Y - 0.5f);
-        if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover), S(Palette.RadiusMd));
+        if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover));
         Reticle(dl, id + "##ret", min, max, hovered);
-        var x = min.X + S(12);
-        Txt.Line(dl, new Vector2(x, min.Y), Txt.Fit(row.Number, Face.MonoSemibold, 13, S(34)), Face.MonoSemibold, 13, Palette.White, 50);
+        var x = min.X + S(20);
+        Txt.Line(dl, new Vector2(x, min.Y), Txt.Fit(row.Number, Face.MonoSemibold, 13, S(34)), Face.MonoSemibold, 13, Palette.White, RowTall);
         x += S(34) + S(12);
 
-        // From the right: the chevron, the tick (or its word), the outcome.
-        var right = max.X - S(12);
-        var chevron = S(15);
-        Icons.Draw(dl, Icon.ChevronRight, new Vector2(right - chevron, min.Y + (h - chevron) / 2), chevron, hovered ? Palette.White : Palette.Faint);
-        right -= chevron + S(12);
+        // From the right: the tick (or its word), the outcome. A row that opens a page has no chevron (the site's rule:
+        // a chevron is for a row that opens in place).
+        var right = max.X - S(20);
         if (row.Uploaded)
         {
             Icons.Draw(dl, Icon.Check, new Vector2(right - S(15), min.Y + (h - S(15)) / 2), S(15), Palette.Ready, 2.2f);
@@ -218,30 +204,24 @@ public static partial class Kit
         else if (row.Waiting is { } waiting)
         {
             var ww = Txt.Width(waiting, Face.Sans, 12);
-            Txt.Line(dl, new Vector2(right - ww, min.Y), waiting, Face.Sans, 12, Palette.Faint, 50);
+            Txt.Line(dl, new Vector2(right - ww, min.Y), waiting, Face.Sans, 12, Palette.Faint, RowTall);
             right -= ww + S(12);
         }
         var tw = TagWidth(row.Outcome, row.OutcomeKind);
-        Tag(dl, new Vector2(right - tw, min.Y + (h - S(22)) / 2), row.Outcome, row.OutcomeKind);
+        Tag(dl, new Vector2(right - tw, min.Y + (h - S(TagH)) / 2), row.Outcome, row.OutcomeKind);
         right -= tw + S(12);
 
+        // Two lines, 2px apart (`.rp-two`): the length in mono with Best, and when and where it ended.
         var lineH = S(18);
         var subH = S(16);
         var top = min.Y + (h - lineH - subH - S(2)) / 2;
         var lw = Txt.Line(dl, new Vector2(x, top), row.Length, Face.MonoSemibold, 13, Palette.White, 18);
-        if (row.Best && x + lw + S(8) + ToneTagWidth("Best") < right) ToneTagEmber(dl, new Vector2(x + lw + S(8), top + (lineH - S(18)) / 2), "Best");
+        if (row.Best && x + lw + S(8) + ToneTagWidth("Best") < right) ToneTagEmber(dl, new Vector2(x + lw + S(8), top + (lineH - S(TagH)) / 2), "Best");
         Txt.Line(dl, new Vector2(x, top + lineH + S(2)), Txt.Fit(row.Sub, Face.Sans, 12, MathF.Max(0, right - x)), Face.Sans, 12, Palette.Faint, 16);
         Reserve(at, w, h);
         return clicked;
     }
 
     /// <summary>An ember tag (the Best pull's), small.</summary>
-    public static float ToneTagEmber(ImDrawListPtr dl, Vector2 pos, string text, float height = 18)
-    {
-        var w = ToneTagWidth(text);
-        var h = S(height);
-        Box(dl, pos, pos + new Vector2(w, h), Palette.EmberWash, Palette.EmberLine, 5);
-        Txt.Spaced(dl, new Vector2(pos.X + S(7), pos.Y + (h - Txt.Natural(Face.Mono, 10)) / 2), Txt.Caps(text), Face.Mono, 10, Palette.EmberHi, 0.05f);
-        return w;
-    }
+    public static float ToneTagEmber(ImDrawListPtr dl, Vector2 pos, string text, float height = TagH) => Tag(dl, pos, text, TagKind.Ember, height);
 }
