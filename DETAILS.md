@@ -2544,7 +2544,7 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.10.1
 
 - **A locked meter stays exactly where you left it**, and so do the party cooldowns, the callouts, the ready check
   card and the death recap: growing down each kept its place by its title bar's top (or the arranging head's), so
