@@ -154,7 +154,12 @@ own function first and changes nothing):
   a spread, and how the many mechanics with no cast bar (the game's invisible helpers resolving a
   head marker, a chain of exaflares) are seen at all. Since 0.3.0 with what it did to each of them
   (`dmg`, `fx`, `hp`: the damage, the hit's flags, their HP as the message came, read in the detour:
-  the game takes the HP off a moment later). Every other action concerning the party goes to the
+  the game takes the HP off a moment later). A hit's targets are every party member in the message's target list, by
+  the entity id it gives, whatever the message's size (1, 8, 16, 24 or 32 targets; anyone not in the party is left
+  out), with the damage the message itself carries (`Core/HitIntake.cs`: `Collect`). A boss's own message for a
+  raidwide often has no targets at all (the name over its head, the animation): the damage to each player comes in
+  its helpers' messages, so a hit with no one hit and HP falling a second later is a helper's hit that wasn't kept
+  (TOP's Wave Cannons, Blue Screen, Latent Defect in a 0.7.4 recording: below). Every other action concerning the party goes to the
   combat parser (the meter's numbers, below): the party's own (and their pets' and limit breaks'),
   into the combat block's `fx`. The message is read into one buffer kept for it, most messages
   stop at the first question (the party's, or landing on the party?), and HP is read (the game's own
@@ -198,8 +203,11 @@ actors (BNpcBase 9020 and their kin) that cast nearly every real AoE, a battle N
 `ActorType.Helper` is 0x20B). Until 0.7.5 only sub-kinds 5 (combatant) and 1 (a part of one) were
 read, so every helper's cast, hit on the party, status and marker was left out: a replay drew
 almost no mechanics, and Survival missed the damage they did (recordings from then can't get them
-back). A hit from one not seen yet counts only if it's a combatant, a part of one or a helper with
-no owner: pets and summons are the party's own. In a field
+back). A hit from one not seen yet counts if it's a combatant, a part of one or a helper with
+no owner: pets and summons are the party's own. Since the next release (not out yet) also, whatever the game says
+its caster is, one that did damage to a party member (or killed one outright), which only an enemy does, even when
+the game has no object for its caster at all (a nameless helper then, `HitIntake.TakeUnmet`): before, such a hit was
+dropped whole, its targets with it. In a field
 operation's open zone (`GameData.IsFieldZone`: the TerritoryType sheet's TerritoryIntendedUse 41
 Eureka, 48 the Bozjan Southern Front and Zadnor, 61 Occult Crescent's South and North Horn) the
 object table also holds mobs other players are fighting and the next CE's or FATE's enemies, so
@@ -2322,7 +2330,7 @@ end with "Profile: Ultimate" while one is in effect (it opens Profiles).
 ```
 RaidPlanner/
   Plugin.cs, Services.cs, Configuration.cs
-  Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), the
+  Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), an enemy's hit taken in (HitIntake), the
               store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
               uploading to the logs (LogUpload: the body, the answers, UploadQueue, UploadPrefs),
               the server's clock (ServerClock),
@@ -2543,6 +2551,14 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### Next (not released yet)
+
+- **Big raidwides hitting the whole party were sometimes recorded with no one hit, so a death to one had no cause on
+  the site.** A hit that did damage to the party is now kept whoever the game says cast it, and when the game has no
+  object for its caster at all; before, it was dropped with everyone it hit. (The pull it was found from, TOP's Wave
+  Cannons in 0.7.4, lost them to 0.7.4 leaving out the game's helpers, whose messages carry the damage: 0.7.5 took
+  those in.)
 
 ### 0.10.1
 

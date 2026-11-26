@@ -1234,13 +1234,7 @@ public sealed unsafe class FightRecorder : IDisposable
     /// facing only if that isn't a number), with what it did to each party member it hit (the damage,
     /// the hit's flags, their HP before: <see cref="Effects.Taken"/>).
     /// </summary>
-    private readonly List<int> hitTargets = new();
-    private readonly List<long> hitDamage = new();
-    private readonly List<int> hitFx = new();
-    private readonly List<long> hitHp = new();
-    private readonly List<int> hitShield = new();
-    private readonly List<float> hitPx = new();
-    private readonly List<float> hitPz = new();
+    private readonly HitIntake.Lists hitLists = new();
 
     internal void OnHit(uint casterId, Character* caster, float hitX, float hitZ, float rotation, uint action, EffectBatch hit)
     {
@@ -1248,46 +1242,24 @@ public sealed unsafe class FightRecorder : IDisposable
         var b = current;
         if (b == null || casterId is 0 or InvalidId || b.IsParty(casterId)) return;
         // Lists reused hit after hit (since 0.7.8): the builder only reads them, and everything here is on the framework thread.
-        var targets = hitTargets;
-        var damage = hitDamage;
-        var fx = hitFx;
-        var hp = hitHp;
-        var shield = hitShield;
-        var px = hitPx;
-        var pz = hitPz;
-        targets.Clear();
-        damage.Clear();
-        fx.Clear();
-        hp.Clear();
-        shield.Clear();
-        px.Clear();
-        pz.Clear();
-        for (var i = 0; i < hit.Count; i++)
-        {
-            if (b.PartyId(hit.Targets[i]) is not { } p) continue;
-            var (dmg, flags) = Effects.Taken(hit.EffectsOf(i));
-            targets.Add(p);
-            damage.Add(dmg);
-            fx.Add(flags);
-            hp.Add(hit.Hp[i]);
-            shield.Add(hit.Shield[i]);
-            px.Add(hit.X[i]);
-            pz.Add(hit.Z[i]);
-        }
+        var lists = hitLists;
+        HitIntake.Collect(hit, b, lists);
+        var targets = lists.Targets;
         var src = b.KnownActor(casterId);
         if (src == null)
         {
-            // A helper never seen in the object table (it came and went between frames): an enemy's,
-            // never a pet or a summon (theirs are the party's own actions).
-            if (caster == null || caster->GameObject.ObjectKind != FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc) return;
-            var kind = (BattleNpcSubKind)caster->GameObject.SubKind;
-            if (kind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)) return;
-            if (caster->GameObject.OwnerId is not (0 or InvalidId)) return;
-            // A field zone: one that hit none of the party, away from you, is someone else's fight.
-            if (onlyEngaged && targets.Count == 0
-                && !(Services.Objects.LocalPlayer?.Position is { } you && Near(you, caster->GameObject.Position)))
-                return;
-            src = b.Actor(casterId, string.Empty, caster->GameObject.HitboxRadius, caster->GameObject.BaseId);
+            // A caster the frames haven't met (a helper come and gone between them): an enemy's, never a pet or a summon
+            // (theirs are the party's own actions). One that hurt the party is kept whatever the game says it is (a pet never hurts it),
+            // and when the game has no object for it at all (HitIntake.TakeUnmet): before, its hit was dropped whole.
+            var has = caster != null;
+            var npc = has && caster->GameObject.ObjectKind == FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectKind.BattleNpc;
+            var owned = has && caster->GameObject.OwnerId is not (0 or InvalidId);
+            var near = has && onlyEngaged && targets.Count == 0
+                && Services.Objects.LocalPlayer?.Position is { } you && Near(you, caster->GameObject.Position);
+            if (!HitIntake.TakeUnmet(has, npc, has ? caster->GameObject.SubKind : (byte)0, owned, near, lists, onlyEngaged)) return;
+            src = has
+                ? b.Actor(casterId, string.Empty, caster->GameObject.HitboxRadius, caster->GameObject.BaseId)
+                : b.Actor(casterId, string.Empty, 0, 0);
         }
         float x = hitX, z = hitZ, rot = float.IsFinite(rotation) ? rotation : 0;
         if (caster != null)
@@ -1297,7 +1269,7 @@ public sealed unsafe class FightRecorder : IDisposable
             if (!float.IsFinite(rotation)) rot = caster->GameObject.Rotation;
         }
         var t = Elapsed;
-        b.Hit(t, src.Value, action, x, z, rot, hitX, hitZ, targets, damage, fx, hp, shield, px, pz);
+        b.Hit(t, src.Value, action, x, z, rot, hitX, hitZ, targets, lists.Damage, lists.Fx, lists.Hp, lists.Shield, lists.X, lists.Z);
         if (HitLanded is { } listeners)
         {
             try
