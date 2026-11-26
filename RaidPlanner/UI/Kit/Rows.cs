@@ -366,8 +366,16 @@ public static partial class Kit
         var h = max.Y - min.Y;
         var x1 = min.X + MathF.Max(r, w * 0.32f);
         var y1 = min.Y + MathF.Max(r, MathF.Min(h * 0.45f, S(120)));
-        if (x1 > min.X + r) dl.AddRectFilledMultiColor(new Vector2(min.X + r * 0.6f, min.Y), new Vector2(x1, min.Y + 1), Palette.U32(lit), Palette.U32(none), Palette.U32(none), Palette.U32(lit));
-        if (y1 > min.Y + r) dl.AddRectFilledMultiColor(new Vector2(min.X, min.Y + r * 0.6f), new Vector2(min.X + 1, y1), Palette.U32(lit), Palette.U32(lit), Palette.U32(none), Palette.U32(none));
+        // The lit corner itself: the hairline's arc in the lit colour, so the light turns the corner instead of
+        // stopping short of it (the two straight lines started inside the curve, which stayed the plain edge: the
+        // corner looked cut off, the owner, 26 November 2026).
+        if (r > 0.5f)
+        {
+            dl.PathArcTo(min + new Vector2(r), r - 0.5f, MathF.PI, MathF.PI * 1.5f, Math.Max(4, (int)r));
+            dl.PathStroke(Palette.U32(lit), ImDrawFlags.None, 1f);
+        }
+        if (x1 > min.X + r) dl.AddRectFilledMultiColor(new Vector2(min.X + r, min.Y), new Vector2(x1, min.Y + 1), Palette.U32(lit), Palette.U32(none), Palette.U32(none), Palette.U32(lit));
+        if (y1 > min.Y + r) dl.AddRectFilledMultiColor(new Vector2(min.X, min.Y + r), new Vector2(min.X + 1, y1), Palette.U32(lit), Palette.U32(lit), Palette.U32(none), Palette.U32(none));
         var k = S(4) + 0.5f;
         if (w > k * 4 && h > k * 4)
             dl.AddRect(min + new Vector2(k), max - new Vector2(k), Palette.U32(quiet ? Palette.FrameQuiet : Palette.Frame), MathF.Max(0, r - S(5)), ImDrawFlags.None, 1f);

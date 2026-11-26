@@ -2526,6 +2526,11 @@ entry).
 
 ## Release notes
 
+### Next (not released yet)
+
+- **A panel's lit corner turns the corner**: the ember light along a panel's top and left edge now runs round its
+  rounded top-left corner (it started inside the curve, which stayed the plain edge, so the corner looked cut off).
+
 ### 0.10.0
 
 - **Replay is the site's again**: a pull's page no longer plays it back in the window (0.9.0's _Summary · Replay_). Its
