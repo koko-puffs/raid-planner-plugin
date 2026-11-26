@@ -166,6 +166,7 @@ public sealed class ArrangeWindow : Window
                     config.MeterAnchorX = was.AnchorX;
                     config.MeterAnchorY = was.AnchorY;
                     config.MeterAnchorFor = was.AnchorFor;
+                    config.MeterAnchorVersion = was.AnchorVersion;
                     meter.PutWidth(was.Width);
                     // Never placed before the mode: back to its first place (ImGui's), as it would have gone.
                     if (!was.Anchored) meter.ResetPlace();
@@ -231,7 +232,7 @@ public sealed class ArrangeWindow : Window
     private WindowPlace PlaceOf(ArrangePart part) => part switch
     {
         ArrangePart.Meter => new WindowPlace(config.MeterLocked, config.MeterClickThrough, config.MeterGrows, config.MeterBackground, meter.WidthCss,
-            config.MeterHeight, config.MeterAnchored, config.MeterAnchorX, config.MeterAnchorY, config.MeterAnchorFor),
+            config.MeterHeight, config.MeterAnchored, config.MeterAnchorX, config.MeterAnchorY, config.MeterAnchorFor, config.MeterAnchorVersion),
         ArrangePart.Plan => WindowPlace.OfPlan(config.PlanWindowLocked, plan.Drawn?.Pos, plan.Drawn?.Size),
         _ => WindowPlace.Of(Overlay(part).Settings()),
     };

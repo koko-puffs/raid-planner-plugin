@@ -454,7 +454,7 @@ public sealed partial class MeterWindow : Window
     private float TitleBarH => titleH > 0 ? titleH : ImGui.GetFrameHeight();
 
     /// <summary>The anchor as the settings keep it.</summary>
-    private MeterAnchor Anchor
+    private WindowAnchor Anchor
     {
         get => new(new Vector2(config.MeterAnchorX, config.MeterAnchorY), config.MeterAnchored, config.MeterAnchorFor, config.MeterAnchorVersion);
         set
@@ -485,7 +485,7 @@ public sealed partial class MeterWindow : Window
         // An anchor saved before it was its content's: read once as this version does, with the chrome it was saved with
         // (none locked, the title bar unlocked), so it stays exactly where it is.
         var a = Anchor;
-        if (a.Version < MeterAnchor.Current)
+        if (a.Version < WindowAnchor.Current)
         {
             Anchor = a.Migrated(config.MeterLocked ? 0 : TitleBarH);
             config.Save();
@@ -546,7 +546,7 @@ public sealed partial class MeterWindow : Window
 
     /// <summary>
     /// Inside the window, each frame: the title bar's height, whether you've taken hold of it, and its
-    /// anchor (<see cref="MeterAnchor.Track"/>): read from where it is the first time (one saved by an older version
+    /// anchor (<see cref="WindowAnchor.Track"/>): read from where it is the first time (one saved by an older version
     /// stays where it was), moved to the other corner of where it is when Grows changes, following it while
     /// you move or size it; otherwise never read back from where it was kept on the screen.
     /// </summary>
@@ -589,7 +589,7 @@ public sealed partial class MeterWindow : Window
         drawnOnce = true;
     }
 
-    private void SetAnchor(Vector2 at) => Anchor = new MeterAnchor(at, true, config.MeterGrows, MeterAnchor.Current);
+    private void SetAnchor(Vector2 at) => Anchor = new WindowAnchor(at, true, config.MeterGrows, WindowAnchor.Current);
 
     /// <summary>Once you let go: the height you gave it and where you put it, saved once (not every frame of the drag).</summary>
     private void Commit()

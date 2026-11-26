@@ -32,6 +32,10 @@ public abstract class OverlayWindow : Window
     private bool heldOnMe;
     private bool held;
     private float titleH;
+
+    /// <summary>Its chrome this frame (screen px): the title bar unlocked, the arranging head, none locked.</summary>
+    private float chromeNow;
+
     private Vector2 lastPos;
     private Vector2 lastSize;
     private bool drawnOnce;
@@ -165,7 +169,16 @@ public abstract class OverlayWindow : Window
         else if (guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = Theme.Scale;
         SizeConstraints = Sizes.Now;
-        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        var titleBar = titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleBar;
+        chromeNow = chrome;
+        // An anchor saved before it was its content's: read once with the chrome it's shown with (none locked, the title
+        // bar unlocked), so it stays exactly where it is.
+        if (s.AnchorVersion < WindowAnchor.Current)
+        {
+            s.SetAnchor(s.Anchor().Migrated(s.Locked ? 0 : titleBar));
+            Config.Save();
+        }
         contentH = MathF.Max(S(8), S(Measure(WidthCss)));
         if (held)
         {
@@ -180,7 +193,7 @@ public abstract class OverlayWindow : Window
         {
             // Reset places: its first anchor for its size now, as the corner its Grows keeps.
             resetWanted = false;
-            var first = OverlayLayout.FirstAnchor(vp.WorkPos, vp.WorkPos + vp.WorkSize, WidthCss * scale, height, firstAt.X, firstAt.Y, s.Grows);
+            var first = OverlayLayout.FirstAnchor(vp.WorkPos, vp.WorkPos + vp.WorkSize, WidthCss * scale, height, firstAt.X, firstAt.Y, s.Grows, chrome);
             SetAnchor(s, first);
             Config.Save();
         }
@@ -195,8 +208,8 @@ public abstract class OverlayWindow : Window
             return;
         }
         var otherScreens = (ImGui.GetIO().ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0;
-        var at = MeterLayout.Place(new Vector2(s.AnchorX, s.AnchorY), new Vector2(WidthCss * scale, height), s.Grows, vp.WorkPos, vp.WorkPos + vp.WorkSize, otherScreens);
-        ImGui.SetNextWindowPos(at, ImGuiCond.Always);
+        if (s.Anchor().Place(s.Grows, new Vector2(WidthCss * scale, height), chrome, vp.WorkPos, vp.WorkPos + vp.WorkSize, otherScreens, held) is { } at)
+            ImGui.SetNextWindowPos(at, ImGuiCond.Always);
     }
 
     /// <summary>Inside: the title bar's height, whether you've taken hold of it, its anchor and width following you.</summary>
@@ -212,14 +225,16 @@ public abstract class OverlayWindow : Window
         }
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
             heldOnMe = !Locked && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup);
-        if (!s.Anchored || s.AnchorFor != s.Grows)
+        // Locked (or not held) it's kept as it is: where it was kept on the screen this frame is never read back.
+        var (anchor, change) = s.Anchor().Track(s.Grows, pos, size, chromeNow, held && drawnOnce && (pos != lastPos || size != lastSize));
+        if (change is AnchorChange.First or AnchorChange.Turned)
         {
-            SetAnchor(s, MeterLayout.Corner(pos, size, s.Grows));
+            s.SetAnchor(anchor);
             Config.Save();
         }
-        else if (held && drawnOnce && (pos != lastPos || size != lastSize))
+        else if (change == AnchorChange.Moved)
         {
-            SetAnchor(s, MeterLayout.Corner(pos, size, s.Grows));
+            s.SetAnchor(anchor);
             if (MathF.Abs(size.X - lastSize.X) > 0.5f) s.Width = MathF.Round(size.X / Theme.Scale);
             dirty = true;
         }
@@ -228,13 +243,7 @@ public abstract class OverlayWindow : Window
         drawnOnce = true;
     }
 
-    private static void SetAnchor(OverlaySettings s, Vector2 at)
-    {
-        s.AnchorX = at.X;
-        s.AnchorY = at.Y;
-        s.Anchored = true;
-        s.AnchorFor = s.Grows;
-    }
+    private static void SetAnchor(OverlaySettings s, Vector2 at) => s.SetAnchor(new WindowAnchor(at, true, s.Grows, WindowAnchor.Current));
 
     public sealed override void Draw()
     {

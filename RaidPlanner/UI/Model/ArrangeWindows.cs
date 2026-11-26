@@ -63,7 +63,7 @@ public static class ArrangeParts
 /// <summary>
 /// A window's place and the settings Arrange windows can change, as plain values, kept as the mode starts so
 /// Cancel can put them back. For an overlay (<see cref="OverlaySettings"/>) and the meter: locked, click-through,
-/// Grows, background, the anchor (screen px) and which corner it is, its width (CSS px; 0 its first) and, the
+/// Grows, background, the anchor (screen px), which corner it is and what it means (<see cref="WindowAnchor.Version"/>), its width (CSS px; 0 its first) and, the
 /// meter's, the height you gave it (CSS px). For the plan window: locked, and its place and size as ImGui last
 /// drew it (screen px: <see cref="AnchorX"/>, <see cref="AnchorY"/>, <see cref="Width"/>, <see cref="Height"/>;
 /// <see cref="Anchored"/> false when it hadn't been drawn yet).
@@ -78,11 +78,12 @@ public readonly record struct WindowPlace(
     bool Anchored,
     float AnchorX,
     float AnchorY,
-    MeterGrows AnchorFor)
+    MeterGrows AnchorFor,
+    int AnchorVersion = WindowAnchor.Current)
 {
     /// <summary>An overlay's, from its settings.</summary>
     public static WindowPlace Of(OverlaySettings s) =>
-        new(s.Locked, s.ClickThrough, s.Grows, s.Background, s.Width, 0, s.Anchored, s.AnchorX, s.AnchorY, s.AnchorFor);
+        new(s.Locked, s.ClickThrough, s.Grows, s.Background, s.Width, 0, s.Anchored, s.AnchorX, s.AnchorY, s.AnchorFor, s.AnchorVersion);
 
     /// <summary>Puts an overlay's settings back as they were (Cancel); its Show, Everywhere and Compact aren't the mode's and stay.</summary>
     public void PutBack(OverlaySettings s)
@@ -96,6 +97,7 @@ public readonly record struct WindowPlace(
         s.AnchorX = AnchorX;
         s.AnchorY = AnchorY;
         s.AnchorFor = AnchorFor;
+        s.AnchorVersion = AnchorVersion;
     }
 
     /// <summary>The plan window's: its lock, and where and how big ImGui last drew it (null: not drawn yet).</summary>

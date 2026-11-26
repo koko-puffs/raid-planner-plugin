@@ -210,8 +210,8 @@ public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
     public MeterGrows MeterAnchorFor { get; set; } = MeterGrows.Down;
 
     /// <summary>
-    /// What the anchor means (<see cref="UI.Model.MeterAnchor.Current"/>): 1 growing down its content's top-left, under the
-    /// title bar; 0 (saved before) the window's, the title bar's top, read once as 1 (<see cref="UI.Model.MeterAnchor.Migrated"/>).
+    /// What the anchor means (<see cref="UI.Model.WindowAnchor.Current"/>): 1 growing down its content's top-left, under the
+    /// title bar; 0 (saved before) the window's, the title bar's top, read once as 1 (<see cref="UI.Model.WindowAnchor.Migrated"/>).
     /// </summary>
     public int MeterAnchorVersion { get; set; }
 

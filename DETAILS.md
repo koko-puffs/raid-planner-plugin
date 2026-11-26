@@ -1626,7 +1626,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   a bigger party, compact), growing **down** keeps its top edge where it is, growing **up** its bottom
   edge. Since 0.7.4 that's all Grows does: where the head sits and the rows' order are their own (below).
   Its anchor (`MeterAnchorX`, `MeterAnchorY`, screen px: its content's top-left corner, under the title
-  bar or the arranging head, or its bottom-left growing up, `MeterAnchorFor`; `MeterAnchor`, tested frame
+  bar or the arranging head, or its bottom-left growing up, `MeterAnchorFor`; `WindowAnchor`, tested frame
   by frame) is read from where the window is the first time it's drawn (so one saved by an older
   version keeps its place), moved to the other corner of where the window is when Grows changes (so it
   doesn't move then), and follows the window while you move or size it (unlocked, or in Arrange windows;
@@ -1638,7 +1638,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   after 0.10.0 the anchor was the window's top-left, the title bar's top, so locking a meter growing down
   (its lock, or Done) lifted it by the title bar's or the arranging head's height (about 22 or 26px) for
   good, which showed as "a bit higher" the next time you looked; one saved like that is read once with
-  the chrome it's shown with then (`MeterAnchorVersion` 0 to 1, `MeterAnchor.Migrated`: a locked one is
+  the chrome it's shown with then (`MeterAnchorVersion` 0 to 1, `WindowAnchor.Migrated`: a locked one is
   where it is, an unlocked one's head stays under its title bar). It's kept whole on the game's screen
   while the anchor is on it (moved in as little as it takes, its anchored edge first when it's taller
   than the screen, and back onto it after the resolution shrinks; with Dalamud's multi-monitor windows
@@ -1933,7 +1933,10 @@ rgb 13 13 16 at their own _Background_ (their words solid), 10px corners, as tal
 (worked out before ImGui's Begin, `Measure`), as wide as you make them (`OverlaySettings.Width`, kept
 once you let go), kept at their anchor as their height changes (`MeterLayout.Place`: the top edge
 growing down, the foot growing up, on the game's screen; the anchor read from where the window is the
-first time, moved to the other corner when Grows changes, following you while you move it). Before
+first time, moved to the other corner when Grows changes, following you while you move it; the meter's
+`WindowAnchor`, so as the meter's it's their content's corner, under the title bar or the arranging head, and
+locking, unlocking or Arrange windows' Done doesn't move what they show, and one saved before as the window's
+top-left is read once with the chrome it's shown with, `OverlaySettings.AnchorVersion`). Before
 you've placed one it goes where `OverlayLayout.FirstAnchor` says (the callouts centred a fifth down
 the screen, the tracker at the left a third down). Unlocked, Dalamud's title bar ("Cooldowns",
 "Callouts") with its × (the setting's _Show_, or the sample's stop); locked, no title bar, no moving
@@ -2206,8 +2209,11 @@ cooldowns", on the head's own dark ground washed white at 6%, ember at 18% when 
 mouse, so a drag there moves the window), and a 1.5px dashed outline round it (`ArrangeMode.Outline`, the dashes
 of `Dashes`, worked out again only when it moves or changes size: white at 55%, ember when picked). The head is
 its chrome as the title bar was (the meter's and the overlays' heights are their content's and the head's), so
-they're kept at their anchors as ever (`MeterLayout.Place`; the meter's is its content's corner, under the head, so
-Done doesn't move it as the head goes), and moved and sized as when unlocked: their anchor and
+they're kept at their anchors as ever (`MeterLayout.Place`; the meter's and the overlays' are their content's corner,
+under the head, so Done doesn't move them as the head goes; Reset places puts the window, head and all, at its first
+place, and Cancel puts back what each anchor meant with it, `WindowPlace.AnchorVersion`). The plan window keeps its
+title bar locked and is placed by ImGui, its place its window's: Done gives its title bar back where the head was, so it
+doesn't move either, and moved and sized as when unlocked: their anchor and
 width (the normal meter's height you give it) are saved as you let go, as always. The plan window is ImGui's to
 place and size, as ever. A press anywhere in a window picks it (`ArrangeSession.Pick`); the first taking part is
 picked at first.
@@ -2344,7 +2350,7 @@ RaidPlanner/
               faces: Faces; how big the windows are: WindowSize; the meter's themes' token tables: MeterTheme; compact's
               numbers, rows, ranks' hold, sizes, job icons and settings' move: MeterPlate; numbers and
               words, curves, polygons, the screens' states, the meter's and a pull's views, the
-              meter's sizes and place (MeterLayout; its anchor frame by frame, MeterAnchor) and its sample fight (MeterPreview), its
+              meter's sizes and place (MeterLayout; its and the overlays' anchor frame by frame, WindowAnchor) and its sample fight (MeterPreview), its
               0.4.0 words (MeterText), the Healing and Mitigation tabs' cards and lines (MeterGuard; 0.9.0), the cooldown tracker's catalogue, book and rows (Cooldowns),
               the callouts' timeline (CalloutTimeline), the plan's cooldowns on its clock
               (PlannedUses), a real arena's floor cut into triangles (ArenaFloor), the overlays'
@@ -2540,10 +2546,11 @@ entry).
 
 ### Next (not released yet)
 
-- **A locked meter stays exactly where you left it**: a meter growing down kept its place by its title bar's top
-  (or the arranging head's), so locking it, or Arrange windows' Done, lifted it by that bar's height for good. Its
-  place is now its own top, under the bar: locking, unlocking and Done don't move it, and one placed before stays
-  where it is. Kept on the screen when it's taller than the room under it, it still goes back as it shrinks.
+- **A locked meter stays exactly where you left it**, and so do the party cooldowns, the callouts, the ready check
+  card and the death recap: growing down each kept its place by its title bar's top (or the arranging head's), so
+  locking it, or Arrange windows' Done, lifted it by that bar's height for good. Its place is now its own top, under
+  the bar: locking, unlocking and Done don't move it, and one placed before stays where it is. Kept on the screen
+  when it's taller than the room under it, it still goes back as it shrinks.
 
 - **A panel's lit corner turns the corner**: the ember light along a panel's top and left edge now runs round its
   rounded top-left corner (it started inside the curve, which stayed the plain edge, so the corner looked cut off).
