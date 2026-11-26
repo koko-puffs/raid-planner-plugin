@@ -656,8 +656,8 @@ ignored. _Upload since_ (`Configuration.UploadSince`) is set when 0.6.0 first lo
 version 1, is moved to version 2: Upload my logs on, from then on; `UploadPrefs.Migrate`) and each time _Upload
 my logs_ is turned on, so pulls kept before (or while it was off) go only with _Upload my older pulls_, which sets
 it to the beginning of time. The site's answer says whether a pull is public now (`public`); the plugin only logs
-it. Your logs are public on the site, with your party's names and worlds, unless you make them private there
-(Settings → Your logs, `SiteLink.LogsSettingsUrl`); Settings → Recording says so and links there.
+it. Your logs are always public on the site, with your party's names and worlds; a player can hide their own
+character there (Settings → Your logs, `SiteLink.LogsSettingsUrl`); Settings → Recording says so and links there.
 
 ## Progress and your roster (`Game/Uploads.cs`, `Core/PullSummary.cs`)
 
@@ -2526,7 +2526,7 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.10.0
 
 - **Replay is the site's again**: a pull's page no longer plays it back in the window (0.9.0's _Summary · Replay_). Its
   place has _Open on the site_, the pull's Replay on the Raid Codex, which keeps getting better without a plugin
@@ -2550,7 +2550,7 @@ entry).
 - **Every empty state has a next step**: no pulls yet (_Turn recording on_, or _Recording settings_), a pull that
   couldn't be read (_Open the recordings folder_), one with nothing in it (_All pulls_).
 
-### 0.9.0 (not released yet)
+### 0.9.0
 
 - **Replay a pull in the window**: a pull's page has _Summary · Replay_. Replay plays the pull back as the Raid Codex
   does: the arena with the party by job, the enemies, their mechanics as they're cast and land, tethers, markers,
