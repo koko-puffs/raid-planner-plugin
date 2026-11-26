@@ -116,6 +116,9 @@ public sealed partial class MeterWindow : Window
     /// <summary>The title bar's height when it shows (screen px), measured once it has; until then ImGui's frame height.</summary>
     private float titleH;
 
+    /// <summary>Its chrome this frame (screen px): the title bar unlocked, the arranging head, none locked (<see cref="Arrange"/>).</summary>
+    private float chromeNow;
+
     /// <summary>How tall the content drawn last frame was (screen px): ImGui fits a folded or empty meter to it this frame.</summary>
     private float contentH;
 
@@ -409,7 +412,8 @@ public sealed partial class MeterWindow : Window
         // Compact is never resized by hand; the normal meter isn't while the mouse is over its buttons (a press there is theirs).
         if (!MeterLayout.Resizable(config.MeterCompact, Locked) || guard.Over()) Flags |= ImGuiWindowFlags.NoResize;
         var scale = Theme.Scale;
-        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : titleH > 0 ? titleH : ImGui.GetFrameHeight();
+        var chrome = Arranging ? ArrangeMode.HeadH : Locked ? 0 : TitleBarH;
+        chromeNow = chrome;
         if (config.MeterCompact)
         {
             ArrangePlate(scale, chrome);
@@ -443,7 +447,24 @@ public sealed partial class MeterWindow : Window
             fightH = height;
         }
         else SizeCondition = ImGuiCond.FirstUseEver;
-        PlaceAt(widthCss * scale, height);
+        PlaceAt(widthCss * scale, height, chrome);
+    }
+
+    /// <summary>The title bar's height (screen px): as measured once it has shown, ImGui's frame height until then (the same, at Begin's font).</summary>
+    private float TitleBarH => titleH > 0 ? titleH : ImGui.GetFrameHeight();
+
+    /// <summary>The anchor as the settings keep it.</summary>
+    private MeterAnchor Anchor
+    {
+        get => new(new Vector2(config.MeterAnchorX, config.MeterAnchorY), config.MeterAnchored, config.MeterAnchorFor, config.MeterAnchorVersion);
+        set
+        {
+            config.MeterAnchorX = value.At.X;
+            config.MeterAnchorY = value.At.Y;
+            config.MeterAnchored = value.Anchored;
+            config.MeterAnchorFor = value.For;
+            config.MeterAnchorVersion = value.Version;
+        }
     }
 
     /// <summary>The fight's height (CSS px) as <see cref="MeterLayout.Hold"/> has it this frame, held from here on while the mouse stays.</summary>
@@ -455,23 +476,32 @@ public sealed partial class MeterWindow : Window
         return h;
     }
 
-    /// <summary>Places the window from its anchor for this size (screen px), kept on the screen; not while held, nor before its height is known.</summary>
-    private void PlaceAt(float width, float height)
+    /// <summary>
+    /// Places the window from its anchor for this size and chrome (screen px), kept on the screen (never saved: the anchor
+    /// stays, so it goes back exactly); not while held, nor before its height is known.
+    /// </summary>
+    private void PlaceAt(float width, float height, float chrome)
     {
+        // An anchor saved before it was its content's: read once as this version does, with the chrome it was saved with
+        // (none locked, the title bar unlocked), so it stays exactly where it is.
+        var a = Anchor;
+        if (a.Version < MeterAnchor.Current)
+        {
+            Anchor = a.Migrated(config.MeterLocked ? 0 : TitleBarH);
+            config.Save();
+        }
         if (resetWanted && !float.IsNaN(height))
         {
             // Reset places: its anchor as it would be at its first place, for its size now.
             resetWanted = false;
             var screen = ImGui.GetMainViewport().WorkPos;
-            SetAnchor(ArrangeLayout.MeterFirst(screen, new Vector2(width, height), config.MeterGrows));
+            SetAnchor(ArrangeLayout.MeterFirst(screen, new Vector2(width, height), config.MeterGrows, chrome));
             config.Save();
         }
-        if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows || held || float.IsNaN(height)) return;
         var vp = ImGui.GetMainViewport();
         var otherScreens = (ImGui.GetIO().ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0;
-        var at = MeterLayout.Place(new Vector2(config.MeterAnchorX, config.MeterAnchorY), new Vector2(width, height), config.MeterGrows, vp.WorkPos,
-            vp.WorkPos + vp.WorkSize, otherScreens);
-        ImGui.SetNextWindowPos(at, ImGuiCond.Always);
+        if (Anchor.Place(config.MeterGrows, new Vector2(width, height), chrome, vp.WorkPos, vp.WorkPos + vp.WorkSize, otherScreens, held) is { } at)
+            ImGui.SetNextWindowPos(at, ImGuiCond.Always);
     }
 
     /// <summary>
@@ -516,8 +546,9 @@ public sealed partial class MeterWindow : Window
 
     /// <summary>
     /// Inside the window, each frame: the title bar's height, whether you've taken hold of it, and its
-    /// anchor: read from where it is the first time (one saved by an older version stays where it was),
-    /// moved to the other corner when Grows changes, following it while you move or size it.
+    /// anchor (<see cref="MeterAnchor.Track"/>): read from where it is the first time (one saved by an older version
+    /// stays where it was), moved to the other corner of where it is when Grows changes, following it while
+    /// you move or size it; otherwise never read back from where it was kept on the screen.
     /// </summary>
     private void Track()
     {
@@ -535,18 +566,20 @@ public sealed partial class MeterWindow : Window
         if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByPopup)
             || ImGui.IsPopupOpen(Picker) || ImGui.IsPopupOpen(TabMenu) || ImGui.IsPopupOpen(PlateMenu))
             pointedFrame = ImGui.GetFrameCount();
-        if (!config.MeterAnchored || config.MeterAnchorFor != config.MeterGrows)
+        // Locked (or not held) it's kept as it is: where it was kept on the screen this frame is never read back.
+        var (anchor, change) = Anchor.Track(config.MeterGrows, pos, size, chromeNow, held && drawnOnce && (pos != lastPos || size != lastSize));
+        if (change is AnchorChange.First or AnchorChange.Turned)
         {
             // 0.3.0 kept the height it first opened to (382) by itself, not only one you gave it: that one isn't yours.
-            if (!config.MeterAnchored && MathF.Abs(config.MeterHeight - OpenHeight) < 0.5f) config.MeterHeight = 0;
-            SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
+            if (change == AnchorChange.First && MathF.Abs(config.MeterHeight - OpenHeight) < 0.5f) config.MeterHeight = 0;
+            Anchor = anchor;
             config.Save();
         }
-        else if (held && drawnOnce && (pos != lastPos || size != lastSize))
+        else if (change == AnchorChange.Moved)
         {
             // Sized by its edge: your drag wins; once you let go it's fitted again under the height you gave it, not held.
             if (size != lastSize) holdH = 0;
-            SetAnchor(MeterLayout.Corner(pos, size, config.MeterGrows));
+            Anchor = anchor;
             anchorMoved = true;
             // The normal meter sized by its edge in a fight: that's the height you're giving it (compact can't be sized).
             if (!config.MeterCompact && view is View.Fight or View.Waiting && !float.IsNaN(fightH) && MathF.Abs(size.Y - fightH) > 1.5f) givenNow = size.Y / Theme.Scale;
@@ -556,13 +589,7 @@ public sealed partial class MeterWindow : Window
         drawnOnce = true;
     }
 
-    private void SetAnchor(Vector2 at)
-    {
-        config.MeterAnchorX = at.X;
-        config.MeterAnchorY = at.Y;
-        config.MeterAnchored = true;
-        config.MeterAnchorFor = config.MeterGrows;
-    }
+    private void SetAnchor(Vector2 at) => Anchor = new MeterAnchor(at, true, config.MeterGrows, MeterAnchor.Current);
 
     /// <summary>Once you let go: the height you gave it and where you put it, saved once (not every frame of the drag).</summary>
     private void Commit()

@@ -278,8 +278,13 @@ public static class MeterLayout
     /// <summary>A tab as saved: one this version doesn't have (a newer version's) is Damage.</summary>
     public static MeterTab Known(MeterTab tab) => (int)tab >= 0 && (int)tab < Words.Length ? tab : MeterTab.Damage;
 
-    /// <summary>The point that stays put for a window at <paramref name="pos"/> this size: its top-left growing down, its bottom-left growing up.</summary>
-    public static Vector2 Corner(Vector2 pos, Vector2 size, MeterGrows grows) => grows == MeterGrows.Up ? new Vector2(pos.X, pos.Y + size.Y) : pos;
+    /// <summary>
+    /// The point that stays put for a window at <paramref name="pos"/> this size: its content's top-left growing down (under
+    /// its <paramref name="chrome"/>, the title bar unlocked or the arranging head, so locking it or Arrange windows' Done
+    /// doesn't move what it shows), its bottom-left growing up (the chrome is at its top, away from it).
+    /// </summary>
+    public static Vector2 Corner(Vector2 pos, Vector2 size, MeterGrows grows, float chrome = 0) =>
+        grows == MeterGrows.Up ? new Vector2(pos.X, pos.Y + size.Y) : new Vector2(pos.X, pos.Y + chrome);
 
     /// <summary>
     /// Where the window's top-left goes for its anchor and size: the anchor's edge kept, the rest
@@ -287,11 +292,12 @@ public static class MeterLayout
     /// little as it takes (its head's edge first when it's taller than the screen; after the game's
     /// resolution shrinks, back onto it). The anchor itself isn't moved, so it goes back when it's
     /// smaller. With Dalamud's multi-monitor windows on (<paramref name="otherScreens"/>) an anchor
-    /// off the game's screen is on another monitor, and left as it is.
+    /// off the game's screen is on another monitor, and left as it is. Growing down the window's top is
+    /// <paramref name="chrome"/> over the anchor (<see cref="Corner"/>: the anchor is its content's).
     /// </summary>
-    public static Vector2 Place(Vector2 anchor, Vector2 size, MeterGrows grows, Vector2 screenMin, Vector2 screenMax, bool otherScreens = false)
+    public static Vector2 Place(Vector2 anchor, Vector2 size, MeterGrows grows, Vector2 screenMin, Vector2 screenMax, bool otherScreens = false, float chrome = 0)
     {
-        var pos = grows == MeterGrows.Up ? new Vector2(anchor.X, anchor.Y - size.Y) : anchor;
+        var pos = grows == MeterGrows.Up ? new Vector2(anchor.X, anchor.Y - size.Y) : new Vector2(anchor.X, anchor.Y - chrome);
         const float slack = 1;
         var off = anchor.X < screenMin.X - slack || anchor.X > screenMax.X + slack || anchor.Y < screenMin.Y - slack || anchor.Y > screenMax.Y + slack;
         if (off && otherScreens) return pos;

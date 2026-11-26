@@ -209,6 +209,12 @@ public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
     /// <summary>Which corner the anchor is (moved to the other's place when Grows is changed).</summary>
     public MeterGrows MeterAnchorFor { get; set; } = MeterGrows.Down;
 
+    /// <summary>
+    /// What the anchor means (<see cref="UI.Model.MeterAnchor.Current"/>): 1 growing down its content's top-left, under the
+    /// title bar; 0 (saved before) the window's, the title bar's top, read once as 1 (<see cref="UI.Model.MeterAnchor.Migrated"/>).
+    /// </summary>
+    public int MeterAnchorVersion { get; set; }
+
     /// <summary>Where the meter shows the limit break gauge (added in 0.4.0): in its head, in its foot, or not at all.</summary>
     public GaugePlace MeterGauge { get; set; } = GaugePlace.Foot;
 

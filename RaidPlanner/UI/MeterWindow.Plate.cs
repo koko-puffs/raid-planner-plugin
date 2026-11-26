@@ -104,7 +104,7 @@ public sealed partial class MeterWindow
         Size = Theme.Units(new Vector2(width, h));
         SizeCondition = ImGuiCond.Always;
         fightH = h * scale;
-        PlaceAt(width * scale, h * scale);
+        PlaceAt(width * scale, h * scale, chrome);
     }
 
     /// <summary>The compact meter, inside the window: one line, or the fight; then what was pressed, the menu and the details panel.</summary>

@@ -200,8 +200,8 @@ public static class ArrangeLayout
     /// </summary>
     public static readonly Vector2 ImGuiFirst = new(60, 60);
 
-    /// <summary>The meter's first place (Reset places): its anchor (its Grows corner) for a meter this big at ImGui's first place.</summary>
-    public static Vector2 MeterFirst(Vector2 screenMin, Vector2 size, MeterGrows grows) => MeterLayout.Corner(screenMin + ImGuiFirst, size, grows);
+    /// <summary>The meter's first place (Reset places): its anchor (its Grows corner) for a meter this big, its chrome on top, at ImGui's first place.</summary>
+    public static Vector2 MeterFirst(Vector2 screenMin, Vector2 size, MeterGrows grows, float chrome = 0) => MeterLayout.Corner(screenMin + ImGuiFirst, size, grows, chrome);
 
     /// <summary>
     /// The plan window's place on Reset places: at the right of the screen, 60px in, centred down it (its ImGui first
