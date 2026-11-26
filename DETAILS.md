@@ -2552,7 +2552,7 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.10.2
 
 - **Big raidwides hitting the whole party were sometimes recorded with no one hit, so a death to one had no cause on
   the site.** A hit that did damage to the party is now kept whoever the game says cast it, and when the game has no
