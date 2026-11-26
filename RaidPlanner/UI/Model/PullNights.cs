@@ -62,6 +62,35 @@ public static class PullNights
     }
 
     /// <summary>
+    /// The pulls' numbers as the site says them (since 0.9.1, its words: "Pull 17" by night): each pull's place among its
+    /// night's pulls of its duty, the first 1. <paramref name="pulls"/> in local time, in any order (the list's, newest first).
+    /// </summary>
+    public static int[] Numbers(IReadOnlyList<(DateTime Local, string Duty)> pulls)
+    {
+        var order = Enumerable.Range(0, pulls.Count).OrderBy(i => pulls[i].Local).ToList();
+        var counts = new Dictionary<(DateTime, string), int>();
+        var numbers = new int[pulls.Count];
+        foreach (var i in order)
+        {
+            var key = (KeyOf(pulls[i].Local), pulls[i].Duty.ToUpperInvariant());
+            counts.TryGetValue(key, out var n);
+            numbers[i] = counts[key] = n + 1;
+        }
+        return numbers;
+    }
+
+    /// <summary>The number a pull of <paramref name="duty"/> starting at <paramref name="nowLocal"/> has: one more than its night's kept pulls of it before then.</summary>
+    public static int Next(IReadOnlyList<(DateTime Local, string Duty)> pulls, string duty, DateTime nowLocal)
+    {
+        var key = KeyOf(nowLocal);
+        var n = 1;
+        foreach (var p in pulls)
+            if (KeyOf(p.Local) == key && p.Local <= nowLocal && string.Equals(p.Duty, duty, StringComparison.OrdinalIgnoreCase))
+                n++;
+        return n;
+    }
+
+    /// <summary>
     /// Each duty's best pull in a list (a night's): its fastest clear, else the one that lasted longest; only for a duty
     /// pulled more than once. Returns their places in the list.
     /// </summary>

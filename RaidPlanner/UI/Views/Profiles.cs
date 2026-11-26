@@ -77,7 +77,7 @@ public sealed partial class MainWindow
         const string add = "New profile";
         var bw = Kit.ButtonWidth(add, BtnSize.Md, Icon.Plus);
         var textW = w - bw - S(16);
-        var th = Kit.Callout(dl, at, SettingsIndex.Title(SettingsTab.Profiles), 17, textW, 2, 1.1f);
+        var th = Kit.Callout(dl, at, SettingsIndex.Title(SettingsTab.Profiles), 22, textW, 2, 1.05f);
         var y = at.Y + th + S(6);
         var lh = Txt.Flow(new Vector2(at.X, y), textW, ProfileLead, 19.5f, out _);
         if (Kit.Button("##prof-new", new Vector2(at.X + w - bw, at.Y), add, Btn.Outline, BtnSize.Md, Icon.Plus, 0, false,
@@ -188,7 +188,7 @@ public sealed partial class MainWindow
         if (Kit.Button("##prof-delete", new Vector2(at.X + w - dw, at.Y), delete, Btn.Danger, BtnSize.Sm, Icon.Trash, 0, false, "Deletes this profile. It asks first."))
             Ask($"Delete {ProfileItems.Title(p)}?",
                 "Its settings go. Where it was used, your usual settings are, from now on.",
-                "Delete it", "Keep it", () => DeleteProfile(p), danger: true, yesIcon: Icon.Trash);
+                "Delete", () => DeleteProfile(p), danger: true, yesIcon: Icon.Trash);
         Kit.Reserve(at, w, MathF.Max(back, th));
         Kit.Gap(18);
 
@@ -215,8 +215,7 @@ public sealed partial class MainWindow
         Kit.Gap(18);
 
         // What it changes.
-        SettingsParts.SectionHead("##prof-changes-head", "What it changes", "Off: it follows your usual settings.");
-        Kit.BeginPanel("##prof-changes" + p.Id, 0, 0, 0);
+        Kit.BeginPanel("##prof-changes" + p.Id, "What it changes", "Off: it follows your usual settings.", 0, 0, 0);
         for (var i = 0; i < ProfileItems.All.Count; i++) ProfileRow(p, ProfileItems.All[i], i);
         Kit.EndPanel();
         Kit.Gap(18);
@@ -279,13 +278,13 @@ public sealed partial class MainWindow
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
-        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
+        if (index > 0 || Kit.PanelHeaded) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
         var on = ProfileItems.Changes(p, item);
         var field = item.Fields[0];
         var value = on ? ProfileLayer.Value(config, config, p, field) : null;
         var sw = Kit.SwitchSize;
-        var x = at.X + S(16);
-        var right = at.X + w - S(16);
+        var x = at.X + S(20);
+        var right = at.X + w - S(20);
         var controlW = on ? ControlWidth(item, value) : Txt.Width("usual", Face.Sans, 12);
         var wordsW = right - sw.X - S(14) - controlW - S(14) - x;
         var nameH = S(14 * 1.3f);

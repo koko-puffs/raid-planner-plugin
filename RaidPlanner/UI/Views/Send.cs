@@ -224,7 +224,7 @@ public sealed partial class MainWindow
             if (stop) StopSend(s);
             Kit.Gap(10);
             var at = Kit.At;
-            var h = Kit.Cast(Kit.Dl, at, Kit.Width, $"Sending pull {Math.Max(1, info.Pull)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
+            var h = Kit.Cast(Kit.Dl, at, Kit.Width, $"Sending pull {PullNo(info)}", s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
             Kit.Reserve(at, Kit.Width, h);
             return;
         }
@@ -358,7 +358,7 @@ public sealed partial class MainWindow
         {
             const string stop = "Stop";
             var sw = Kit.ButtonWidth(stop, BtnSize.Sm, null, Btn.Quiet);
-            Kit.Cast(dl, new Vector2(at.X, at.Y + (h - S(13 * 1.2f + 4.8f + 6)) / 2), w - sw - S(12), $"Sending pull {Math.Max(1, info.Pull)}",
+            Kit.Cast(dl, new Vector2(at.X, at.Y + (h - S(13 * 1.2f + 4.8f + 6)) / 2), w - sw - S(12), $"Sending pull {PullNo(info)}",
                 s.Bytes > 0 ? Format.Megabytes(s.Bytes) : null, Running(1.6f));
             if (Kit.Button(id + "stop", new Vector2(at.X + w - sw, at.Y), stop, Btn.Quiet, BtnSize.Sm)) StopSend(s);
             Kit.Reserve(at, w, h);

@@ -84,10 +84,9 @@ public sealed partial class MainWindow
         foreach (var night in nights)
         {
             Kit.Gap(18);
-            var at = Kit.At;
-            Kit.Eyebrow(Kit.Dl, at, night.Heading, null, Kit.Width, Palette.Muted);
-            Kit.Reserve(at, Kit.Width, Kit.EyebrowH);
-            Kit.Gap(8);
+            // A night's head as a panel's title ("Tonight", its count faint after it), as the site heads its groups.
+            Kit.Section($"##night-head-{night.Key:yyyyMMdd}", night.Label, Words.Count(night.Items.Count, "pull"));
+            Kit.Gap(10);
             var rows = night.Items.Select(i => all[i]).ToList();
             // The duty most of the night was in isn't said on each row; another is.
             var main = rows.GroupBy(r => r.Duty, StringComparer.OrdinalIgnoreCase).OrderByDescending(g => g.Count()).First().Key;
@@ -96,7 +95,10 @@ public sealed partial class MainWindow
         Frame.EndBody();
     }
 
-    /// <summary>No pulls kept: the Boss asleep and a line.</summary>
+    /// <summary>
+    /// No pulls kept (the site's StatePanel: never a dead end): the Boss asleep, a callout, one line, and the next step: with
+    /// recording off, Turn recording on (the primary); on, Recording settings.
+    /// </summary>
     private void DrawNoPulls()
     {
         var dl = Kit.Dl;
@@ -107,8 +109,28 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, S(96));
         Kit.Gap(8.8f);
         var cy = Kit.At;
-        Kit.Reserve(cy, w, Kit.Callout(dl, cy, "No pulls yet", 17, w, 2, 1.05f, center: true));
-        Kit.Gap(8.8f);
-        Txt.Note(config.AutoRecord ? "Each pull in a raid or trial is kept here by itself, the newest first." : "Recording is off: turn it on in Settings › Recording.", center: true);
+        Kit.Reserve(cy, w, Kit.Callout(dl, cy, "No pulls yet", 22, w, 2, 1.05f, center: true));
+        Kit.Gap(10);
+        Txt.Note(config.AutoRecord ? "Each pull in a raid or trial is kept here by itself, the newest first." : "Recording is off, so no pull is kept.", center: true);
+        Kit.Gap(16);
+        var label = config.AutoRecord ? "Recording settings" : "Turn recording on";
+        var style = config.AutoRecord ? Btn.Outline : Btn.Tele;
+        var bw = Kit.ButtonWidth(label, BtnSize.Md, config.AutoRecord ? Icon.Sliders : null, style);
+        var bp = Kit.At;
+        if (Kit.Button("##no-pulls-next", new Vector2(bp.X + (w - bw) / 2, bp.Y), label, style, BtnSize.Md, config.AutoRecord ? Icon.Sliders : null))
+        {
+            if (config.AutoRecord)
+            {
+                settingsFrom = screen;
+                screen = Screen.Settings;
+                GoToPage(SettingsTab.Recording);
+            }
+            else
+            {
+                config.AutoRecord = true;
+                config.Save();
+            }
+        }
+        Kit.Reserve(bp, w, Kit.ButtonHeight());
     }
 }

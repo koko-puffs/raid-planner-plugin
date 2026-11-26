@@ -24,7 +24,7 @@ public class HomeTests
         Assert.Equal("Hello World 2", g.EndedAt);
         Assert.Equal(8, g.Party);
         var said = PullGist.Sentence(Outcome.Wipe, 391, g);
-        Assert.Equal("Wiped at Hello World 2, P3. Three deaths, the first Velka Moor to Latent Defect.", PullGist.Plain(said));
+        Assert.Equal("Wiped in P3, at Hello World 2. Three deaths, the first Velka Moor to Latent Defect.", PullGist.Plain(said));
         Assert.Contains(said, s => s.Strong && s.Text == "Hello World 2");
         Assert.Equal("P3", PullGist.Where(g));
     }
@@ -107,6 +107,24 @@ public class HomeTests
             ("UWU", 900, Outcome.Wipe),
         };
         Assert.Equal(new HashSet<int> { 1, 5 }, PullNights.Best(pulls));
+    }
+
+    [Fact]
+    public void Pulls_are_numbered_by_night_and_duty_as_the_site_says_them()
+    {
+        // 0.9.1: "Pull 17" is the pull's place in its night of its fight (the site's words), not since the zone was entered.
+        var pulls = new List<(DateTime, string)>
+        {
+            (new DateTime(2026, 11, 25, 0, 40, 0), "TOP"), // after midnight: still Monday's night
+            (new DateTime(2026, 11, 24, 23, 10, 0), "top"),
+            (new DateTime(2026, 11, 24, 22, 0, 0), "FRU"),
+            (new DateTime(2026, 11, 24, 21, 0, 0), "TOP"),
+            (new DateTime(2026, 11, 23, 21, 0, 0), "TOP"), // the night before
+        };
+        Assert.Equal(new[] { 3, 2, 1, 1, 1 }, PullNights.Numbers(pulls));
+        Assert.Equal(4, PullNights.Next(pulls, "TOP", new DateTime(2026, 11, 25, 1, 0, 0)));
+        Assert.Equal(1, PullNights.Next(pulls, "TOP", new DateTime(2026, 11, 25, 20, 0, 0)));
+        Assert.Equal(2, PullNights.Next(pulls, "FRU", new DateTime(2026, 11, 24, 23, 0, 0)));
     }
 
     [Fact]

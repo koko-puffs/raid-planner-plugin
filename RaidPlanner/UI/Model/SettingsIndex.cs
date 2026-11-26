@@ -235,7 +235,7 @@ namespace RaidPlanner.UI.Model
             // Kept by Reset this page: on would upload pulls, and uploads are public on the site (as on FF Logs).
             new(SettingId.UploadLogs, Rec, "Uploads", "Upload my logs", "Each pull goes to your Raid Codex as it ends.", Keep: true),
             new(SettingId.UploadOlder, Rec, "Uploads", "Upload my older pulls", "The pulls kept here from before, the oldest first.", Sub: true, Action: true),
-            new(SettingId.WhoSees, Rec, "Uploads", "Who sees my logs", "Public on the site, with names. Make yours private there.", Sub: true, Action: true),
+            new(SettingId.WhoSees, Rec, "Uploads", "Logs are public", "On the site, with names. You can hide your character there.", Sub: true, Action: true),
             new(SettingId.TrackProgress, Rec, "Uploads", "Track my progress", "How far each pull got, for Progress on the site."),
             new(SettingId.SmoothReplays, Rec, "More", "Smoother replays", "Places four times a second, not two: bigger files.", "smoother replays", More: true),
             new(SettingId.ShowInBar, Rec, "More", "Show it in the server info bar", "“Rec 2:31” while a pull is recorded.", "the server info bar", More: true),
@@ -336,7 +336,7 @@ namespace RaidPlanner.UI.Model
             // Account and privacy.
             new(SettingId.Account, Acc, "Your account", "Raid Codex account", "Link it with a token from the site, or unlink it.", Action: true),
             new(SettingId.Codex, Acc, "Your account", "The Raid Codex", "Make plans from your pulls, draw your strats, present them.", Action: true),
-            new(SettingId.WhoSees, Acc, "Privacy", "Who sees my logs", "Public on the site, with names. Make yours private there.", Echo: true, Action: true),
+            new(SettingId.WhoSees, Acc, "Privacy", "Logs are public", "On the site, with names. You can hide your character there.", Echo: true, Action: true),
 
             // Advanced.
             new(SettingId.Diagnostics, Adv, "Diagnostics", "Diagnostics", "Writes what it reads from the game to a file, for checking."),

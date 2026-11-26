@@ -447,7 +447,8 @@ public sealed partial class MainWindow : Window, IDisposable
     // ---------------------------------------------------------------------------------------------
     // The question: the site's dialog over the window, its answers saying what happens.
 
-    private sealed record Confirmation(string Title, string Body, string Yes, string No, Action OnYes, bool Danger, Icon? YesIcon);
+    /// <summary>A question (the site's ConfirmDialog): its title, its line, its action (the verb alone: "Delete"), whether it can't be undone.</summary>
+    private sealed record Confirmation(string Title, string Body, string Yes, Action OnYes, bool Danger, Icon? YesIcon);
 
     private Confirmation? confirm;
     private float confirmCardH;
@@ -458,9 +459,10 @@ public sealed partial class MainWindow : Window, IDisposable
     /// <summary>When the question was asked (it fades in from then).</summary>
     private double confirmAt;
 
-    private void Ask(string title, string body, string yes, string no, Action onYes, bool danger = false, Icon? yesIcon = null)
+    /// <summary>Asks first (the site's ConfirmDialog, never "press again"): Cancel, the one "don't" of every question, and the action.</summary>
+    private void Ask(string title, string body, string yes, Action onYes, bool danger = false, Icon? yesIcon = null)
     {
-        confirm = new Confirmation(title, body, yes, no, onYes, danger, yesIcon);
+        confirm = new Confirmation(title, body, yes, onYes, danger, yesIcon);
         confirmFocused = false;
         confirmAt = ImGui.GetTime();
     }
@@ -473,12 +475,12 @@ public sealed partial class MainWindow : Window, IDisposable
     }
 
     /// <summary>
-    /// The question over the plugin's window: a window of its own the size of the plugin's, kept in
-    /// front, which dims the window under Dalamud's title bar (rgb 4 4 5 at 74%) and takes every
-    /// click; in its middle the site's dialog: raised near-solid #18181d with 20px corners, a white
-    /// hairline and the shadow faked with rings, its title a small callout, its words, its two
-    /// answers on the right (a destructive one in the danger outline). No key answers it. It fades in
-    /// over 280ms (text can't scale crisply in ImGui, so it doesn't grow).
+    /// The question over the plugin's window (the site's ConfirmDialog, `.dlg`): a window of its own the size of the plugin's,
+    /// kept in front, which dims the window under Dalamud's title bar (the scrim, rgb 3 3 4 at 66%) and takes every click; in
+    /// its middle the dialog: a panel's ground and lit edge with 20px corners and the shadow faked with rings; its head (a red
+    /// well with the action's icon for what can't be undone, the title in Geist 600 15px, its line in 13px muted), and its foot
+    /// under a hairline: Cancel, then the action (red for what can't be undone, else the primary). No key answers it. It
+    /// fades in over 260ms (text can't scale crisply in ImGui, so it doesn't rise).
     /// </summary>
     private void DrawConfirm()
     {
@@ -513,42 +515,61 @@ public sealed partial class MainWindow : Window, IDisposable
             var since = (float)(ImGui.GetTime() - confirmAt);
             Palette.Opacity = ReducedMotion ? 1 : Model.Ease.Out(Math.Clamp(since / TSettle, 0, 1));
             var dl = ImGui.GetWindowDrawList();
-            dl.AddRectFilled(under, under + underSize, Palette.U32(Palette.Rgba(4, 4, 5, 0.74f)), S(Palette.RadiusLg), ImDrawFlags.RoundCornersBottom);
-            var width = MathF.Min(S(440), winSize.X - S(48));
-            var pad = S(24);
-            var inner = width - pad * 2;
-            var cardH = confirmCardH > 0 ? confirmCardH : S(200);
+            dl.AddRectFilled(under, under + underSize, Palette.U32(Palette.Scrim), S(Palette.RadiusLg), ImDrawFlags.RoundCornersBottom);
+            var width = MathF.Min(S(480), winSize.X - S(48));
+            var cardH = confirmCardH > 0 ? confirmCardH : S(180);
             var cardPos = new Vector2(winPos.X + (winSize.X - width) / 2, under.Y + MathF.Max(S(40), (underSize.Y - cardH) / 2));
             var rr = S(Palette.RadiusXl);
-            // The shadow, faked with rings, inside this window (it would otherwise sit under the window it's over).
-            dl.AddRect(cardPos - new Vector2(S(3)), cardPos + new Vector2(width, cardH) + new Vector2(S(3)), Palette.U32(Palette.WithAlpha(Palette.Black, 0.25f)), rr + S(3), ImDrawFlags.None, S(6));
-            dl.AddRect(cardPos - new Vector2(S(10)), cardPos + new Vector2(width, cardH) + new Vector2(S(10)), Palette.U32(Palette.WithAlpha(Palette.Black, 0.12f)), rr + S(10), ImDrawFlags.None, S(8));
-            dl.AddRectFilled(cardPos, cardPos + new Vector2(width, cardH), Palette.U32(Palette.Raised), rr);
-            dl.AddRect(cardPos + new Vector2(0.5f), cardPos + new Vector2(width, cardH) - new Vector2(0.5f), Palette.U32(Palette.Line2), rr, ImDrawFlags.None, 1f);
+            // The shadow (`0 40px 90px -30px`), faked with rings, inside this window (it would otherwise sit under the window it's over).
+            dl.AddRect(cardPos - new Vector2(S(3)), cardPos + new Vector2(width, cardH) + new Vector2(S(3)), Palette.U32(Palette.WithAlpha(Palette.Black, 0.3f)), rr + S(3), ImDrawFlags.None, S(6));
+            dl.AddRect(cardPos - new Vector2(S(10)), cardPos + new Vector2(width, cardH) + new Vector2(S(10)), Palette.U32(Palette.WithAlpha(Palette.Black, 0.15f)), rr + S(10), ImDrawFlags.None, S(8));
+            Kit.PanelGround(dl, cardPos, cardPos + new Vector2(width, cardH), rr);
+            Kit.PanelEdge(dl, cardPos, cardPos + new Vector2(width, cardH), rr);
 
-            var at = cardPos + new Vector2(pad, pad);
-            ImGui.SetCursorScreenPos(at);
-            Kit.PushBox(at.X, inner);
-            var th = Kit.Callout(dl, at, c.Title, 17, inner, 2, 1.05f);
-            Kit.Reserve(at, inner, th);
-            Kit.Gap(10);
-            Txt.Para(new[] { new Run(c.Body, Face.Sans, 14, Palette.Text) }, 21.7f);
-            Kit.Gap(20);
-            var buttons = Kit.At;
-            var yesStyle = c.Danger ? Btn.Danger : Btn.Tele;
+            // The head (`.rp-dlg-h`: 22 over, 24 in, 8 under).
+            var pad = S(24);
+            var at = cardPos + new Vector2(pad, S(22));
+            var x = at.X;
+            if (c.Danger)
+            {
+                // `.rp-warnic`: 40px, 12px corners, the danger wash and line, the action's icon in red.
+                var well = S(40);
+                dl.AddRectFilled(at, at + new Vector2(well), Palette.U32(Palette.DangerWash), S(12));
+                dl.AddRect(at + new Vector2(0.5f), at + new Vector2(well) - new Vector2(0.5f), Palette.U32(Palette.DangerLine), S(12), ImDrawFlags.None, 1f);
+                Icons.Draw(dl, c.YesIcon ?? Icon.Trash, at + new Vector2((well - S(18)) / 2), S(18), Palette.Danger, 1.75f);
+                x += well + S(12);
+            }
+            var inner = cardPos.X + width - pad - x;
+            ImGui.SetCursorScreenPos(new Vector2(x, at.Y));
+            Kit.PushBox(x, inner);
+            var tp = Kit.At;
+            Txt.Line(dl, tp, Txt.Fit(c.Title, Face.SansSemibold, 15, inner), Face.SansSemibold, 15, Palette.White, 15 * 1.3f);
+            Kit.Reserve(tp, inner, S(15 * 1.3f));
+            Kit.Gap(4);
+            Txt.Para(new[] { new Run(c.Body, Face.Sans, 13, Palette.Muted) }, 19);
+            Kit.PopBox();
+            var headBottom = MathF.Max(Kit.At.Y, at.Y + (c.Danger ? S(40) : 0)) + S(8) + S(12);
+
+            // The foot (`.rp-dlg-f`): a hairline, 14 over and under, 20 in; Cancel, then the action.
+            Kit.Rule(dl, cardPos.X + 1, cardPos.X + width - 1, headBottom);
+            var by = headBottom + S(14);
+            var yesStyle = c.Danger ? Btn.DangerFill : Btn.Tele;
             var yesW = Kit.ButtonWidth(c.Yes, BtnSize.Md, c.YesIcon, yesStyle);
-            var noW = Kit.ButtonWidth(c.No);
+            const string no = "Cancel";
+            var noW = Kit.ButtonWidth(no);
+            var right = cardPos.X + width - S(20);
             var close = false;
-            if (Kit.Button("##no", new Vector2(buttons.X + inner - yesW - S(6.4f) - noW, buttons.Y), c.No)) close = true;
-            if (Kit.Button("##yes", new Vector2(buttons.X + inner - yesW, buttons.Y), c.Yes, yesStyle, BtnSize.Md, c.YesIcon))
+            if (Kit.Button("##no", new Vector2(right - yesW - S(8) - noW, by), no)) close = true;
+            if (Kit.Button("##yes", new Vector2(right - yesW, by), c.Yes, yesStyle, BtnSize.Md, c.YesIcon))
             {
                 close = true;
                 Later(c.OnYes);
             }
-            // No key answers it (the plugin reads no keys: CLAUDE.md); No and Yes are pressed.
-            Kit.Reserve(buttons, inner, Kit.ButtonHeight());
-            Kit.PopBox();
-            confirmCardH = Kit.At.Y - cardPos.Y + pad;
+            // No key answers it (the plugin reads no keys: CLAUDE.md); Cancel and the action are pressed.
+            ImGui.SetCursorScreenPos(new Vector2(cardPos.X, by + Kit.ButtonHeight() + S(14)));
+            ImGui.Dummy(Vector2.Zero);
+            confirmCardH = by + Kit.ButtonHeight() + S(14) - cardPos.Y;
+
             Palette.Opacity = old;
             if (close && ReferenceEquals(confirm, c)) confirm = null;
         }

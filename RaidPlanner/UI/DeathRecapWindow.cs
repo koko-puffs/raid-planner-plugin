@@ -146,7 +146,7 @@ public sealed class DeathRecapWindow : OverlayWindow
         else if (over) dl.AddRectFilled(at, at + new Vector2(size), Palette.U32(Palette.HoverButton), S(6));
         var icon = S(14);
         Icons.Draw(dl, Icon.Pin, at + new Vector2((size - icon) / 2), icon, on ? Palette.Ember : over ? Palette.White : Palette.Faint);
-        if (over) Kit.Tooltip(on ? "Pinned: it stays until you press this again." : "Keep it: it stays until you press this again.");
+        if (over) Kit.Tooltip(on ? "Pinned: it stays until you unpin it." : "Pin it: it stays until you unpin it.");
         if (clicked) queue.TogglePin();
         return at.X;
     }

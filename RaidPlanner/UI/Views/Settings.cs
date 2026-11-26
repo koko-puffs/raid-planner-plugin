@@ -318,11 +318,9 @@ public sealed partial class MainWindow
             switch (tab, section.Title)
             {
                 case (SettingsTab.Meter, "How it looks"):
-                    SettingsParts.SectionHead("##sh-look", section.Title, ProfileNoteFor(SettingId.MeterSize) ?? ProfileNoteFor(SettingId.MeterTheme));
-                    DrawLookPanel();
+                    DrawLookPanel(section.Title, ProfileNoteFor(SettingId.MeterSize) ?? ProfileNoteFor(SettingId.MeterTheme));
                     break;
                 case (SettingsTab.Plans, "On-screen callouts"):
-                    SettingsParts.SectionHead("##sh-callouts", section.Title);
                     DrawCalloutsPanel(section);
                     break;
                 case (SettingsTab.Cooldowns, "Cooldowns"):
@@ -332,8 +330,7 @@ public sealed partial class MainWindow
                     DrawArrangeBox();
                     break;
                 default:
-                    SettingsParts.SectionHead("##sh-" + section.Title, section.Title, SectionHint(tab, section.Title));
-                    Kit.BeginPanel("##set-" + tab + section.Title, 0, 0, 0);
+                    Kit.BeginPanel("##set-" + tab + section.Title, section.Title, SectionHint(tab, section.Title), 0, 0, 0);
                     for (var i = 0; i < section.Rows.Count; i++) DrawRow(section.Rows[i], i);
                     Kit.EndPanel();
                     break;
@@ -378,14 +375,14 @@ public sealed partial class MainWindow
         var resetW = SettingsIndex.CanReset(tab) ? Kit.ButtonWidth(reset, BtnSize.Sm, Icon.Refresh, Btn.Quiet) : 0;
         var textW = w - (resetW > 0 ? resetW + S(12) : 0);
         var title = SettingsIndex.Title(tab);
-        var th = Kit.Callout(dl, at, title, 17, textW, 2, 1.1f);
+        var th = Kit.Callout(dl, at, title, 22, textW, 2, 1.05f);
         var y = at.Y + th + S(6);
         var lh = Txt.Flow(new Vector2(at.X, y), textW, LeadRuns[tab], 19.5f, out var clicked);
         if (clicked != null && SettingsIndex.LeadLink(tab) is { } to) GoToPage(to);
         if (resetW > 0 && Kit.Button("##set-reset", new Vector2(at.X + w - resetW, at.Y - S(4)), reset, Btn.Quiet, BtnSize.Sm, Icon.Refresh, 0, false,
                 "Puts this page's settings back as they were at first. It asks first."))
             Ask($"Reset {title}?", $"Every setting on {title} goes back to how it was when the plugin was new. Where the windows sit stays as it is.",
-                "Reset this page", "Keep them", () => ResetPage(tab));
+                "Reset", () => ResetPage(tab), yesIcon: Icon.Refresh);
         Kit.Reserve(at, w, MathF.Max(y + lh - at.Y, S(HSm)));
     }
 
@@ -429,7 +426,7 @@ public sealed partial class MainWindow
                     + "Yours are the game's own. A new zone, or the duty starting again after a wipe, sets them all back to ready.");
                 break;
             case SettingsTab.Account:
-                Txt.Note("Anyone with the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");
+                Txt.Note("Whoever has the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");
                 Kit.Gap(10);
                 Txt.Note("What goes to the site: your logs (Upload my logs) carry each pull with your party's names and home worlds, as on FFLogs. Track my progress sends a few "
                     + "numbers (by spot and job, never names). Send my party sends names to your own roster, only when you press it. Share my step sends only the plan and "
@@ -589,7 +586,7 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         const string clear = "Clear";
         var cw = Kit.ButtonWidth(clear, BtnSize.Sm, Icon.X, Btn.Quiet);
-        var th = Kit.Callout(dl, at, "Find a setting", 17, w - cw - S(12), 1, 1.1f);
+        var th = Kit.Callout(dl, at, "Find a setting", 22, w - cw - S(12), 1, 1.05f);
         var line = foundCount == 0
             ? $"Nothing matches “{query}”. Try fewer words, or another way of saying it."
             : $"{Words.Count(foundCount, "setting")} for “{query}”. Each works here; Go opens its page.";
@@ -602,12 +599,12 @@ public sealed partial class MainWindow
         for (var gi = 0; gi < groups.Count; gi++)
         {
             var g = groups[gi];
-            if (SettingsParts.SectionHead("##found-go" + gi, g.Head, null, "Go"))
+            if (Kit.BeginPanel("##found" + gi, g.Head, null, 0, 0, 0, "Go", Icon.ChevronRight))
             {
+                Kit.EndPanel();
                 GoToPage(g.Page, g.Rows.Any(r => r.More));
                 return;
             }
-            Kit.BeginPanel("##found" + gi, 0, 0, 0);
             var i = 0;
             foreach (var e in g.Rows) DrawRow(e, i++, true);
             foreach (var k in g.Cooldowns) CooldownRow(k, i++);
@@ -671,9 +668,11 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         var on = set[f];
         var needsLink = Features.NeedsAccount(f) && !Linked;
-        var r = S(12);
-        dl.AddRectFilled(pos, pos + new Vector2(w, h), Palette.U32(Palette.Slab), r);
-        dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(on && !needsLink ? Palette.EmberLine : Palette.Line), r, ImDrawFlags.None, 1f);
+        var r = S(Palette.RadiusLg);
+        // A panel (`.pn`); while it's on, lit (an ember line round it), else quiet.
+        Kit.PanelGround(dl, pos, pos + new Vector2(w, h), r);
+        Kit.PanelEdge(dl, pos, pos + new Vector2(w, h), r, quiet: !(on && !needsLink));
+        if (on && !needsLink) dl.AddRect(pos + new Vector2(0.5f), pos + new Vector2(w, h) - new Vector2(0.5f), Palette.U32(Palette.EmberLine), r, ImDrawFlags.None, 1f);
         var x = pos.X + S(14);
         var y = pos.Y + S(14);
         var well = S(34);
@@ -737,9 +736,9 @@ public sealed partial class MainWindow
     /// the left; on the right (under them in a narrow window) the live preview, the sample fight playing in the theme at its
     /// real size as the meter draws it, and Play a sample fight under it.
     /// </summary>
-    private void DrawLookPanel()
+    private void DrawLookPanel(string title, string? sub)
     {
-        Kit.BeginPanel("##set-look", 14, 14, 14);
+        Kit.BeginPanel("##set-look", title, sub, 4, 20, 18);
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
@@ -892,7 +891,7 @@ public sealed partial class MainWindow
     /// </summary>
     private void DrawCalloutsPanel(SettingSection section)
     {
-        Kit.BeginPanel("##set-callouts", 0, 0, 0);
+        Kit.BeginPanel("##set-callouts", section.Title, null, 0, 0, 0);
         var at = Kit.At;
         var w = Kit.Width;
         var colW = S(210);
@@ -999,7 +998,6 @@ public sealed partial class MainWindow
     /// <summary>Each kind's panel id (by the kind's number), made once.</summary>
     private static readonly string[] KindPanelIds = Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => $"##set-cd{k}").ToArray();
 
-    private static readonly string[] KindHeadIds = Enumerable.Range(0, CooldownCatalog.Kinds.Max(k => (int)k) + 1).Select(k => $"##cd-kind{k}").ToArray();
 
     /// <summary>Each cooldown's switch id and its jobs ("PLD, WAR, DRK, GNB"), as the catalogue lists them, made once.</summary>
     private static readonly (string Id, string Jobs)[] SpecWords = CooldownCatalog.All.Select(s => ("##cd-" + s.Key, string.Join(", ", s.Jobs))).ToArray();
@@ -1020,14 +1018,13 @@ public sealed partial class MainWindow
         {
             var (on, of) = CooldownCatalog.Count(kind, config.CooldownPicks);
             var all = on == of;
-            if (SettingsParts.SectionHead(KindHeadIds[(int)kind], CooldownCatalog.KindWord(kind), OnOf(on, of), all ? "Turn all off" : "Turn all on"))
+            if (Kit.BeginPanel(KindPanelIds[(int)kind], CooldownCatalog.KindWord(kind), OnOf(on, of), 0, 0, 0, all ? "Turn all off" : "Turn all on"))
             {
                 foreach (var spec in CooldownCatalog.All)
                     if (spec.Kind == kind)
                         config.CooldownPicks[spec.Key] = !all;
                 config.Save();
             }
-            Kit.BeginPanel(KindPanelIds[(int)kind], 0, 0, 0);
             var j = 0;
             for (var k = 0; k < CooldownCatalog.All.Count; k++)
                 if (CooldownCatalog.All[k].Kind == kind)

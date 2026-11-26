@@ -602,12 +602,14 @@ public sealed class Plugin : IDalamudPlugin
             if (recorder.Current is { } b)
             {
                 text = $"● Rec {Words.Clock(recorder.Elapsed)}";
-                tip = $"Raid Codex is recording {b.Duty.Name}, pull {b.Pull}. Click to open the Raid Codex plugin.";
+                tip = $"Raid Codex is recording {b.Duty.Name}, pull {window.PullNoAt(b.Duty.Name, b.StartedAt)}. Click to open the Raid Codex plugin.";
             }
             else if (justKept is { } k && DateTime.UtcNow < k.Until)
             {
-                text = $"Pull {k.Info.Pull} kept";
-                tip = $"Pull {k.Info.Pull} is kept. Click to open the Raid Codex plugin.";
+                // Numbered by night, as the window and the site say it (0.9.1).
+                var no = window.PullNo(k.Info);
+                text = $"Pull {no} kept";
+                tip = $"Pull {no} is kept. Click to open the Raid Codex plugin.";
             }
             if (text == null)
             {

@@ -962,16 +962,23 @@ batches well under its 65,536 corners a draw.
 
 ## The windows' look (`UI/Kit/`)
 
-Since 0.3.0 every window is drawn in the Raid Codex's Ready Check (the site's
-`src/features/raid-codex/styles/ready.css`, the mock-ups in kokos-tools'
-`docs/proposals/raid-codex/mockup/pages/plugin.html` and `meter.html`), under Dalamud's own title
-bar (only its colour, #0a0a0c, is the plugin's: its font and buttons stay Dalamud's, so their hit
-boxes do). Every size, colour and font is in the kit: `Palette` (the tokens by their CSS names: void
-#070708, basalt, slab #111115, raised #18181d, well #09090b, floor; white hairlines at 7, 12 and 20%;
-words white #f5f5f6, text #d6d6db, muted #a0a0aa, faint #7c7c87; ember #ff8a3d with its light, deep,
-on-ember, wash and line; ready #3ddc84, danger #ff5a5a, warn #ffcf4a; the roles' and intents'
-colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; the motion's 90,
-160, 280 and 420ms and its curves, `Model/Ease`; the window's padding), `Fonts`, `Txt` and the parts.
+Since 0.9.1 every window is drawn in the Raid Codex's redesign (25 November 2026: kokos-tools'
+`docs/proposals/raid-codex/redesign/`, its `pages/system.html` and `assets/rx.css` for every value, the site's
+`src/features/raid-codex/styles/ready.css` and `ui/README.md`), and says things in its words
+(`docs/tools/raid-codex/words.md`; below, The words). Before, since 0.3.0, it was the Ready Check of the plugin's own
+mock-ups (`docs/proposals/raid-codex/mockup/pages/plugin.html`, `meter.html`), which the redesign carried over and
+finished. Under Dalamud's own title bar (only its colour, #0a0a0c, is the plugin's: its font and buttons stay Dalamud's,
+so their hit boxes do). Every size, colour and font is in the kit: `Palette` (the tokens by their CSS names: void
+#070708, basalt #0c0c0f, slab #111115, raised #18181d, well #09090b, floor; white hairlines at 7, 12 and 20%; the
+controls' line #303037 (#45454f pointed at, #6a6a76 typed in), a button pointed at #121216 with #4a4a55; the panels'
+ground #141418 to #101013, their edge lit ember from the top left and their frame rgb(233 211 168 / 9%); words white
+#f5f5f6, text #d6d6db, muted #a0a0aa, faint #878792 (#7c7c87 before 0.9.1); ember #ff8a3d with its light, deep,
+on-ember, wash and line, and the primary's gradient #ff9a52 → ember → #f47d2f; ready #3ddc84, danger #ff5a5a (and the
+destructive answer's #ff7b7b edge and #2a0606 words), warn #ffcf4a; the roles' and intents' colours; corners 2, 4, 6,
+8, 10, 14, 20), `Theme` (heights 40, 32 in a head, a row or a card, 48 for the one large button; rows 44 and 56, a
+head row 34; the motion's 90, 140, 180, 260 and 420ms and its curves, `Model/Ease`; the window's padding), `Fonts`,
+`Txt` and the parts. One colour, one meaning: ember is time going by and the one thing to press, red is wrong (a death,
+the enrage), amber worth a look, green right or alive, white what's picked.
 
 - **The ground**: basalt at 96% (`.dw`, the site's near-solid fallback for its glass: ImGui can't
   blur), a white hairline at 9% round it and 14px corners, a shadow faked with two rings of black
@@ -982,7 +989,7 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   callouts' first step; latin only, so a callout in Chinese or Korean is drawn at 22) 30px for the callout, in
   capitals written by the code; Geist 400 (11–14), 500 (12–14, the site's 550) and 600 (7, 8, 10,
   13–15, the site's 650 and 700); Geist Mono 500 (9–13) and 600 (10–13, 15, 16, 18 and 30 for the
-  clock), for everything counted, so clocks hold still. Letter-spacing (eyebrows +0.09em, tags
+  clock), for everything counted, so clocks hold still. Letter-spacing (eyebrows +0.08em, tags +0.06em since 0.9.1, before that eyebrows +0.09em and tags
   +0.05em, intents +0.1em) is drawn glyph by glyph. 31 fonts on most clients (some 20,000 glyphs);
   a size not loaded is drawn at the nearest (worked out once). On a Japanese client Archivo and Geist
   are Dalamud's font from 11px up (the callout drawn twice a pixel apart for its weight, and not put
@@ -993,29 +1000,55 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   it's picked (above, _The meter's windows_, Compact). Dalamud's language's extra glyphs (Chinese, Korean) are added only to the
   faces a plan's own words are drawn in (`Fonts.PlanText`: the callout at 16 and 22, Sans 12 and
   13, SansMedium 14, SansSemibold 13): everything else is the game's words or the windows' own.
-- **Buttons** (`Kit.Button`): 40 tall with 10px corners (32 and 8 in dense rows), 13px words at 550.
-  One telegraph a screen (`Btn.Tele`): ember with a hot inner rim, on-ember words at 650; pointed at,
-  lighter with a glow of two rings; pressed, a ring goes out and fades over 420ms; held, the shape
-  dips to 0.97 (the words stay: text can't scale crisply). The rest outlined (a 20% hairline),
-  quiet, danger (Stop, Delete), on (a white wash) or ember-washed (a lock that's locked). Disabled
+- **Buttons** (`Kit.Button`; since 0.9.1 the site's `.btn`): 40 tall with 10px corners, 16px in, 14px words at 500 and
+  an icon 8px before them (32 with 8px corners, 12px in and 13px words in a head, a row or a card; 48 for the one
+  large). Never see-through: a **plain** button is the well with the controls' line, white words, #121216 and a
+  lighter line when pointed at; what was a quiet button (words only) is a plain one since 0.9.1 (`Btn.Quiet` draws as
+  `Btn.Outline`). One **primary** a screen (`Btn.Tele`, the site's `rp-tele`): ember from #ff9a52 at its top through
+  ember to #f47d2f at its foot (its rounded ends solid: ImGui can't round a gradient), a #ffa86b edge, a white line along
+  its top inside, a soft ember glow under it, dark words at 600; pointed at, lighter. **Danger** (Stop, Delete): plain
+  with red words and a red line. The **destructive answer** in a question (`Btn.DangerFill`, `.rp-danger-fill`): red with
+  dark words. **Picked** (`Btn.On`): #141418 with a white line at 40%; **on in ember** (`Btn.Ember`, a lock that's
+  locked): the ember wash and line. Pressed, the shape dips to 0.97 (the words stay: text can't scale crisply). Disabled
   at 45%. Focus is a white ring 3px out, for the keyboard.
-- **Controls**: the switch (34×20, white 14% with a white knob; on, ember with a dark knob, sliding
-  over 160ms), segments (a well, the picked one raised with a hairline), the stepper (40 tall, the
-  value in mono), the slider (a 2px track, ember to the value, a white knob with a soft ember ring),
-  the field (a 40px well with a 12% hairline: white with a faint ring while you type, red when
-  wrong; the caret and selection are ImGui's).
-- **Marks**: tags (mono capitals in 22px boxes with 6px corners: ember with a beating dot while
-  recording, plain, Wipe red, Clear white, Linked green), the ready tick, spots (round in their
+- **Controls**: the switch (34×20, #2a2a31 with a muted knob; on, ember with a dark knob, sliding
+  over 140ms), the pick-one (`Kit.Segmented`, the site's Toggle: the well with the controls' line, 3px inside, the
+  picked one filled ember with dark words, or white where ember is taken, `quiet`; the rest in the text colour), the
+  stepper (40 tall, the well and the controls' line, the value in mono), the slider (a 2px track, ember to the value, a
+  white knob with a soft ember ring), the field (a 40px well with the controls' line: lighter pointed at, #6a6a76 with a
+  faint ring while you type, red when wrong; the caret and selection are ImGui's), the menu (#111116, a hairline at 12%,
+  14px corners, 6 inside; a row 38 tall on the raised fill with 8px corners when pointed at, its words white then), the
+  tooltip (#1f1f25, 8px corners, 12px words at 500).
+- **Panels** (`Kit.BeginPanel`, the site's `.pn`): 14px corners, the ground from #141418 to #101013, a hairline edge
+  lit ember along its top and down its left from the top-left corner (two fading 1px gradients: ImGui has no gradient
+  border), and the frame 4px inside (`Kit.PanelGround`, `Kit.PanelEdge`; a quiet panel's light and frame fainter). A
+  slab of before (#111115 with a hairline) is a panel now; a box of another colour (the ember recording card, a linked
+  green one) stays itself. **A panel's head** (`Kit.BeginPanel(id, title, sub, …)`, `Kit.PanelHead`; `.pn-h`): at least
+  56 tall, 20 in, its title in Geist 600 15px white, a faint 12px line under it, one 32px plain button at its right; the
+  rows under it each with a hairline over them (`Kit.PanelHeaded`). A section outside a panel (`Kit.Section`, Home's
+  _Latest pull_, a night on Pulls, a pull's _What happened_) has the same title with a faint aside (a count) and a link.
+  The eyebrow (mono capitals) is for what's above things, never a title.
+- **Rows**: 44 tall (56 of two lines, 2px apart), 20 in, a hairline over each but the first; pointed at, a 2.5% white
+  wash (4% while open) and the reticle; a row that opens a page has no chevron, a row that opens in place has the one
+  chevron at its right end (turned up while open: the fold row, a death in the recap's stack). Head rows in Geist Mono
+  600 capitals, faint (`Kit.Label`); numbers in mono, right-aligned.
+- **Marks**: tags (`Kit.Tag`, the site's Tag: Geist Mono 600 capitals at +0.06em in 20px boxes with 4px corners, 7 in:
+  plain (the raised ground and a hairline, muted), Clear white with dark words, Wipe neutral as plain words (red is for
+  deaths and the enrage), Danger red, Ready and Live green (Live with a beating dot), Ember (and Rec, with its beating
+  dot while recording), Warn amber, Phase on the well), the ready tick, spots (round in their
   role's colour on a dark halo), intents (Dodge, Share, Apart, Tanks, Soak, Move, Look, Mark: a word
-  in its colour after its shape), the eyebrow, square wells (32px, 8px corners: quiet, ember or
-  danger), the reticle (four 9px corner brackets 5px outside what's pointed at, closing in over
-  160ms), cast bars (a 6px track, 3 slim, filled with a square-ended gradient from deep to light
-  ember, its hot end a 2px line with a glow: ImGui can't round a gradient), links (underlined in a
-  faint line; ember-light when pointed at), tabs (words; the one you're on white with the ember cast
-  bar under it, filling from the left over 280ms), the facts box (mono capitals over mono values),
-  error and warning boxes, the Boss (`Kit/Boss.cs`: the site's enemy shield and face from
-  board/enemyArt.ts, flattened and cut into triangles once, `Model/Polygon`, shaded per vertex; asleep
-  with lids and z's, awake, tilted).
+  in its colour after its shape), the eyebrow (Geist Mono 600 11px at +0.08em, faint), square wells (32px, 8px corners:
+  quiet, ember or danger), the reticle (four 9px corner brackets 5px outside what's pointed at, closing in over
+  180ms), cast bars (a 6px track, 3 slim, filled with a square-ended gradient from deep to light
+  ember, its hot end a 2px line with a glow: ImGui can't round a gradient), links (white, underlined in a
+  faint line that turns white when pointed at), tabs (words; the one you're on white with the ember line under it,
+  filling from the left over 180ms; pointed at, white), Home's chips (32 tall with 8px corners on the well with the
+  controls' line), the facts box (mono capitals over mono values), error and warning boxes, the Boss (`Kit/Boss.cs`:
+  the site's enemy shield and face from board/enemyArt.ts, flattened and cut into triangles once, `Model/Polygon`, shaded
+  per vertex; asleep with lids and z's, awake, tilted).
+- **Empty states** (the site's StatePanel): the Boss, a callout, one line and the next step, never a dead end: no pulls
+  yet, _Turn recording on_ (the primary) or _Recording settings_; a pull that couldn't be read, _Open the recordings
+  folder_; a pull with nothing in it, _All pulls_; nothing pulled yet on Home, the three steps and _Link your account_.
 - **Size** (since 0.8.1; `Kit/UiScale.cs`, `Model/WindowSize.cs`; Settings → Windows → Size, `/raidcodex size`):
   every size is drawn at Dalamud's global scale times the plugin's own (`Theme.S`, `Theme.Scale`), so the
   windows, their words, icons and spacing grow and shrink together. _Fit to my screen_ (on at first,
@@ -1037,16 +1070,28 @@ colours; corners 6, 8, 10, 14, 20), `Theme` (heights 40, 32 for dense rows, 46; 
   the meter reads its first width at it; fitting starts the fonts at it (the screen isn't known before the first
   frame). A minimised game (a screen under 200px tall) keeps the size it has. The title bars stay Dalamud's own size
   (its font and buttons, as above).
-- **Toasts** (`Frame.Toast`): raised near-solid, 10px corners, a hairline, an icon in its colour
+- **Toasts** (`Frame.Toast`, the site's `.rp-toast`): raised, 14px corners, a hairline at 12%, an icon in its colour
   (it worked green, it didn't red, news ember), at most one action in ember-light ("Open", "Why"), and
-  a 2px bar along its foot counting its 2.6 seconds down in its colour; it waits while pointed at and
+  a 2px life bar along its foot counting its 2.6 seconds down in its colour; it waits while pointed at and
   fades over its last 0.3 s. It sits at the window's foot (above a footer) in a part of the window of
   its own, so it never paints over another window over this one.
-- **The question** (`MainWindow.DrawConfirm`): a window of its own over the plugin's, which dims it
-  under the title bar (rgb 4 4 5 at 74%) and takes every click; the site's dialog in its middle
-  (raised, 20px corners, a 12% hairline, a shadow faked with rings, its title a small callout, its
-  words at 14px, its answers on the right: a destructive one in the danger outline). No key answers it (the plugin reads no keys). It
-  fades in over 280ms (it doesn't grow: text can't scale crisply).
+- **The question** (`MainWindow.Ask`, `DrawConfirm`; since 0.9.1 the site's ConfirmDialog): a window of its own over the
+  plugin's, which dims it under the title bar (the scrim, rgb 3 3 4 at 66%) and takes every click; the dialog in its
+  middle (a panel's ground and lit edge with 20px corners, a shadow faked with rings): its head (for what can't be
+  undone a 40px red well with the action's icon; the title in Geist 600 15px; its line in 13px muted), then its foot
+  under a hairline, **Cancel** (every question's one "don't": never "Keep it") and the action, the verb alone
+  ("Delete", "Reset"), red for what can't be undone, else the primary. Nothing is ever "press again". No key answers it
+  (the plugin reads no keys). It fades in over 260ms (it doesn't rise: text can't scale crisply).
+- **The words** (since 0.9.1, the site's `docs/tools/raid-codex/words.md`): a pull's number is its place in its night
+  of its fight, "Pull 17" (`PullNights.Numbers`, a night running to 6:00; the pull being recorded and the server info
+  bar's "Pull 3 kept" count the same way, `MainWindow.PullNo`, `PullNoAt`; before 0.9.1 it was counted from entering
+  the zone, so a duty entered twice in a night had two pull 3s); how a pull ended leads its sentence as the site's
+  `endingSentence` does ("Wiped in P3, at Hello World 2."); _Open the pull_ opens a pull's page; every question's "don't"
+  is Cancel; "Everyone", never "Anyone", as a choice; logs are public, never "private" (a player can hide their
+  character on the site, Settings › Your logs: the row _Logs are public_ · _Hide my character_); a pin "stays until you
+  unpin it". No window says a key (the plugin binds none). The meter's own pull numbers (its fights) and the duty's
+  name as the game has it (the site's short names, "M12S", come from its rankings' data, which the plugin hasn't) are
+  as they were.
 
 ## The main window (`UI/MainWindow.cs`, `UI/Views/`)
 
@@ -1061,7 +1106,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
 - **Home** (`Views/Home.cs`; 0.8.0, the mock-ups' plug-main): between pulls, a _Not kept_ tag and why
   for three minutes after a pull that wasn't kept, then the **status card** (`StatusNow`): a well and
   "Ready for the next pull" (a pull has gone in this zone) or "Waiting for the pull" (none yet), with
-  "Example Arena · pull 13" under it (`FightRecorder.PullsHere` + 1); "Following your plan" while a
+  "Example Arena · Pull 13" under it (tonight's kept pulls of the duty and one, `PullNoAt`; `FightRecorder.PullsHere` + 1 before 0.9.1); "Following your plan" while a
   pull is only followed; "Recording is off" (with _Turn it on_); "Not recorded here" in a duty that
   isn't recorded; "Not in a duty". Under it a **chip per main part** (`SetupGuide.ChipName`:
   Recording, Uploading, Meter, "Plan: <the plan's name>" when you have one for the duty, Cooldowns,
@@ -1069,7 +1114,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
   each opens its Settings page (Recording, Meter, Plan window, Cooldowns; Uploading and Progress
   Recording). Then **Latest pull**: its number as a small callout, the outcome's tag, its length in
   mono; the duty and when, when the status card doesn't name it; the pull in a sentence in plain
-  words (`Model/PullGist.Sentence`: "Wiped at **Hello World 2**, P3. Three deaths, the first Velka
+  words (`Model/PullGist.Sentence`: "Wiped in P3, at **Hello World 2**. Three deaths, the first Velka
   Moor to Latent Defect.", the mechanic in white; "Cleared in 9:41. No deaths."; before its file is
   read, "Wiped after 6:31."); the top part opens the pull (the reticle when pointed at). Under it its
   upload in a row (`DrawUploadLine`): a green tick and "Uploaded 2 minutes ago" with _Open the pull_;
@@ -1096,13 +1141,14 @@ above, 18 below), a footer on the basalt band where a screen has one.
   pull's file on a worker, one file at a time, only for rows in view, and never while a pull is
   recorded or followed (its read would cost the game a frame); a pull's own screen fills it from its
   own read. Kept for the session.
-- **Pulls** (`Views/Pulls.cs`, 0.8.0): every kept pull, the newest first, by night (each its heading in
-  mono capitals: "Tonight · 12 pulls"), each night's rows in a slab (`Kit.PullListRow`): the pull's
-  number in mono, its length in mono with a _Best_ tag (each duty's fastest clear that night, else its
+- **Pulls** (`Views/Pulls.cs`, 0.8.0): every kept pull, the newest first, by night (each its head as a panel's title,
+  "Tonight" with "12 pulls" faint after it; mono capitals before 0.9.1), each night's rows in a panel (`Kit.PullListRow`,
+  56 tall, 20 in): the pull's number in mono (its place in its night of its duty, The windows' look, The words), its length in mono with a _Best_ tag (each duty's fastest clear that night, else its
   longest pull, `PullNights.Best`), how long ago and where it ended ("14 minutes ago · P3", or "at
   Hello World"; the duty first when it isn't the night's), the outcome's tag, a green tick once it's on
-  your Raid Codex (else a faint "waiting" while Upload my logs will send it), a chevron; pointed at, a
-  faint fill and the reticle; pressed, the pull. A line on what's kept on top; none yet, the Boss asleep.
+  your Raid Codex (else a faint "waiting" while Upload my logs will send it); no chevron since 0.9.1 (a row that opens a
+  page has none, the site's rule); pointed at, a 2.5% wash and the reticle; pressed, the pull. A line on what's kept on
+  top; none yet, the Boss asleep with its next step (above, Empty states).
 - **Sending** (`Views/Send.cs`, a pull not yet on your Raid Codex; Home's latest pull has it in a row, above): not linked, _Link your account_
   is the telegraph and _Save as file_ outlined, "Link once, and each pull is a button away from being
   a plan."; linked, _Send to Raid Codex_ in the same place. Sending, it dims and holds still, a
@@ -1155,18 +1201,21 @@ above, 18 below), a footer on the basalt band where a screen has one.
   opening a menu of the pages) and the search share a row above the page instead, and the version and _What's
   new_ go to the page's foot. The pages, their sections, every row's name and line, and the search are
   `Model/SettingsIndex` (tested); a row is drawn by what it is (`SettingId`) wherever it's shown.
-  - **A page**: its title as a small callout, one muted line saying what it's for (the meter's, the plan's and
+  - **A page**: its title as a callout at 22 (17 before 0.9.1), one muted line saying what it's for (the meter's, the plan's and
     the cooldowns' end "Where it sits: Windows", a link), and _Reset this page_ (quiet, top right; it asks first,
     then puts the page's settings back to a new configuration's: not its buttons, not the windows' Show rows
     on Windows, never where a window sits, never _Upload my logs_, which on would upload pulls that are public on
-    the site; Features and Account have none). Then its sections: an eyebrow (mono
-    capitals, muted; a faint hint at its right, as Uploads' "Linked to your Raid Codex") over a slab of rows,
-    each the setting's name (550 14px) over one muted line, its control at the right (switch, 40px stepper,
-    dense segments, slider or button); a sub-row 34 in; a row that can't be used dims its words and control and
+    the site; Features and Account have none). Then its sections, each a panel (since 0.9.1 as the site's Settings:
+    the section's title in the panel's head, Geist 600 15px, a faint line under it where it has one, as Uploads'
+    "Linked to your Raid Codex"; before, an eyebrow over a slab), its rows under the head with a hairline over each
+    (`.srow`: 20 in, at least 56 tall), each the setting's name (500 14px) over one faint line, its control at the right
+    24 from the words (switch, 40px stepper, a 32px pick-one, slider or button); a sub-row 38 in; a row that can't be used dims its words and control and
     says why in the text colour ("Link your account first: Account", the link going there; "With Record where
-    the party stands on."). The rarely changed settings fold under one dashed row, "3 more: smoother replays,
-    the server info bar, recordings folder" (its words the rows inside; closed at first, open for the session
-    once pressed, a chevron up while open), opening their slab under it. The notes, 13px muted, at the foot.
+    the party stands on."). The rarely changed settings fold under one row (the site's Fold: the well with the
+    controls' line, dashed before 0.9.1), "3 more: smoother replays, the server info bar, recordings folder" (its words
+    the rows inside; closed at first, open for the session once pressed, its one chevron at the right, up while open),
+    opening their panel under it. A found group (Find a setting) and each cooldown kind are panels with their head too
+    (_Go ›_, _Turn all on_ the head's button). The notes, 13px muted, at the foot.
   - **Find a setting**: typing lists every row whose name or line has each word typed (case, quotes and
     accents don't matter), and each cooldown by its name, jobs or kind, grouped by page and section ("Damage
     meter · The numbers") with _Go ›_ to the page; each row works there as on its page (the theme tiles, the
@@ -1183,8 +1232,9 @@ above, 18 below), a footer on the basalt band where a screen has one.
   - **Recording and uploads**: **Recording**: _Record my pulls_, then _Which duties_ (Raids and trials, Every
     duty: the old _In every duty_), _Record where the party stands_ and _Keep the last_ under it. **Uploads**:
     _Upload my logs_ (waiting for a link), _Upload my older pulls_ · Upload (its line what's waiting, what
-    holds it up, or why it stopped; dimmed until linked with Upload my logs on), _Who sees my logs_ · Change
-    on the site (the site's Settings → Your logs), _Track my progress_ (waiting for a link). More: _Smoother
+    holds it up, or why it stopped; dimmed until linked with Upload my logs on), _Logs are public_ · Hide my character
+    (since 0.9.1, as every log on the site is: the site's Settings → Your logs, where a player hides their character;
+    _Who sees my logs_ · Change on the site before, when logs could be made private), _Track my progress_ (waiting for a link). More: _Smoother
     replays_ (dimmed while places aren't kept), _Show it in the server info bar_, _Recordings folder_ · Open.
     A hook the game hides is said in an amber warning box (here and on Advanced).
   - **Damage meter**, **Plan and callouts**, **Party cooldowns**: below (The meter's windows, The overlays).
@@ -1200,7 +1250,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
   - **Account and privacy**: **Your account**: linked, a ready tick, a green _Linked_ tag and the token masked
     in mono, _Unlink_ dense; not linked, the instructions, the 40px well field (the token in mono, masked) with
     _Link_ as the telegraph, a bad token said in red with an icon under it, and _Get a token_; _The Raid
-    Codex_ · Open. **Privacy**: _Who sees my logs_ · Change on the site. The notes: keeping the token, and
+    Codex_ · Open. **Privacy**: _Logs are public_ · Hide my character. The notes: keeping the token, and
     what goes to the site (logs with names, progress without, the roster only when pressed, the step only,
     the meter's numbers never).
   - **Advanced**: **Diagnostics**: _Diagnostics_, _Recordings folder_ · Open. **Damage meter**: _Use ACT's
@@ -2483,6 +2533,22 @@ entry).
   release; keeping two replays alike was more than the window's gave. Recording is as it was.
 - **Open the pull** (was _Open in Review_) opens the pull's own page on the site, its night's report with the pull
   picked, as the site's links do now.
+- **The windows look like the Raid Codex again**, after its redesign: buttons are never see-through (plain on the well,
+  the one primary in ember from light to deep, a question's destructive answer in red), the switch and pick-ones as the
+  site's (the picked one filled), 20px tags with a wipe neutral and the enrage red, panels with the site's lit edge and
+  inner frame, a section's title in its panel's head (Settings' sections, found settings, the cooldowns' kinds, a
+  profile's changes), rows 20 in with a hairline over each, no chevron on a row that opens a page, menus, tooltips, toasts
+  and fields in the site's colours, and the faint words a step lighter.
+- **A question is the site's**: _Cancel_ and the action, the verb alone (_Delete_, _Reset_), red for what can't be
+  undone; never "Keep it".
+- **Pulls are numbered by night**, as the site numbers them: "Pull 17" is the 17th pull of that duty that night, on
+  Home, the Pulls tab, a pull's page, the send, the toasts and the server info bar (it was counted from entering the
+  zone, so a duty entered twice had two of each). A pull's sentence leads with how it ended ("Wiped in P3, at Hello
+  World 2.").
+- **Logs are public**, as every log on the site is now: Settings says _Logs are public_ with _Hide my character_ (the
+  site's Settings › Your logs), never that yours can be made private.
+- **Every empty state has a next step**: no pulls yet (_Turn recording on_, or _Recording settings_), a pull that
+  couldn't be read (_Open the recordings folder_), one with nothing in it (_All pulls_).
 
 ### 0.9.0 (not released yet)
 

@@ -21,8 +21,8 @@ Record the fights you're in, then make them into plans on
   worlds and levels, the game's version and the server's time, for your logs.
 - **Uploads every pull to your logs** on the Raid Codex as it ends, once you've linked your account
   (in the background, one at a time; pulls kept while you're offline go when you're back). Your
-  logs are **public on the site**, with your party's names and worlds, as on FFLogs; you can make
-  yours private there (Settings → Your logs), or turn _Upload my logs_ off.
+  logs are **public on the site**, with your party's names and worlds, as on FF Logs, as every log there
+  is; you can hide your character there (Settings → Your logs), or turn _Upload my logs_ off.
 - **Sends a pull to the Raid Codex** with one press, once you've linked your account. It waits
   on the Raid Codex's front page under _From the game_; _Make a plan_ turns it into steps, one for
   each moment something goes off, with exact shapes and arenas for the fights BossMod knows.
@@ -90,8 +90,8 @@ shows what most people change; the rest fold under one "N more" row.
 - **Recording and uploads**: _Record my pulls_ (on), in raids and trials or every duty, _Record where the
   party stands_ (on; off keeps only the enemies and their attacks), _Keep the last_ 20 pulls (5 to 100;
   the oldest sent go first, pulls still to upload are held up to 200), _Upload my logs_ (on, once linked)
-  with _Upload my older pulls_ and _Who sees my logs_ (the site's Settings → Your logs: your logs are
-  public, as on FF Logs, unless you make them private), _Track my progress_ (on: how far each pull got,
+  with _Upload my older pulls_ and _Logs are public_ (every log on the site is, as on FF Logs; _Hide my
+  character_ opens the site's Settings → Your logs), _Track my progress_ (on: how far each pull got,
   who died to what, the boss's HP left and each spot's numbers, no names). More: smoother replays, the
   server info bar, the recordings folder.
 - **Damage meter**: when it shows (it stays open between pulls in duties, or folds to a line), its size (Detailed, or Compact) and theme with a live preview, role

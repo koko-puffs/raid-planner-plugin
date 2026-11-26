@@ -339,7 +339,7 @@ public sealed partial class MainWindow
         Kit.Gap(10);
         Txt.Para(Lead("Your pulls: the fight, where everyone stood, casts, damage and deaths, with the party’s names, jobs and home worlds. Never your chat."), 19.5f);
         Kit.Gap(10);
-        Txt.Para(Lead("They’re public on the Raid Codex, as logs are on FF Logs. You can make yours private, or hide your character, on the site under Settings › Your logs."), 19.5f);
+        Txt.Para(Lead("They’re public on the Raid Codex, as logs are on FF Logs. To keep your character’s name out, hide it on the site under Settings › Your logs."), 19.5f);
         Kit.EndPanel();
     }
 

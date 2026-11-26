@@ -47,7 +47,7 @@ public sealed record PullGist(int Phase, int Phases, string? EndedAt, int Deaths
     public static string Number(int n) => n >= 0 && n < Numbers.Length ? Numbers[n] : n.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// The pull in a sentence or two, in plain words: how it ended and where ("Wiped at Hello World 2, P3."), then its
+    /// The pull in a sentence or two, in plain words: how it ended and where ("Wiped in P3, at Hello World 2."), then its
     /// deaths ("Three deaths, the first Velka Moor to Latent Defect."), then, given the pull before it in the same
     /// duty, how far this one got against it ("2 seconds further than pull 11."). Without its facts (not read yet,
     /// or unreadable), what the list knows: how it ended and its length.
@@ -77,9 +77,10 @@ public sealed record PullGist(int Phase, int Phases, string? EndedAt, int Deaths
                     var verb = outcome == Outcome.Wipe ? "Wiped" : "Ended";
                     if (g.EndedAt is { } at)
                     {
-                        said.Add(new Said($"{verb} at "));
+                        // The site's words lead (`endingSentence`: "Wiped in P3"), then where: "Wiped in P3, at Hello World 2."
+                        said.Add(new Said(phase != null ? $"{verb} in {phase}, at " : $"{verb} at "));
                         said.Add(new Said(at, true));
-                        said.Add(new Said(phase != null ? $", {phase}." : "."));
+                        said.Add(new Said("."));
                     }
                     else said.Add(new Said(phase != null ? $"{verb} in {phase}, after {length}." : $"{verb} after {length}."));
                     break;

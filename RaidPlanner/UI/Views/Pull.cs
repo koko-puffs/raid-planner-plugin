@@ -58,22 +58,24 @@ public sealed partial class MainWindow
         if (Kit.Button("##pull-back", row, "All pulls", Btn.Quiet, BtnSize.Sm, Icon.ChevronLeft)) screen = Screen.Pulls;
         const string delete = "Delete";
         const string save = "Save as file";
-        var dw = Kit.ButtonWidth(delete, BtnSize.Sm, Icon.Trash, Btn.Quiet);
+        var dw = Kit.ButtonWidth(delete, BtnSize.Sm, Icon.Trash, Btn.Danger);
         var sw = Kit.ButtonWidth(save, BtnSize.Sm, Icon.Download, Btn.Quiet);
         if (Kit.Button("##pull-save", new Vector2(row.X + w - dw - S(6.4f) - sw, row.Y), save, Btn.Quiet, BtnSize.Sm, Icon.Download, 0, false,
                 "A file to import in the Raid Codex yourself (Import on its front page), or to share."))
             SaveAs(info);
-        if (Kit.Button("##delete", new Vector2(row.X + w - dw, row.Y), delete, Btn.Quiet, BtnSize.Sm, Icon.Trash, 0, false, "Delete this pull"))
+        // Its number as it's shown now (once it's out of the list, the night's pulls are numbered again).
+        var number = PullNo(info);
+        if (Kit.Button("##delete", new Vector2(row.X + w - dw, row.Y), delete, Btn.Danger, BtnSize.Sm, Icon.Trash, 0, false, "Delete this pull"))
             Ask("Delete this pull?", info.SentId != null
                     ? "It's gone from the plugin. The copy on your Raid Codex stays there."
                     : "It's gone for good: it isn't on your Raid Codex.",
-                "Delete", "Keep it", () =>
+                "Delete", () =>
                 {
                     // Out of the list at once; its file's delete and the index's and marks' writes on a worker, never in a frame.
                     _ = store.DeleteLater(info).ContinueWith(t => Services.Log.Error(t.Exception!, "Raid Codex couldn't delete a pull"),
                         TaskContinuationOptions.OnlyOnFaulted);
                     screen = Screen.Pulls;
-                    Notify($"Deleted pull {Math.Max(1, info.Pull)}", ToastKind.News, Icon.Trash);
+                    Notify($"Deleted pull {number}", ToastKind.News, Icon.Trash);
                 }, danger: true, yesIcon: Icon.Trash);
         Kit.Reserve(row, w, S(HSm));
         Frame.EndHeader();
@@ -93,14 +95,14 @@ public sealed partial class MainWindow
         var length = Format.Clock(info.Duration);
         var lengthW = Txt.Width(length, Face.MonoSemibold, 18);
         var rowH = S(26);
-        var title = $"Pull {Math.Max(1, info.Pull)}";
+        var title = $"Pull {PullNo(info)}";
         const string openSite = "Open on the site";
         var sentId = (store.Find(info.File) ?? info).SentId;
         var openW = Kit.ButtonWidth(openSite, BtnSize.Sm, Icon.ExternalLink);
         var room = w - lengthW - S(12) - Kit.TagWidth(tag, kind) - S(12) - openW - S(16);
         var line = Kit.CalloutLines(title, 22, room, 1)[0];
         var tw = Txt.Line(dl, at, line, Face.Callout, 22, Palette.White, 26);
-        Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(22)) / 2), tag, kind);
+        Kit.Tag(dl, new Vector2(at.X + tw + S(12), at.Y + (rowH - S(Kit.TagH)) / 2), tag, kind);
         Txt.LineRight(dl, at.X + w - openW - S(16), at.Y, length, Face.MonoSemibold, 18, Palette.White, 26);
         if (Kit.Button("##pull-open-site", new Vector2(at.X + w - openW, at.Y + (rowH - S(HSm)) / 2), openSite, Btn.Outline, BtnSize.Sm, Icon.ExternalLink, 0,
                 sentId == null, sentId != null
@@ -114,7 +116,7 @@ public sealed partial class MainWindow
         var state = pullView;
         var before = Before(info);
         var gist = GistOf(info, false);
-        Txt.Para(Runs(PullGist.Sentence(info.Outcome, info.Duration, gist, before is { } b ? (b.Pull, b.Duration) : null)), 20);
+        Txt.Para(Runs(PullGist.Sentence(info.Outcome, info.Duration, gist, before is { } b ? (PullNo(b), b.Duration) : null)), 20);
         if (state?.View is { } view)
         {
             Kit.Gap(14);
@@ -221,9 +223,13 @@ public sealed partial class MainWindow
 
         if (view == null || view.Rows.Count == 0)
         {
-            if (state?.Problem is { } problem) EmptyBlock(BossMood.Awake, "This pull won't open", problem);
+            // An empty state is never a dead end (the site's StatePanel): each has its next step.
+            if (state?.Problem is { } problem)
+            {
+                if (EmptyBlock(BossMood.Awake, "Couldn't read this pull", problem, "Open the recordings folder", Icon.Folder)) Dalamud.Utility.Util.OpenLink(store.Folder);
+            }
             else if (view == null) EmptyBlock(null, "Reading it", null);
-            else EmptyBlock(BossMood.Asleep, "Nothing went off", "No mechanics were seen in this pull.");
+            else if (EmptyBlock(BossMood.Asleep, "Nothing went off", "No mechanics were seen in this pull.", "All pulls", Icon.ChevronLeft)) screen = Screen.Pulls;
             return;
         }
 
@@ -235,8 +241,8 @@ public sealed partial class MainWindow
         DrawRows(view, h);
     }
 
-    /// <summary>The Boss (or the party running, while it's read), a small callout and a line, centred.</summary>
-    private static void EmptyBlock(BossMood? mood, string title, string? line)
+    /// <summary>The Boss (or the party running, while it's read), a small callout, a line and its next step, centred. True when the step is pressed.</summary>
+    private static bool EmptyBlock(BossMood? mood, string title, string? line, string? next = null, Icon? nextIcon = null)
     {
         var dl = Kit.Dl;
         var w = Kit.Width;
@@ -260,10 +266,22 @@ public sealed partial class MainWindow
         Kit.Reserve(at, Kit.Width, S(80));
         Kit.Gap(8.8f);
         var p = Kit.At;
-        var ch = Kit.Callout(dl, p, title, 13, Kit.Width, 2, 1.1f, center: true);
+        var ch = Kit.Callout(dl, p, title, 17, Kit.Width, 2, 1.05f, center: true);
         Kit.Reserve(p, Kit.Width, ch);
         Kit.Gap(8.8f);
-        if (line != null) Txt.Note(line, center: true);
+        var pressed = false;
+        if (line != null)
+        {
+            Txt.Note(line, center: true);
+            if (next != null)
+            {
+                Kit.Gap(14);
+                var bw = Kit.ButtonWidth(next, BtnSize.Sm, nextIcon);
+                var bp = Kit.At;
+                pressed = Kit.Button("##pull-empty-next", new Vector2(bp.X + (Kit.Width - bw) / 2, bp.Y), next, Btn.Outline, BtnSize.Sm, nextIcon);
+                Kit.Reserve(bp, Kit.Width, S(HSm));
+            }
+        }
         else
         {
             var bw = MathF.Min(S(200), Kit.Width);
@@ -273,6 +291,7 @@ public sealed partial class MainWindow
         }
         Kit.EndPanel();
         _ = w;
+        return pressed;
     }
 
     /// <summary>
@@ -286,7 +305,7 @@ public sealed partial class MainWindow
         var w = Kit.Width;
         var outer = Kit.Dl;
         var r = S(Palette.RadiusLg);
-        outer.AddRectFilled(at, at + new Vector2(w, height), Palette.U32(Palette.Slab), r);
+        Kit.PanelGround(outer, at, at + new Vector2(w, height), r);
         ImGui.SetCursorScreenPos(at + new Vector2(1));
         var open = ImGui.BeginChild("##pull-rows", new Vector2(w - 2, height - 2), false, ImGuiWindowFlags.None);
         Frame.Open.Push(false);
@@ -312,7 +331,7 @@ public sealed partial class MainWindow
                 var min = start + new Vector2(0, rowH * i);
                 var max = min + new Vector2(rw, rowH);
                 var hovered = Kit.Pointed(min, max);
-                if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover), S(Palette.RadiusMd));
+                if (hovered) dl.AddRectFilled(min, max, Palette.U32(Palette.Hover), S(Palette.RadiusSm));
                 Kit.Reticle(dl, $"##ml{i}", min, max, hovered);
                 var x = min.X + S(8);
                 var time = Format.Clock(row.T);
@@ -363,7 +382,7 @@ public sealed partial class MainWindow
                 var top = ImGui.GetWindowPos().Y + viewH - S(56);
                 var a = new Vector2(ImGui.GetWindowPos().X, top);
                 var b = new Vector2(ImGui.GetWindowPos().X + w - S(8), top + S(56));
-                var bg = Palette.Slab;
+                var bg = Palette.PanelBottom;
                 dl.AddRectFilledMultiColor(a, b, Palette.U32(Palette.WithAlpha(bg, 0)), Palette.U32(Palette.WithAlpha(bg, 0)), Palette.U32(bg), Palette.U32(bg));
             }
         }
@@ -372,7 +391,7 @@ public sealed partial class MainWindow
             if (Frame.Open.Count > 0) Frame.Open.Pop();
             ImGui.EndChild();
         }
-        outer.AddRect(at + new Vector2(0.5f), at + new Vector2(w, height) - new Vector2(0.5f), Palette.U32(Palette.Line), r, ImDrawFlags.None, 1f);
+        Kit.PanelEdge(outer, at, at + new Vector2(w, height), r);
         Kit.Reserve(at, w, height);
     }
 }

@@ -860,3 +860,46 @@ public class PlanCalloutTests
         Assert.Equal(2, s.Objects[3].Count);
     }
 }
+
+/// <summary>
+/// The windows say things in the site's words (0.9.1; kokos-tools' docs/tools/raid-codex/words.md, whose own test fails on
+/// the words it replaced): a string in the plugin's code never says one of them, and no window says a key.
+/// </summary>
+public class SiteWordsTests
+{
+    /// <summary>The words the site replaced, and a key named in the windows (the plugin binds none: CLAUDE.md).</summary>
+    private static readonly string[] Replaced =
+    {
+        "\"Keep it\"", "\"Never mind\"", "\"Not now\"", "press again", "press this again", "Open in Review", "make yours private",
+        "Make yours private", "Only me", "stays yours", "boss at ", "didn't load", "Couldn't load", "\"Anyone\"", "Remove it\"",
+        "Revoke it\"", "Esc to", "(Esc)", "Ctrl+", "Shift+",
+    };
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "RaidPlanner.sln"))) dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("No RaidPlanner.sln above the tests");
+    }
+
+    [Fact]
+    public void No_string_says_a_word_the_site_replaced()
+    {
+        var found = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(RepoRoot(), "RaidPlanner"), "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i].TrimStart();
+                // Comments say what the words were; only what a window draws counts.
+                if (line.StartsWith("//", StringComparison.Ordinal) || !line.Contains('"')) continue;
+                foreach (var w in Replaced)
+                    if (line.Contains(w, StringComparison.Ordinal))
+                        found.Add($"{Path.GetFileName(file)}:{i + 1}: {w}");
+            }
+        }
+        Assert.Empty(found);
+    }
+}

@@ -122,7 +122,7 @@ public sealed partial class MainWindow
             case SettingId.UploadLogs:
                 if (SwitchRow(i, "##upload", n, l, config.UploadLogs,
                         "Each pull worth keeping goes whole to your logs on the site as soon as it's kept, in the background, one at a time. Pulls kept while you're offline go when "
-                        + "you're back. Your logs are public on the site, with your party's names and home worlds, as on FFLogs; you can make yours private there. Off, nothing is "
+                        + "you're back. Every log on the site is public, with your party's names and home worlds, as on FF Logs; you can hide your character there. Off, nothing is "
                         + "uploaded (you can still send a pull yourself).", off: !Linked, linkFirst: !Linked))
                     logs.SetOn(!config.UploadLogs);
                 break;
@@ -138,9 +138,9 @@ public sealed partial class MainWindow
                 break;
             }
             case SettingId.WhoSees:
-                if (ButtonRow(i, "##logs-private", n, l, "Change on the site", Btn.Outline, false, null,
-                        "Your logs are public on the Raid Codex, as on FFLogs: each pull with your party's names and home worlds. In the site's Settings → Your logs you can make "
-                        + "yours private (then they're unranked too) or hide your character.", icon: Icon.ExternalLink, sub: sub))
+                if (ButtonRow(i, "##logs-hide", n, l, "Hide my character", Btn.Outline, false, null,
+                        "Every log on the Raid Codex is public, as on FF Logs: each pull with your party's names and home worlds. To keep your character's name out, hide it in "
+                        + "the site's Settings › Your logs.", icon: Icon.ExternalLink, sub: sub))
                     Dalamud.Utility.Util.OpenLink(SiteLink.LogsSettingsUrl);
                 break;
             case SettingId.TrackProgress:
@@ -822,9 +822,9 @@ public sealed partial class MainWindow
     private static readonly Run[] SetNote = new Run[1];
 
     /// <summary>
-    /// A setting's row (`.set`: 11px 16px inside, a hairline between, 34 at the left for a sub-row): its
-    /// name (550 14px white) and one muted line under it (12px), the control at the right, 14px from
-    /// the words. A row that's off dims its words and control to 45%, and with <paramref name="linkFirst"/>
+    /// A setting's row (the site's `.srow`, since 0.9.1: 20 in, at least 56 tall, a hairline over each, the first too under
+    /// its panel's head; 38 at the left for a sub-row): its name (500 14px white) and one faint line under it (12px), the
+    /// control at the right, 24px from the words. A row that's off dims its words and control to 45%, and with <paramref name="linkFirst"/>
     /// says "Link your account first: Account" (the link goes there), or <paramref name="why"/>. The
     /// longer words are the tooltip over the words.
     /// </summary>
@@ -834,29 +834,29 @@ public sealed partial class MainWindow
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
-        if (index > 0) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
-        var x = at.X + S(sub ? 34 : 16);
-        var wordsW = at.X + w - S(16) - (controlW > 0 ? controlW + S(14) : 0) - x;
+        if (index > 0 || Kit.PanelHeaded) Kit.Rule(dl, at.X, at.X + w, at.Y - 0.5f);
+        var x = at.X + S(sub ? 38 : 20);
+        var wordsW = at.X + w - S(20) - (controlW > 0 ? controlW + S(24) : 0) - x;
         var nameH = S(14 * 1.3f);
         var noteH = 0f;
         if (!string.IsNullOrEmpty(note))
         {
-            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
-            noteH = S(2) + Txt.Flow(Vector2.Zero, wordsW, SetNote, 17.4f, out _, draw: false);
+            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Faint);
+            noteH = S(3) + Txt.Flow(Vector2.Zero, wordsW, SetNote, 17.4f, out _, draw: false);
         }
         var profileWhy = !linkFirst && why == null ? rowProfileNote : null;
         var whyText = linkFirst ? "Link your account first: " : why ?? profileWhy;
         var whyH = whyText != null ? S(2) + S(17.4f) : 0;
         var wordsH = nameH + noteH + whyH;
-        var h = S(pad) * 2 + MathF.Max(wordsH, controlH);
+        var h = MathF.Max(S(RowTall), S(pad) * 2 + MathF.Max(wordsH, controlH));
         var top = at.Y + (h - wordsH) / 2;
         var old = Palette.Opacity;
         if (off) Palette.Opacity = old * 0.45f;
         Txt.Line(dl, new Vector2(x, top), Txt.Fit(name, Face.SansMedium, 14, wordsW), Face.SansMedium, 14, Palette.White, 14 * 1.3f);
         if (!string.IsNullOrEmpty(note))
         {
-            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Muted);
-            Txt.Flow(new Vector2(x, top + nameH + S(2)), wordsW, SetNote, 17.4f, out _);
+            SetNote[0] = new Run(note, Face.Sans, 12, Palette.Faint);
+            Txt.Flow(new Vector2(x, top + nameH + S(3)), wordsW, SetNote, 17.4f, out _);
         }
         Palette.Opacity = old;
         if (whyText != null)
@@ -871,7 +871,7 @@ public sealed partial class MainWindow
         if (controlW > 0)
         {
             if (off) Palette.Opacity = old * 0.45f;
-            control(new Vector2(at.X + w - S(16) - controlW, at.Y + (h - controlH) / 2));
+            control(new Vector2(at.X + w - S(20) - controlW, at.Y + (h - controlH) / 2));
             Palette.Opacity = old;
         }
         Kit.Reserve(at, w, h);

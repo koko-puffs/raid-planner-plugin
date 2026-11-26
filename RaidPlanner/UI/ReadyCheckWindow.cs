@@ -143,7 +143,7 @@ public sealed class ReadyCheckWindow : OverlayWindow
         else if (hovered) dl.AddRectFilled(at, at + new Vector2(size), Palette.U32(Palette.HoverButton), S(6));
         var icon = S(14);
         Icons.Draw(dl, Icon.Pin, at + new Vector2((size - icon) / 2), icon, on ? Palette.Ember : hovered ? Palette.White : Palette.Faint);
-        if (hovered) Kit.Tooltip(on ? "Pinned: it stays until you press this again." : "Keep it: it stays after the pull starts, until you press this again.");
+        if (hovered) Kit.Tooltip(on ? "Pinned: it stays until you unpin it." : "Pin it: it stays after the pull starts, until you unpin it.");
         if (clicked)
         {
             if (Previewing) previewPinned = !previewPinned;

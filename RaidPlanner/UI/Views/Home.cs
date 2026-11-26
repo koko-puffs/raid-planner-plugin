@@ -85,7 +85,7 @@ public sealed partial class MainWindow
         if (duty == null) return ("Not in a duty", "Pulls in raids and trials are recorded by themselves", WellTone.Quiet);
         if (!recorder.RecordsThisDuty) return ("Not recorded here", $"{duty.Name} · only raids and trials are recorded", WellTone.Quiet);
         var pulls = recorder.PullsHere;
-        var next = $"{duty.Name} · pull {(pulls + 1).ToString(CultureInfo.InvariantCulture)}";
+        var next = $"{duty.Name} · Pull {PullNoAt(duty.Name, DateTimeOffset.Now).ToString(CultureInfo.InvariantCulture)}";
         return pulls > 0 ? ("Ready for the next pull", next, WellTone.Ready) : ("Waiting for the pull", next, WellTone.Ready);
     }
 
@@ -211,7 +211,7 @@ public sealed partial class MainWindow
         var stopW = Kit.ButtonWidth(stop, BtnSize.Sm, Icon.Square, Btn.Danger);
         var rowH = S(HSm);
         Kit.BeatDot(dl, new Vector2(at.X + S(4.5f), at.Y + rowH / 2), Palette.Ember, true, 9);
-        Kit.Label(dl, new Vector2(at.X + S(9) + S(10), at.Y + (rowH - Txt.Natural(Face.Mono, 12)) / 2), $"Recording pull {Math.Max(1, b.Pull)}", 12, 0.08f, Palette.EmberHi,
+        Kit.Label(dl, new Vector2(at.X + S(9) + S(10), at.Y + (rowH - Txt.Natural(Face.Mono, 12)) / 2), $"Recording pull {PullNoAt(b.Duty.Name, b.StartedAt)}", 12, 0.08f, Palette.EmberHi,
             w - stopW - S(12) - S(19));
         if (Kit.Button("##stop", new Vector2(at.X + w - stopW, at.Y), stop, Btn.Danger, BtnSize.Sm, Icon.Square, 0, false,
                 "Ends this pull here and keeps it. It ends by itself when the fight does."))
@@ -313,11 +313,9 @@ public sealed partial class MainWindow
     /// </summary>
     private void DrawLatest(RecordingInfo info)
     {
-        var ep = Kit.At;
-        Kit.Eyebrow(Kit.Dl, ep, "Latest pull", null, Kit.Width, Palette.Muted);
-        Kit.Reserve(ep, Kit.Width, Kit.EyebrowH);
-        Kit.Gap(12);
-        Kit.BeginPanel("##latest", 16, 18, 16);
+        Kit.Section("##latest-head", "Latest pull");
+        Kit.Gap(10);
+        Kit.BeginPanel("##latest", 16, 20, 18);
         var at = Kit.At;
         var w = Kit.Width;
         var dl = Kit.Dl;
@@ -325,10 +323,10 @@ public sealed partial class MainWindow
         var length = Format.Clock(info.Duration);
         var rowH = S(24);
         var lw = Txt.Width(length, Face.MonoSemibold, 18);
-        var title = $"Pull {Math.Max(1, info.Pull)}";
+        var title = $"Pull {PullNo(info)}";
         Kit.Callout(dl, new Vector2(at.X, at.Y + (rowH - S(17 * 1.05f)) / 2), title, 17, w - lw - S(140), 1);
         var titleW = Txt.Width(Kit.CalloutLines(title, 17, w - lw - S(140), 1)[0], Face.Callout, 17);
-        Kit.Tag(dl, new Vector2(at.X + titleW + S(10), at.Y + (rowH - S(22)) / 2), tag, kind);
+        Kit.Tag(dl, new Vector2(at.X + titleW + S(10), at.Y + (rowH - S(Kit.TagH)) / 2), tag, kind);
         Txt.LineRight(dl, at.X + w, at.Y, length, Face.MonoSemibold, 18, Palette.White, 24);
         Kit.Reserve(at, w, rowH);
         if (!string.Equals(info.Duty, DutyShown, StringComparison.OrdinalIgnoreCase))
@@ -357,9 +355,7 @@ public sealed partial class MainWindow
     {
         var old = Palette.Opacity;
         Palette.Opacity = old * 0.55f;
-        var ep = Kit.At;
-        Kit.Eyebrow(Kit.Dl, ep, "Latest pull", null, Kit.Width, Palette.Muted);
-        Kit.Reserve(ep, Kit.Width, Kit.EyebrowH);
+        Kit.Section("##latest-quiet-head", "Latest pull");
         Kit.Gap(8);
         Kit.BeginPanel("##latest-quiet", 14, 16, 14, Palette.Slab, Palette.Line, Palette.RadiusMd + 2);
         var at = Kit.At;
@@ -367,7 +363,7 @@ public sealed partial class MainWindow
         var dl = Kit.Dl;
         var (tag, kind) = OutcomeTag(info.Outcome);
         var rowH = S(22);
-        var title = $"Pull {Math.Max(1, info.Pull)}";
+        var title = $"Pull {PullNo(info)}";
         var x = at.X + Txt.Line(dl, new Vector2(at.X, at.Y + (rowH - S(16 * 1.05f)) / 2), Txt.CalloutCaps(title), Face.Callout, 16, Palette.White, 16 * 1.05f) + S(10);
         x += Kit.Tag(dl, new Vector2(x, at.Y), tag, kind) + S(10);
         Txt.Line(dl, new Vector2(x, at.Y), Format.Clock(info.Duration), Face.MonoSemibold, 15, Palette.White, 22);
@@ -385,6 +381,39 @@ public sealed partial class MainWindow
     /// <summary>The local times of the kept pulls (the list's order), for grouping by night.</summary>
     private static List<DateTime> LocalTimes(IReadOnlyList<RecordingInfo> all) => all.Select(i => i.RecordedAt.ToLocalTime().DateTime).ToList();
 
+    // ---------------------------------------------------------------------------------------------
+    // Pull numbers (0.9.1): by night, as the site says them ("Pull 17" is the 17th pull of that fight that night).
+
+    private IReadOnlyList<RecordingInfo>? numberedFor;
+    private List<(DateTime Local, string Duty)> numberedPulls = new();
+    private readonly Dictionary<string, int> pullNumbers = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The kept pulls' numbers, worked out again when the list changes (it's a new list then).</summary>
+    private void NumberPulls()
+    {
+        var all = store.All;
+        if (ReferenceEquals(all, numberedFor)) return;
+        numberedFor = all;
+        numberedPulls = all.Select(i => (i.RecordedAt.ToLocalTime().DateTime, i.Duty)).ToList();
+        var n = PullNights.Numbers(numberedPulls);
+        pullNumbers.Clear();
+        for (var i = 0; i < all.Count; i++) pullNumbers[all[i].File] = n[i];
+    }
+
+    /// <summary>A kept pull's number: its place in its night of its duty (<see cref="PullNights.Numbers"/>).</summary>
+    internal int PullNo(RecordingInfo info)
+    {
+        NumberPulls();
+        return pullNumbers.TryGetValue(info.File, out var no) ? no : Math.Max(1, info.Pull);
+    }
+
+    /// <summary>The number of a pull of <paramref name="duty"/> beginning at <paramref name="at"/> (being recorded, or the next): its night's kept pulls of it, and one.</summary>
+    internal int PullNoAt(string duty, DateTimeOffset at)
+    {
+        NumberPulls();
+        return PullNights.Next(numberedPulls, duty, at.ToLocalTime().DateTime);
+    }
+
     /// <summary>A pull's row's words: its number, length, how long ago and where it ended, its outcome, uploaded or waiting.</summary>
     private Kit.PullLine LineOf(RecordingInfo info, bool best, string? dutyShown, bool wantGist)
     {
@@ -397,7 +426,7 @@ public sealed partial class MainWindow
         var sent = (store.Find(info.File)?.SentId ?? info.SentId) != null;
         string? waiting = null;
         if (!sent && Linked && config.UploadPrefsNow().Wants(info)) waiting = "waiting";
-        return new Kit.PullLine(Math.Max(1, info.Pull).ToString(CultureInfo.InvariantCulture), Format.Clock(info.Duration), sub, tag, kind, sent, waiting, best);
+        return new Kit.PullLine(PullNo(info).ToString(CultureInfo.InvariantCulture), Format.Clock(info.Duration), sub, tag, kind, sent, waiting, best);
     }
 
     /// <summary>Pulls as rows in a slab; a row opens its pull. Its facts are read only for rows in view.</summary>
@@ -426,14 +455,8 @@ public sealed partial class MainWindow
         var rows = night.Items.Where(i => i > 0).Take(EarlierShown).Select(i => all[i]).ToList();
         if (rows.Count == 0) return;
         Kit.Gap(22);
-        var at = Kit.At;
-        var w = Kit.Width;
-        const string link = "All pulls";
-        var linkW = Kit.LinkWidth(link, Icon.ArrowRight);
-        Kit.Eyebrow(Kit.Dl, new Vector2(at.X, at.Y + (S(18) - Kit.EyebrowH) / 2), night.Heading, null, w - linkW - S(12), Palette.Muted);
-        if (Kit.Link("##home-all", new Vector2(at.X + w - linkW, at.Y + (S(18) - Txt.Natural(Face.SansMedium, 13)) / 2), link, Icon.ArrowRight)) Later(ShowPulls);
-        Kit.Reserve(at, w, S(18));
-        Kit.Gap(8);
+        if (Kit.Section("##home-all", night.Label, Words.Count(night.Items.Count, "pull"), "All pulls")) Later(ShowPulls);
+        Kit.Gap(10);
         var best = BestOf(all, night);
         DrawPullRows("##tonight", rows, best, all[0].Duty);
     }
@@ -468,7 +491,7 @@ public sealed partial class MainWindow
         Kit.Reserve(at, w, drawH);
         Kit.Gap(8.8f);
         var cy = Kit.At;
-        var ch = Kit.Callout(dl, cy, "Nothing pulled yet", 17, w, 2, 1.05f, center: true);
+        var ch = Kit.Callout(dl, cy, "Nothing pulled yet", 22, w, 2, 1.05f, center: true);
         Kit.Reserve(cy, w, ch);
         Kit.Gap(8.8f);
         var lw = MathF.Min(w, S(304));
