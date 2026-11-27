@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
 using RaidPlanner.Core;
@@ -13,7 +14,10 @@ namespace RaidPlanner.Game;
 /// it's kept, one at a time and the oldest first, off the game's thread. What's waiting is the kept pulls not sent yet
 /// (<see cref="UploadQueue"/>, from the store's sent marks), so pulls kept while offline or when the game closed go at the next
 /// chance; and the store holds those still to go past Keep the last (up to <see cref="RecordingStore.MostHeld"/>). On the
-/// framework thread; the reading, gzipping and sending on a worker.
+/// framework thread; the reading, gzipping and sending on a worker. Since the uploads round (not yet released) none starts while a fight is on or about to
+/// start (<see cref="FightRecorder.FightNear"/>: in combat, a pull recorded, a countdown going), and the one on its way when
+/// one begins is stopped and goes again whole after (<see cref="UploadQueue.Fight"/>), so a slow connection never shares
+/// the fight with an upload.
 /// </summary>
 public sealed class LogUploader : IDisposable
 {
@@ -38,6 +42,9 @@ public sealed class LogUploader : IDisposable
     /// <summary>Bumped when the account changes: an answer for the one before is ignored.</summary>
     private int generation;
     private bool stopTold;
+
+    /// <summary>Stops the upload on its way (a fight began); null with none. On the framework thread.</summary>
+    private CancellationTokenSource? sending;
 
     public LogUploader(Configuration config, RecordingStore store, FightRecorder recorder, SiteSession site, string version)
     {
@@ -125,6 +132,12 @@ public sealed class LogUploader : IDisposable
     private void Pump()
     {
         if (!every.Due(Environment.TickCount64) || site.Closed) return;
+        // A fight on or about to start: nothing starts, and the one on its way stops (it goes again whole after; the site
+        // keeps a pull sent twice once). Also never started during a pull for the game's sake: fitting a long pull's file to
+        // the site's size, serialising and compressing it is tens of megabytes of work, and though it's a worker's, the
+        // garbage it leaves can pause the game mid-fight.
+        queue.Fight = recorder.FightNear;
+        if (queue.Cancels && sending is { IsCancellationRequested: false } stop) stop.Cancel();
         prefs = config.UploadPrefsNow();
         var token = site.Token;
         if (!string.Equals(token, lastToken, StringComparison.Ordinal))
@@ -137,10 +150,6 @@ public sealed class LogUploader : IDisposable
         }
         linked = SiteLink.LooksRight(token);
         if (!prefs.UploadLogs || !linked) return;
-        // Never started during a pull: fitting a long pull's file to the site's size, serialising and
-        // compressing it is tens of megabytes of work, and though it's a worker's, the garbage it
-        // leaves can pause the game mid-fight. The next one starts once the pull's over.
-        if (recorder.InPull) return;
         if (queue.Next(store.All, DateTime.UtcNow, Waits) is { } next) Start(next, token);
     }
 
@@ -151,7 +160,9 @@ public sealed class LogUploader : IDisposable
         var clientId = SiteLink.ClientId(info.File, info.RecordedAt);
         summaries.TryGetValue(info.File, out var summary);
         var gen = generation;
-        var cancel = site.Closing;
+        var stop = CancellationTokenSource.CreateLinkedTokenSource(site.Closing);
+        sending = stop;
+        var cancel = stop.Token;
         var http = site.Http;
         _ = Task.Run(async () =>
         {
@@ -205,13 +216,15 @@ public sealed class LogUploader : IDisposable
                 answer = new UploadAnswer(UploadOutcome.Retry, Why: "The upload couldn't be made.", ThisPull: true);
             }
             if (site.Closed) return;
+            // Stopped for a fight (not the plugin unloading): it waits, with no failure counted, and goes again after.
+            if (answer.Why == "Stopped." && stop.IsCancellationRequested) answer = LogUpload.ForTheFight;
             try
             {
                 _ = Services.Framework.RunOnFrameworkThread(() =>
                 {
                     try
                     {
-                        Finish(info, gen, answer);
+                        Finish(info, gen, answer, stop);
                     }
                     catch (Exception ex)
                     {
@@ -254,8 +267,10 @@ public sealed class LogUploader : IDisposable
         });
     }
 
-    private void Finish(RecordingInfo info, int gen, UploadAnswer answer)
+    private void Finish(RecordingInfo info, int gen, UploadAnswer answer, CancellationTokenSource stop)
     {
+        if (ReferenceEquals(sending, stop)) sending = null;
+        stop.Dispose();
         if (site.Closed || gen != generation) return;
         var mark = queue.Done(info.File, answer, DateTime.UtcNow);
         if (mark is { SentId: { } id })
@@ -280,6 +295,10 @@ public sealed class LogUploader : IDisposable
         {
             stopTold = true;
             PlanService.Print($"Uploading your pulls stopped: {answer.Why}");
+        }
+        else if (answer == LogUpload.ForTheFight)
+        {
+            Services.Log.Information($"Raid Codex's upload of {info.Name} stopped for the fight: it goes again after");
         }
         else if (answer.Outcome != UploadOutcome.Sent)
         {

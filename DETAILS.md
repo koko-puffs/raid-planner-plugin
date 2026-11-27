@@ -687,8 +687,26 @@ with, so the site joins them), `name` the pull's (≤ 120), `summary` the summar
 anyway), `recording` the file as written (copied in unparsed, as a send's). Whole: thinned as a send is
 (`SiteLink.Fit`, the same order) only past 8 MB less 64 KB (`LogUpload.MaxRecording`; the site takes 8 MB
 ungzipped, 10 MB gzipped: its Worker has 128 MB, and a recording read there takes several times its size),
-which no ordinary pull comes near (a ten-minute savage pull is under 1 MB). The file is read, gzipped and sent on a worker;
-it waits half a minute and a quarter more for each MB, and stops when the plugin unloads.
+which no ordinary pull comes near (a ten-minute savage pull is under 1 MB; gzipped, a ten-minute ultimate pull is about
+150 KB). The file is read, gzipped and sent on a worker; it waits half a minute and a minute more for each MB sent
+(`LogUpload.TimeoutFor`; a quarter minute before the uploads round, and cut at 100 seconds by HttpClient's own wait, which
+the plugin's client no longer has: every call sets its own), so a slow connection (a big pull at about 130 kbit/s up)
+still gets through; and it stops when the plugin unloads. A send that runs out of time is tried again (below), never
+marked refused.
+
+**Never during a fight** (since the uploads round, not yet released): no upload starts while you're in combat, a pull is recorded or
+followed, or (in a duty that's recorded, where the countdown is watched for the pull's start) a countdown is going
+(`FightRecorder.FightNear`; the countdown's at most 35 seconds from when it's first seen, `CountdownWatch.Running`, so a
+reading stuck on can't hold them longer). The game side sets `UploadQueue.Fight` each check (four times a second), and
+the queue starts nothing while it's set. The upload on its way when a fight begins is stopped (its own cancellation,
+linked to the plugin's: `UploadQueue.Cancels`) and waits, its answer `LogUpload.ForTheFight`: no wait, no failure
+counted, so it's never set aside; it goes again whole once the fight's over, the oldest first (the site keeps a pull sent
+twice once, by its `clientId`, and says `duplicate`). Settings and a pull's upload box say _Held until you're out of
+combat_ meanwhile. Recording never waits on any of it: a pull is written to the disk as it ends, whatever the
+connection; only its upload waits. So on a slow connection pulling again right after a wipe, the upload stops within a
+quarter second of combat starting and the fight has the connection to itself; between pulls (and after the last) what's
+waiting goes. The pulls waiting are held past _Keep the last_ up to 200 (`RecordingStore.MostHeld`; past it the oldest
+go even so) and are worked out from the store, so a restart loses none.
 
 What's waiting is worked out each time from the kept pulls, never kept apart (`UploadQueue`): those not sent
 (no `SentId`; an upload's answer is the same inbox id a send's is, so an uploaded pull is marked sent, shows
@@ -727,7 +745,8 @@ character there (Settings → Your logs, `SiteLink.LogsSettingsUrl`); Settings �
 
 With _Track my progress_ on (the default; it does nothing until you're linked), each kept pull's
 summary goes to `rp_plugin_pull` with the pull's own id (`SiteLink.ClientId`, so a repeat is kept
-once): `{ content, territory, duty, pull, recordedAt, duration, outcome, reached, phase, deaths }`,
+once; at most 20 wait in memory, `SummaryQueue`, past it the oldest goes; since the uploads round none starts during a
+fight, as uploads: `SummaryQueue.Fight`, the one on its way, a few KB, finishes): `{ content, territory, duty, pull, recordedAt, duration, outcome, reached, phase, deaths }`,
 where `reached` is the length (the site reads a wipe's as its last death, when that's within 20 s
 of the end: the recording runs on past the wipe), `phase` the furthest phase (from the builder's count, above) and
 `deaths` at most 48 of `{ t, slot, job, by }` (`by` the action's name, or a lethal tick's status's,
@@ -2617,6 +2636,12 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### Next (not released yet)
+
+- **Uploads wait until you're out of combat**, so a slow connection never competes with the fight: none starts in
+  combat, while a pull is recorded or a countdown runs, and one still going when a fight starts stops and goes again
+  after. Each upload also has longer to finish on a slow connection (half a minute, and a minute for each MB).
 
 ### 0.11.0
 

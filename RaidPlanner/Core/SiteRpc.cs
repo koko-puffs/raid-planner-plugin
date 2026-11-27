@@ -158,7 +158,12 @@ public sealed class SiteSession : IDisposable
     /// <summary>The most an answer may be: a plan is well under this, and nothing bigger is read into memory.</summary>
     public const long MaxAnswer = 8 * 1024 * 1024;
 
-    private readonly HttpClient http = new() { MaxResponseContentBufferSize = MaxAnswer };
+    /// <summary>
+    /// No wait of its own (since the uploads round, not yet released; HttpClient's 100 seconds before): each call sets its own (<see cref="SiteRpc.ShortWait"/>,
+    /// <see cref="SiteLink.TimeoutFor"/>, <see cref="LogUpload.TimeoutFor"/>), so a big upload on a slow connection isn't cut
+    /// short at 100 seconds.
+    /// </summary>
+    private readonly HttpClient http = new() { MaxResponseContentBufferSize = MaxAnswer, Timeout = Timeout.InfiniteTimeSpan };
     private readonly CancellationTokenSource closing = new();
 
     /// <summary>Taken once, so it's still read after the source is disposed (asking the source for it then throws).</summary>

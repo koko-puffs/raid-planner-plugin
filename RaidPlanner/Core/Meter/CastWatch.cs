@@ -142,7 +142,14 @@ public sealed class CountdownWatch
     /// <summary>Only a countdown that reached zero this close to the pull's start is the pull's (seconds).</summary>
     public const double Near = 30;
 
+    /// <summary>
+    /// The longest a countdown is taken as going on (seconds): the game's longest is 30, and a few more. A reading stuck on
+    /// (the agent read wrong, the countdown's end missed) holds the uploads no longer than this (<see cref="Running"/>).
+    /// </summary>
+    public const double Longest = 35;
+
     private bool active;
+    private double since;
     private double length;
     private double zeroAt = double.NaN;
     private double lastRemaining;
@@ -157,6 +164,7 @@ public sealed class CountdownWatch
                 // Its length as set (5–30 whole seconds): the first reading, a frame into it, rounded up.
                 length = Math.Max(0, Math.Ceiling(remaining - 0.05));
                 active = true;
+                since = now;
             }
             zeroAt = now + remaining;
             lastRemaining = remaining;
@@ -176,6 +184,12 @@ public sealed class CountdownWatch
         if (double.IsNaN(zeroAt) || Math.Abs(start - zeroAt) > Near) return null;
         return (length, Math.Round(start - zeroAt, 2, MidpointRounding.AwayFromZero));
     }
+
+    /// <summary>
+    /// A countdown is going now (since the uploads round, not yet released: the uploads don't start one in the moments before a pull), for at most
+    /// <see cref="Longest"/> from when it was first seen; one stopped, cancelled or gone past zero isn't.
+    /// </summary>
+    public bool Running(double now) => active && now - since >= 0 && now - since <= Longest && now <= zeroAt;
 
     public void Clear()
     {

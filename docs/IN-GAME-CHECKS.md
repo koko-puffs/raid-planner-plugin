@@ -167,3 +167,12 @@ The meter estimates what a barrier soaked from the barrier the game shows on a m
 - Open a kept pull that's on your Raid Codex and press _Open on the site_: the browser opens the pull's Replay on the
   site. Before it's uploaded or sent the button is dimmed and says why.
 - _Open the pull_ (Home's latest pull, a pull's upload box, the toast after a send) opens the pull's page there.
+
+## 17. Uploads wait for the fight (not released yet)
+
+- With a few pulls waiting (Settings → Recording shows how many), start a fight: the line says _Held until you're out
+  of combat_, and the pulls go once you're out of it, the oldest first. On a slow connection, pull again right after a
+  wipe: the upload on its way stops (the log says "stopped for the fight") and goes again whole after; the pull on the
+  site is there once, not twice.
+- In a recorded duty, start a /countdown: no upload starts while it runs (and one starts within a second of it being
+  cancelled, if it's out of combat).

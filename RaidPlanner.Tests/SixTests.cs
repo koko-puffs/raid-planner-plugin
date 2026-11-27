@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
 using RaidPlanner.Core;
+using RaidPlanner.Core.Meter;
 using Xunit;
 
 namespace RaidPlanner.Tests;
@@ -435,6 +436,149 @@ public class UploadQueueTests
         Assert.Equal(p.File, q.InFlight);
         q.Drop();
         Assert.Null(q.Done(p.File, new UploadAnswer(UploadOutcome.Sent, Uuid), Now));
+    }
+}
+
+/// <summary>Since the uploads round (not yet released): no upload during a fight (the queues' waiting rule, the countdown, the stop and the wait for a slow connection).</summary>
+public class FightHoldTests
+{
+    private static readonly DateTime Now = new(2026, 11, 27, 20, 0, 0, DateTimeKind.Utc);
+
+    private static RecordingInfo Pull(string file, int minutesAgo) =>
+        new(file + Words.Extension, "Arena", 1, new DateTimeOffset(Now).AddMinutes(-minutesAgo), 120, Outcome.Wipe, 3, true, null, null, null);
+
+    private static readonly RecordingInfo[] Pulls = { Pull("new", 1), Pull("old", 30), Pull("mid", 10) };
+
+    [Fact]
+    public void Nothing_starts_in_a_fight_and_what_waits_goes_after_the_oldest_first()
+    {
+        var q = new UploadQueue { Fight = true };
+        Assert.Null(q.Next(Pulls, Now, _ => true));
+        Assert.Equal(UploadQueue.FightHeld, q.Held);
+        Assert.False(q.Cancels);
+        q.Fight = false;
+        Assert.Null(q.Held);
+        Assert.Equal("old" + Words.Extension, q.Next(Pulls, Now, _ => true)!.File);
+    }
+
+    [Fact]
+    public void One_stopped_for_a_fight_goes_again_first_with_no_wait_and_no_failure()
+    {
+        var q = new UploadQueue();
+        var p = q.Next(Pulls, Now, _ => true)!;
+        q.Fight = true;
+        Assert.True(q.Cancels);
+        // Stopped every pull, many times over: never a failure, so never set aside, never marked, never waiting longer.
+        for (var i = 0; i < UploadQueue.TriesBeforeAside * 3; i++)
+        {
+            Assert.Null(q.Done(p.File, LogUpload.ForTheFight, Now));
+            Assert.False(q.Cancels);
+            Assert.False(q.Aside(p.File, Now));
+            q.Fight = false;
+            p = q.Next(Pulls, Now, _ => true)!;
+            Assert.Equal("old" + Words.Extension, p.File);
+            q.Fight = true;
+        }
+        q.Fight = false;
+        Assert.Null(q.Done(p.File, LogUpload.ForTheFight, Now));
+        Assert.Null(q.Held);
+        Assert.Equal(DateTime.MinValue, q.NotBefore);
+        Assert.Equal("id", q.Done(q.Next(Pulls, Now, _ => true)!.File, new UploadAnswer(UploadOutcome.Sent, "id"), Now)!.Value.SentId);
+    }
+
+    [Fact]
+    public void A_fight_keeps_the_wait_the_site_asked_for()
+    {
+        var q = new UploadQueue();
+        var p = q.Next(Pulls, Now, _ => true)!;
+        q.Done(p.File, new UploadAnswer(UploadOutcome.Retry, Why: "Couldn't reach the site."), Now);
+        q.Fight = true;
+        Assert.Null(q.Next(Pulls, Now.AddMinutes(1), _ => true));
+        q.Fight = false;
+        // Out of combat, a minute on: the 30 seconds are over.
+        Assert.Equal("Couldn't reach the site.", q.Held);
+        Assert.NotNull(q.Next(Pulls, Now.AddMinutes(1), _ => true));
+    }
+
+    [Fact]
+    public void Summaries_wait_for_the_fight_too()
+    {
+        var q = new SummaryQueue(20);
+        q.Add("{}", "a");
+        q.Add("{}", "b");
+        q.Fight = true;
+        Assert.Null(q.Next());
+        Assert.Equal(2, q.Count);
+        q.Fight = false;
+        Assert.Equal("a", q.Next()!.Value.ClientId);
+        // One already on its way finishes; the next waits for the fight.
+        q.Fight = true;
+        q.Answered(true);
+        Assert.Null(q.Next());
+        q.Fight = false;
+        Assert.Equal("b", q.Next()!.Value.ClientId);
+    }
+
+    [Fact]
+    public void A_countdown_holds_the_uploads_only_while_it_goes()
+    {
+        var cd = new CountdownWatch();
+        Assert.False(cd.Running(0));
+        cd.Frame(100, true, 15f);
+        Assert.True(cd.Running(100));
+        cd.Frame(110, true, 5f);
+        Assert.True(cd.Running(110));
+        // Past zero, or stopped (the pull began, or it was cancelled): not any more.
+        Assert.False(cd.Running(115.5));
+        cd.Frame(112, false, 0f);
+        Assert.False(cd.Running(112));
+        // A reading stuck on holds them at most 35 seconds.
+        var stuck = new CountdownWatch();
+        for (var t = 0.0; t <= 60; t += 0.5) stuck.Frame(t, true, 30f);
+        Assert.False(stuck.Running(60));
+        Assert.True(CountdownWatch.Longest < 40);
+        stuck.Clear();
+        Assert.False(stuck.Running(60));
+    }
+
+    [Fact]
+    public void A_slow_connection_has_time_to_send()
+    {
+        // Half a minute, and a minute more for each MB (a big one at about 130 kbit/s, 1 MB at 90); a ten-minute ultimate pull (about
+        // 150 KB gzipped) gets 39 seconds; the biggest the site takes, ten and a half minutes.
+        Assert.Equal(TimeSpan.FromSeconds(30), LogUpload.TimeoutFor(0));
+        Assert.Equal(TimeSpan.FromSeconds(39), LogUpload.TimeoutFor(150_000));
+        Assert.Equal(TimeSpan.FromSeconds(90), LogUpload.TimeoutFor(1_000_000));
+        Assert.Equal(TimeSpan.FromSeconds(630), LogUpload.TimeoutFor(LogUpload.MaxGzip));
+    }
+
+    private sealed class Hangs : HttpMessageHandler
+    {
+        public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
+    [Fact]
+    public async Task An_upload_stopped_mid_way_is_an_answer_that_waits()
+    {
+        var hangs = new Hangs();
+        using var http = new HttpClient(hangs) { Timeout = Timeout.InfiniteTimeSpan };
+        using var stop = new CancellationTokenSource();
+        var send = LogUpload.SendAsync(http, "rpp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ", new byte[] { 1, 2, 3 }, "0.11.0", stop.Token);
+        await hangs.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        stop.Cancel();
+        var a = await send.WaitAsync(TimeSpan.FromSeconds(10));
+        // "Stopped." (the game side makes it LogUpload.ForTheFight when a fight stopped it): a retry, never refused or marked.
+        Assert.Equal(UploadOutcome.Retry, a.Outcome);
+        Assert.Equal("Stopped.", a.Why);
+        Assert.Equal(UploadOutcome.Retry, LogUpload.ForTheFight.Outcome);
+        Assert.False(LogUpload.ForTheFight.ThisPull);
     }
 }
 

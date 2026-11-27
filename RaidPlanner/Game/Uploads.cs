@@ -12,7 +12,8 @@ namespace RaidPlanner.Game;
 /// What goes to the site without a pull's whole recording: each kept pull's summary for the
 /// progress tracker (with Track my progress on), and your party's names for your roster (only when
 /// you press the button). Summaries wait in a short queue: sent one at a time, each with the pull's
-/// own id (so one sent twice is kept once), tried again later when the site can't be reached.
+/// own id (so one sent twice is kept once), tried again later when the site can't be reached, and
+/// (since the uploads round, not yet released) never started while a fight is on or about to start (<see cref="FightRecorder.FightNear"/>).
 /// On the framework thread; the calls go on workers.
 /// </summary>
 public sealed class Uploads : IDisposable
@@ -68,6 +69,8 @@ public sealed class Uploads : IDisposable
             queue.Clear();
             return;
         }
+        // A fight on or about to start: they wait for it to end (since the uploads round, not yet released), so nothing shares a slow connection with it.
+        queue.Fight = recorder.FightNear;
         if (queue.Next() is not var (summary, clientId)) return;
         JsonNode? node;
         try

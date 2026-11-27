@@ -78,8 +78,19 @@ public static class LogUpload
     /// <summary>The longest wait the site's <c>Retry-After</c> is taken for (its hourly limit's window, and a little).</summary>
     public static readonly TimeSpan LongestWait = TimeSpan.FromMinutes(65);
 
-    /// <summary>How long an upload waits for the site: half a minute, and a quarter more for each MB sent.</summary>
-    public static TimeSpan TimeoutFor(int bytes) => TimeSpan.FromSeconds(30 + 15.0 * bytes / 1_000_000);
+    /// <summary>
+    /// How long an upload waits for the site: half a minute, and a minute more for each MB sent (since the uploads round, not yet released; a quarter
+    /// minute before), so a slow connection (down to about 130 kbit/s up) still gets a big pull through. An ordinary pull is
+    /// well under 1 MB gzipped (a ten-minute ultimate pull about 150 KB): about 40 seconds. It no longer waits through a fight
+    /// (<see cref="UploadQueue.Fight"/>), so a long wait costs the game nothing.
+    /// </summary>
+    public static TimeSpan TimeoutFor(int bytes) => TimeSpan.FromSeconds(30 + 60.0 * bytes / 1_000_000);
+
+    /// <summary>
+    /// Since the uploads round (not yet released): the answer for an upload stopped because a fight began (<see cref="UploadQueue.Fight"/>). It waits, and goes
+    /// again whole once the fight's over (the site keeps a pull sent twice once, by its id), with no wait and no failure counted.
+    /// </summary>
+    public static readonly UploadAnswer ForTheFight = new(UploadOutcome.Retry, Why: UploadQueue.FightHeld);
 
     /// <summary>
     /// The recording as it's uploaded: whole when it's at most <see cref="MaxRecording"/> bytes (nearly every pull: a long one
@@ -266,11 +277,31 @@ public sealed class UploadQueue
     /// <summary>The file on its way (null: none).</summary>
     public string? InFlight { get; private set; }
 
+    /// <summary>What <see cref="Held"/> says while a fight holds the uploads (<see cref="Fight"/>).</summary>
+    public const string FightHeld = "Held until you're out of combat.";
+
+    /// <summary>
+    /// Since the uploads round (not yet released): a fight is on or about to start (in combat, a pull recorded, a countdown going; set by the game side each
+    /// check). Nothing starts while it is (<see cref="Next"/>), and the one on its way should be stopped (<see cref="Cancels"/>):
+    /// on a slow connection an upload would compete with the game's own traffic. What's waiting goes once it's over, the
+    /// oldest first, as before.
+    /// </summary>
+    public bool Fight { get; set; }
+
+    /// <summary>The upload on its way should be stopped: a fight began (it's sent again whole after: <see cref="LogUpload.ForTheFight"/>).</summary>
+    public bool Cancels => Fight && InFlight != null;
+
     /// <summary>Why uploading stopped (a refused token, a full account), in the site's words; null while it goes on.</summary>
     public string? Stopped { get; private set; }
 
-    /// <summary>The last thing that held it up (the hourly limit, no connection), in words; null after a success.</summary>
-    public string? Held { get; private set; }
+    /// <summary>The last thing that held it up (the hourly limit, no connection, a fight: <see cref="FightHeld"/>), in words; null after a success.</summary>
+    public string? Held
+    {
+        get => Fight ? FightHeld : held;
+        private set => held = value;
+    }
+
+    private string? held;
 
     /// <summary>When it may go on (after a wait the site asked for, or a pause; <see cref="DateTime.MinValue"/>: now).</summary>
     public DateTime NotBefore => notBefore > backoff.Until ? notBefore : backoff.Until;
@@ -288,7 +319,7 @@ public sealed class UploadQueue
     /// </summary>
     public RecordingInfo? Next(IReadOnlyList<RecordingInfo> all, DateTime now, Func<RecordingInfo, bool> wanted)
     {
-        if (InFlight != null || Stopped != null || !backoff.Ready(now)) return null;
+        if (Fight || InFlight != null || Stopped != null || !backoff.Ready(now)) return null;
         // A clock set back by more than the wait counts as waited (as Backoff does).
         if (now < notBefore && notBefore - now <= notBeforeWait) return null;
         if (marking.Count > 0) ForgetMarked(all);
@@ -335,8 +366,9 @@ public sealed class UploadQueue
                 Held = answer.Why;
                 return null;
             default:
-                // "Stopped." is the plugin unloading: nothing to wait for.
-                if (answer.Why == "Stopped.") return null;
+                // "Stopped." is the plugin unloading, and a fight stopped it (since the uploads round, not yet released): nothing to wait for, no failure; it
+                // goes again (the oldest first) once the fight's over.
+                if (answer.Why is "Stopped." or FightHeld) return null;
                 backoff.Failed(now);
                 Failed(file, now, answer.ThisPull);
                 Held = answer.Why;

@@ -214,6 +214,13 @@ public sealed unsafe class FightRecorder : IDisposable
     public bool InPull => current != null;
 
     /// <summary>
+    /// A fight is on or about to start (since the uploads round, not yet released): you're in combat, a pull is recorded or followed, or (in a duty that's
+    /// recorded, where the countdown is watched) a countdown is going. The uploads start nothing then, and the pull on its
+    /// way is stopped and sent again once it's over (<see cref="LogUploader"/>, <see cref="Uploads"/>).
+    /// </summary>
+    public bool FightNear => current != null || Services.Condition[ConditionFlag.InCombat] || (prePullOn && countdown.Running(Now));
+
+    /// <summary>
     /// Is a pull wanted followed though it won't be recorded (set by the plugin: the plan window
     /// shows a plan for this duty)? Asked as combat begins.
     /// </summary>

@@ -147,16 +147,22 @@ public sealed class SummaryQueue
     /// <summary>One is on its way.</summary>
     public bool Sending => inFlight != null;
 
+    /// <summary>
+    /// Since the uploads round (not yet released): a fight is on or about to start (set by the game side each check): none starts while it is (<see cref="Next"/>);
+    /// they go once it's over, the oldest first. One already on its way (a few KB) finishes.
+    /// </summary>
+    public bool Fight { get; set; }
+
     public void Add(string summary, string clientId)
     {
         while (queue.Count >= most) queue.Dequeue();
         queue.Enqueue((summary, clientId));
     }
 
-    /// <summary>The next to send, now on its way; null while one is already, or with none waiting.</summary>
+    /// <summary>The next to send, now on its way; null while one is already, with none waiting, or in a fight (<see cref="Fight"/>).</summary>
     public (string Summary, string ClientId)? Next()
     {
-        if (inFlight != null || queue.Count == 0) return null;
+        if (Fight || inFlight != null || queue.Count == 0) return null;
         var next = queue.Peek();
         inFlight = next.ClientId;
         return next;
