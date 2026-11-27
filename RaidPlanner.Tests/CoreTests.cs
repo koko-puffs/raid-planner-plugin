@@ -476,6 +476,8 @@ public class RecordingTests
         b.SeenTargetable(bigger, 3_000_000_000);
         var r = b.Finish(30, Outcome.Wipe);
         Assert.All(r.Actors, a => Assert.Equal(ActorKind.Boss, a.Kind));
+        // Its max HP and the next's, past int's range.
+        Assert.Equal((3_000_000_000u, 2_900_000_000u), (r.Boss!.Hp, r.Boss.Next));
     }
 
     [Fact]

@@ -22,9 +22,12 @@ public class RunTests
         Assert.Equal(1001u, o["boss"]!["dataId"]!.GetValue<uint>());
         Assert.Equal(2001u, o["boss"]!["nameId"]!.GetValue<uint>());
         Assert.Equal("The Boss", o["boss"]!["name"]!.GetValue<string>());
+        // Alone (its helper never counts): its max HP, and 0 for the next.
+        Assert.Equal(1_000_000u, o["boss"]!["hp"]!.GetValue<uint>());
+        Assert.Equal(0u, o["boss"]!["next"]!.GetValue<uint>());
         var back = Recording.Parse(o.ToJsonString());
         Assert.Equal(new RunInfo("3f9c2a7d1e4b", new DateTimeOffset(2026, 11, 2, 19, 41, 12, 305, TimeSpan.Zero)), back.Run);
-        Assert.Equal(new BossInfo(1001, 2001, "The Boss"), back.Boss);
+        Assert.Equal(new BossInfo(1001, 2001, "The Boss", 1_000_000, 0), back.Boss);
     }
 
     [Fact]
@@ -40,7 +43,8 @@ public class RunTests
         // Its BNpcName only seen on a later frame.
         b.Actor(2, "Protector", 3, 502, 602);
         var r = b.Finish(60, Outcome.Ended);
-        Assert.Equal(new BossInfo(502, 602, "Protector"), r.Boss);
+        // The next is the pack's, not the helper's.
+        Assert.Equal(new BossInfo(502, 602, "Protector", 900_000, 200_000), r.Boss);
     }
 
     [Fact]
@@ -51,7 +55,10 @@ public class RunTests
         var second = b.Actor(2, "Sentry S8", 1, 504, 604);
         b.SeenTargetable(first, 200_000);
         b.SeenTargetable(second, 200_000);
-        Assert.Equal(501u, b.Finish(30, Outcome.Ended).Boss!.DataId);
+        var boss = b.Finish(30, Outcome.Ended).Boss!;
+        Assert.Equal(501u, boss.DataId);
+        // The next is as big as it.
+        Assert.Equal((200_000u, 200_000u), (boss.Hp, boss.Next));
     }
 
     [Fact]
@@ -83,6 +90,8 @@ public class RunTests
         Assert.Equal(502u, s["boss"]!["dataId"]!.GetValue<uint>());
         Assert.Equal(602u, s["boss"]!["nameId"]!.GetValue<uint>());
         Assert.Equal("Protector", s["boss"]!["name"]!.GetValue<string>());
+        Assert.Equal(900_000u, s["boss"]!["hp"]!.GetValue<uint>());
+        Assert.Equal(0u, s["boss"]!["next"]!.GetValue<uint>());
         // Still one pull of the duty, numbered in it.
         Assert.Equal(4, s["pull"]!.GetValue<int>());
     }
@@ -120,6 +129,18 @@ public class RunTests
         Assert.Equal(RunInfo.MaxId, Recording.Parse(With("run", new JsonObject { ["id"] = longId, ["startedAt"] = "2026-11-02T19:41:12Z" }).ToJsonString()).Run!.Id.Length);
         Assert.Null(Recording.Parse(With("boss", new JsonObject { ["name"] = "The Boss" }).ToJsonString()).Boss);
         Assert.Equal(new BossInfo(1001, 0, ""), Recording.Parse(With("boss", new JsonObject { ["dataId"] = 1001 }).ToJsonString()).Boss);
+        // Its HP and the next's: whole numbers in range, else 0; no next without an hp.
+        BossInfo? Boss(JsonNode? hp, JsonNode? next) =>
+            Recording.Parse(With("boss", new JsonObject { ["dataId"] = 1001, ["hp"] = hp, ["next"] = next }).ToJsonString()).Boss;
+        Assert.Equal((3_000_000u, 400_000u), (Boss(3_000_000, 400_000)!.Hp, Boss(3_000_000, 400_000)!.Next));
+        Assert.Equal((0u, 0u), (Boss(-5, 400_000)!.Hp, Boss(-5, 400_000)!.Next));
+        Assert.Equal((0u, 0u), (Boss(1.5, 400_000)!.Hp, Boss(1.5, 400_000)!.Next));
+        Assert.Equal((0u, 0u), (Boss("3000000", null)!.Hp, Boss("3000000", null)!.Next));
+        Assert.Equal((4_294_967_295u, 0u), (Boss(4_294_967_295L, 4_294_967_296L)!.Hp, Boss(4_294_967_295L, 4_294_967_296L)!.Next));
+        // Without an hp, neither is written back.
+        var noHp = JsonNode.Parse(Recording.Parse(With("boss", new JsonObject { ["dataId"] = 1001 }).ToJsonString()).ToJson())!["boss"]!.AsObject();
+        Assert.False(noHp.ContainsKey("hp"));
+        Assert.False(noHp.ContainsKey("next"));
         // An older file, with neither: read as none, written back without them.
         var old = JsonNode.Parse(json)!.AsObject();
         old.Remove("run");

@@ -75,8 +75,17 @@ public static class PullSummary
             summary["run"] = new JsonObject { ["id"] = run.Id, ["startedAt"] = Recording.StampMs(run.StartedAt) };
         // How hard the duty is (1 hard content, 2 normal raids and trials, 3 the rest): the site keeps hard content's replays longer.
         if (r.Level is { } level) summary["level"] = level;
+        // Its max HP and the next enemy's (0 alone) when known: the site's guess at a boss in a duty its data doesn't know.
         if (r.Boss is { } boss)
-            summary["boss"] = new JsonObject { ["dataId"] = boss.DataId, ["nameId"] = boss.NameId, ["name"] = boss.Name };
+        {
+            var b = new JsonObject { ["dataId"] = boss.DataId, ["nameId"] = boss.NameId, ["name"] = boss.Name };
+            if (boss.Hp > 0)
+            {
+                b["hp"] = boss.Hp;
+                b["next"] = boss.Next;
+            }
+            summary["boss"] = b;
+        }
         return summary;
     }
 }

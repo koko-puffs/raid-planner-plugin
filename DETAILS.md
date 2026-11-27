@@ -61,8 +61,10 @@ disconnect, a crash, the plugin reloaded) can't be told reliably from a new visi
 the site can join them by the duty and the time between. Each pull also names its **main enemy**
 (`boss`): of the enemies that could be targeted (bosses and adds, never the helpers), the one with the
 most max HP, the first seen on a tie (`RecordingBuilder.MainEnemy`), with its BNpcBase id, its BNpcName
-id (`IBattleNpc.NameId`, read with the enemy) and its name as the game showed it; none when no enemy
-could be targeted.
+id (`IBattleNpc.NameId`, read with the enemy), its name as the game showed it, its max HP (`hp`) and
+the max HP of the targetable enemy with the next most (`next`; 0 when it was alone, as much as its own
+on a tie); none when no enemy could be targeted. The two HPs are the site's guess at a boss in a duty its
+encounter data doesn't know: a pull whose main enemy has 3× the next's or more.
 
 **How hard the duty is** (since the dungeons round, not yet released; `level`): each pull says the level
 of _Which duties_ its duty is first recorded at, from the same classification the setting uses
@@ -455,9 +457,12 @@ Since the dungeons round (not yet released; still version 1, both keys optional 
 there's nothing, so older readers read on): top level `run`, `{ "id": "3f9c2a7d1e4b", "startedAt":
 "2026-11-02T19:41:12.305Z" }` (written before `duty`: the visit to the duty, What's recorded, Runs; its
 time the server's as you entered, ISO 8601 UTC with milliseconds as `startedAt`), and `boss`, `{ "dataId":
-1001, "nameId": 2001, "name": "The Boss" }` (written after `duty`: the pull's main enemy). Read back
-leniently (`Recording.ReadRun`, `ReadBoss`): a `run` without an id or a time, or a `boss` without a
-`dataId`, reads as none; an id is cut to 64 characters, a name to 80. The summary carries both the same
+1001, "nameId": 2001, "name": "The Boss", "hp": 1000000, "next": 0 }` (written after `duty`: the pull's
+main enemy; `hp` and `next` its max HP and the next enemy's, both left out when `hp` isn't known, as in
+a file from before them). Read back leniently (`Recording.ReadRun`, `ReadBoss`): a `run` without an id
+or a time, or a `boss` without a `dataId`, reads as none; an id is cut to 64 characters, a name to 80;
+an `hp` or `next` that isn't a whole number from 0 to 4294967295 reads as 0, and a `next` without an
+`hp` as 0. The summary carries both the same
 way (Progress, below). The sample (`RecordingTests.Sample`, the site's `sample.raidrec.json`) has both.
 Also top level `level` (written between `run` and `duty`; optional, left out when not known): how hard
 the duty is (What's recorded, How hard the duty is), a whole number, 1 hard content, 2 normal raids and
@@ -734,9 +739,11 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
 - `phases`: when each phase began, whole seconds, the first 0 (the site's `phaseStarts`), as the
   recorder counted them while it recorded (the same count as `phase`, even past the events' cap).
 - Since the dungeons round (not yet released), as the file has them and each left out when it has
-  none: `run` (`{ id, startedAt }`, the visit to the duty) and `boss` (`{ dataId, nameId, name }`, the
-  pull's main enemy: the only name in a summary, an enemy's, never a player's), so the site's Logs and
-  Home tell boss pulls from trash without the whole recording; and `level` (1 hard content, 2 normal
+  none: `run` (`{ id, startedAt }`, the visit to the duty) and `boss` (`{ dataId, nameId, name, hp,
+  next }`, the pull's main enemy, `hp` and `next` left out when not known: the only name in a summary, an
+  enemy's, never a player's), so the site's Logs and Home tell boss pulls from trash without the whole
+  recording (by its encounter data, or in a duty that doesn't know, by the main enemy having 3× the next's
+  max HP); and `level` (1 hard content, 2 normal
   raids and trials, 3 the rest, as the file's), so the server can keep hard content's replays longer.
 - `stats` (at most 7 KB as the server measures it, `PullStats.Size`: Postgres's jsonb text, a space after
   each `:` and `,`, so the server's 8,192-byte check always has a kilobyte to spare; 6 KB compact before the
@@ -2613,7 +2620,8 @@ entry).
 
 ### Next (not released yet)
 
-- **Dungeon and alliance runs**: each pull now says which visit to the duty it was and its main enemy, so the Raid
+- **Dungeon and alliance runs**: each pull now says which visit to the duty it was and its main enemy (with its max
+  HP and the next enemy's, so a duty the site doesn't know still tells its bosses from trash), so the Raid
   Codex can show a run boss by boss with trash folded between.
 - **Each pull says how hard its duty is**, so the Raid Codex can keep replays of hard content longer than of normal
   content and dungeons.

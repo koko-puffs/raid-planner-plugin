@@ -303,19 +303,27 @@ public sealed class RecordingBuilder
 
     /// <summary>
     /// The pull's main enemy (the file's <c>boss</c>): of the enemies that could be targeted, the one with the most max HP
-    /// (the most seen, else the most while targetable), the first seen on a tie; null with none.
+    /// (the most seen, else the most while targetable), the first seen on a tie; null with none. With its max HP and the
+    /// next most of the others (0 when it was alone; as much as its own on a tie).
     /// </summary>
     private BossInfo? MainEnemy()
     {
         Actor? best = null;
-        long bestHp = -1;
+        long bestHp = -1, nextHp = 0;
         foreach (var a in recording.Actors)
         {
             if (a.Kind == ActorKind.Helper) continue;
             var hp = Math.Max(a.MaxHp, maxHp.TryGetValue(a.Id, out var h) ? h : 0);
-            if (hp > bestHp) (best, bestHp) = (a, hp);
+            if (hp > bestHp)
+            {
+                if (best != null) nextHp = bestHp;
+                (best, bestHp) = (a, hp);
+            }
+            else if (hp > nextHp) nextHp = hp;
         }
-        return best == null ? null : new BossInfo(best.DataId, nameIds.TryGetValue(best.Id, out var n) ? n : 0, best.Name.Trim());
+        static uint Clamp(long v) => (uint)Math.Clamp(v, 0, uint.MaxValue);
+        return best == null ? null : new BossInfo(best.DataId, nameIds.TryGetValue(best.Id, out var n) ? n : 0, best.Name.Trim(),
+            Clamp(bestHp), Clamp(nextHp));
     }
 
     public int? KnownActor(ulong key) => actorIds.TryGetValue(key, out var id) ? id : null;

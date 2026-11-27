@@ -51,9 +51,12 @@ public sealed record RunInfo(string Id, DateTimeOffset StartedAt)
 /// <summary>
 /// A pull's main enemy (since the dungeons round, not yet released; the file's and the summary's <c>boss</c>): of
 /// the enemies that could be targeted, the one with the most max HP: its <paramref name="DataId"/> (BNpcBase),
-/// <paramref name="NameId"/> (BNpcName; 0 not known) and <paramref name="Name"/> as the game showed it.
+/// <paramref name="NameId"/> (BNpcName; 0 not known) and <paramref name="Name"/> as the game showed it; its max HP
+/// (<paramref name="Hp"/>, <c>hp</c>) and that of the targetable enemy with the next most (<paramref name="Next"/>,
+/// <c>next</c>; 0 when it was alone), so the site can guess a boss from trash in a duty its encounter data doesn't know
+/// (3x the next or more). Both 0 when not known (an older file), and then not written.
 /// </summary>
-public sealed record BossInfo(uint DataId, uint NameId, string Name);
+public sealed record BossInfo(uint DataId, uint NameId, string Name, uint Hp = 0, uint Next = 0);
 
 /// <summary>
 /// One player in the party, as the plan will have them: a spot (MT, OT, H1…), their job and role.
@@ -684,6 +687,11 @@ public sealed class Recording
             w.WriteNumber("dataId", boss.DataId);
             w.WriteNumber("nameId", boss.NameId);
             w.WriteString("name", boss.Name);
+            if (boss.Hp > 0)
+            {
+                w.WriteNumber("hp", boss.Hp);
+                w.WriteNumber("next", boss.Next);
+            }
             w.WriteEndObject();
         }
 
@@ -942,13 +950,19 @@ public sealed class Recording
         return new RunInfo(id.Length > RunInfo.MaxId ? id[..RunInfo.MaxId] : id, started);
     }
 
-    /// <summary>A file's <c>boss</c>: none unless it has a <c>dataId</c>; a name cut to 80 characters.</summary>
+    /// <summary>
+    /// A file's <c>boss</c>: none unless it has a <c>dataId</c>; a name cut to 80 characters; its <c>hp</c> and <c>next</c>
+    /// 0 when missing or not whole numbers in range (no <c>next</c> without an <c>hp</c>).
+    /// </summary>
     internal static BossInfo? ReadBoss(JsonNode? n)
     {
         if (n is not JsonObject o || UInt(o["dataId"]) is not { } dataId) return null;
         var name = (Str(o["name"]) ?? string.Empty).Trim();
-        return new BossInfo(dataId, UInt(o["nameId"]) ?? 0, name.Length > 80 ? name[..80] : name);
+        var hp = WholeUInt(o["hp"]);
+        return new BossInfo(dataId, UInt(o["nameId"]) ?? 0, name.Length > 80 ? name[..80] : name, hp, hp > 0 ? WholeUInt(o["next"]) : 0);
     }
+
+    private static uint WholeUInt(JsonNode? n) => UInt(n) is { } v && Num(n) == v ? v : 0;
 
     private static RecEvent? ReadEvent(JsonObject e)
     {
