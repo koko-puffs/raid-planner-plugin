@@ -64,6 +64,14 @@ most max HP, the first seen on a tie (`RecordingBuilder.MainEnemy`), with its BN
 id (`IBattleNpc.NameId`, read with the enemy) and its name as the game showed it; none when no enemy
 could be targeted.
 
+**How hard the duty is** (since the dungeons round, not yet released; `level`): each pull says the level
+of _Which duties_ its duty is first recorded at, from the same classification the setting uses
+(`RecordLevels.For`: `RecordLevels.Of` of `DutyKinds.Of` of the zone's `GameData.Facts`, set as the pull
+starts): 1 hard content (Savage, Ultimate, Extreme and Unreal trials, Criterion, the Chaotic alliance
+raid), 2 normal raids and trials, 3 dungeons, alliance raids and every other duty (the field operations'
+zones too, and a duty that isn't from the Duty Finder). Left out only when the zone isn't in the game's
+data, so its duty can't be told. The site keeps full replays of hard content longer than of the rest.
+
 **Who the party is** (since 0.5.0, `Game/PartyMembers.cs`, the rule in `Core/PartyPick.cs`, tested
 with fakes): one place reads it, and the recorder (its party, the parser's "is this the party's",
 whether the fight goes on, whether everyone's down), the meter, the cooldown tracker, the plan window,
@@ -451,6 +459,9 @@ time the server's as you entered, ISO 8601 UTC with milliseconds as `startedAt`)
 leniently (`Recording.ReadRun`, `ReadBoss`): a `run` without an id or a time, or a `boss` without a
 `dataId`, reads as none; an id is cut to 64 characters, a name to 80. The summary carries both the same
 way (Progress, below). The sample (`RecordingTests.Sample`, the site's `sample.raidrec.json`) has both.
+Also top level `level` (written between `run` and `duty`; optional, left out when not known): how hard
+the duty is (What's recorded, How hard the duty is), a whole number, 1 hard content, 2 normal raids and
+trials, 3 the rest; read back as none unless it's a whole 1 to 3. The sample's is 1 (a Savage raid).
 
 Since 0.7.4 (the mechanics sweep; still version 1, every key optional):
 
@@ -725,7 +736,8 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
 - Since the dungeons round (not yet released), as the file has them and each left out when it has
   none: `run` (`{ id, startedAt }`, the visit to the duty) and `boss` (`{ dataId, nameId, name }`, the
   pull's main enemy: the only name in a summary, an enemy's, never a player's), so the site's Logs and
-  Home tell boss pulls from trash without the whole recording.
+  Home tell boss pulls from trash without the whole recording; and `level` (1 hard content, 2 normal
+  raids and trials, 3 the rest, as the file's), so the server can keep hard content's replays longer.
 - `stats` (at most 7 KB as the server measures it, `PullStats.Size`: Postgres's jsonb text, a space after
   each `:` and `,`, so the server's 8,192-byte check always has a kilobyte to spare; 6 KB compact before the
   round-five review, which a summary of small numbers could have taken past 8,192): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
@@ -2603,6 +2615,8 @@ entry).
 
 - **Dungeon and alliance runs**: each pull now says which visit to the duty it was and its main enemy, so the Raid
   Codex can show a run boss by boss with trash folded between.
+- **Each pull says how hard its duty is**, so the Raid Codex can keep replays of hard content longer than of normal
+  content and dungeons.
 - **Which duties is now three levels**: _Hard content_ (the default: Savage, Ultimate, Extreme and Unreal trials,
   Criterion, the Chaotic alliance raid), _+ Normal_ (normal raids and trials too) and _+ Dungeons_ (dungeons, alliance
   raids and every other duty too). Normal raids, alliance raids and Variant dungeons are no longer recorded by default.

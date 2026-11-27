@@ -205,6 +205,8 @@ public class RecordingTests
         b.SetGame("2026.10.30.0000.0000", new DateTimeOffset(2026, 11, 2, 19, 59, 58, 640, TimeSpan.Zero));
         // Since the dungeons round: the visit to the duty (entered 18 minutes before the pull), and the boss's BNpcName (its `boss`).
         b.SetRun(new RunInfo("3f9c2a7d1e4b", new DateTimeOffset(2026, 11, 2, 19, 41, 12, 305, TimeSpan.Zero)));
+        // How hard the duty is (since the dungeons round): a Savage raid (ContentType 5, high-end), so hard content: 1.
+        b.SetLevel(RaidPlanner.UI.Model.RecordLevels.For(new RaidPlanner.UI.Model.DutyFacts(5, true, false, "Test Arena (Savage)")));
         var boss = b.Actor(900, "The Boss", 5, 1001, 2001);
         var helper = b.Actor(901, "", 0.5f, 1002);
         b.SeenTargetable(boss, 1_000_000);

@@ -268,6 +268,9 @@ public sealed class RecordingBuilder
     /// <summary>The visit to the duty this pull is in (the file's <c>run</c>; since the dungeons round): set once, as the pull starts.</summary>
     public void SetRun(RunInfo? run) => recording.Run = run;
 
+    /// <summary>How hard the duty is (the file's <c>level</c>, 1 to 3; since the dungeons round): set once, as the pull starts; null, or a level outside 1–3, not known.</summary>
+    public void SetLevel(int? level) => recording.Level = level is >= Recording.MinLevel and <= Recording.MaxLevel ? level : null;
+
     /// <summary>The recording player's party id (0 not known).</summary>
     public int SelfId => recording.Party.FirstOrDefault(p => p.Self)?.Id ?? 0;
 

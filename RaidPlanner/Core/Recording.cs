@@ -612,6 +612,17 @@ public sealed class Recording
     /// <summary>The pull's main enemy (<c>boss</c>, since the dungeons round), or null: no enemy, or an older file.</summary>
     public BossInfo? Boss { get; set; }
 
+    /// <summary>
+    /// How hard the duty is (<c>level</c>, since the dungeons round): the level of Settings' <i>Which duties</i> it's first
+    /// recorded at (<c>RecordLevels.For</c>): 1 hard content, 2 normal raids and trials, 3 dungeons, alliance raids and every
+    /// other duty (the field operations' zones too). Null when the duty couldn't be told (its zone isn't in the game's data),
+    /// or an older file. The site keeps hard content's replays longer.
+    /// </summary>
+    public int? Level { get; set; }
+
+    /// <summary>The levels a file can say (<see cref="Level"/>).</summary>
+    public const int MinLevel = 1, MaxLevel = 3;
+
     /// <summary>A server time as the file writes it: UTC, to the millisecond ("2026-11-02T19:59:58.640Z").</summary>
     public static string StampMs(DateTimeOffset at) => at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
@@ -659,6 +670,7 @@ public sealed class Recording
             w.WriteString("startedAt", StampMs(run.StartedAt));
             w.WriteEndObject();
         }
+        if (Level is { } level) w.WriteNumber("level", level);
 
         w.WriteStartObject("duty");
         w.WriteString("name", Duty.Name);
@@ -831,6 +843,7 @@ public sealed class Recording
             StartedAt = StartedAt,
             Run = Run,
             Boss = Boss,
+            Level = Level,
         };
         r.Party.AddRange(Party);
         r.Actors.AddRange(Actors);
@@ -872,6 +885,8 @@ public sealed class Recording
                 && DateTimeOffset.TryParse(started, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var serverAt) ? serverAt : null,
             Run = ReadRun(o["run"]),
             Boss = ReadBoss(o["boss"]),
+            // Only a whole 1 to 3; anything else not known.
+            Level = Num(o["level"]) is { } level and >= MinLevel and <= MaxLevel && level == Math.Floor(level) ? (int)level : null,
         };
         if (o["duty"] is JsonObject d)
             r.Duty = new DutyInfo(Str(d["name"]) ?? "Unknown duty", (UInt(d["territory"]) ?? 0), (UInt(d["content"]) ?? 0),

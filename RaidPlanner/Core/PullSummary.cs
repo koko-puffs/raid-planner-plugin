@@ -12,7 +12,7 @@ namespace RaidPlanner.Core;
 /// <c>phase</c>, the furthest phase from 1) and who died to what. Since 0.3.0 also the main boss's HP
 /// left (<c>boss_hp</c>), when each phase began (<c>phases</c>) and each spot's numbers
 /// (<c>stats</c>: <see cref="PullStats.Stats"/>). Since the dungeons round also the visit to the duty
-/// (<c>run</c>) and the main enemy (<c>boss</c>), as the file has them. No party names, only spots and jobs.
+/// (<c>run</c>), the main enemy (<c>boss</c>) and how hard the duty is (<c>level</c>), as the file has them. No party names, only spots and jobs.
 /// </summary>
 public static class PullSummary
 {
@@ -73,6 +73,8 @@ public static class PullSummary
         // Since the dungeons round, as in the file (each left out when not known): the visit to the duty, and the pull's main enemy.
         if (r.Run is { } run)
             summary["run"] = new JsonObject { ["id"] = run.Id, ["startedAt"] = Recording.StampMs(run.StartedAt) };
+        // How hard the duty is (1 hard content, 2 normal raids and trials, 3 the rest): the site keeps hard content's replays longer.
+        if (r.Level is { } level) summary["level"] = level;
         if (r.Boss is { } boss)
             summary["boss"] = new JsonObject { ["dataId"] = boss.DataId, ["nameId"] = boss.NameId, ["name"] = boss.Name };
         return summary;

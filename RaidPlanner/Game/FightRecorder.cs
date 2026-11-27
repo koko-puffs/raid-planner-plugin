@@ -638,6 +638,8 @@ public sealed unsafe class FightRecorder : IDisposable
         // The visit to the duty it's part of (since the dungeons round: the site shows a dungeon run boss by boss).
         var visit = RunFor(territory);
         if (!follow) current.SetRun(visit);
+        // How hard the duty is (since the dungeons round): the level Which duties records it from, so the site keeps hard content's replays longer.
+        if (!follow) current.SetLevel(UI.Model.RecordLevels.For(data.Facts(territory)));
         partyTouched.Clear();
         partyTouching.Clear();
         casting.Clear();

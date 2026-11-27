@@ -38,6 +38,13 @@ public static class RecordLevels
         _ => Every,
     };
 
+    /// <summary>
+    /// The level a duty is first recorded at, from the game's data (<see cref="Of(DutyKind)"/> of <see cref="DutyKinds.Of"/>, as
+    /// the recorder decides): each pull's <c>level</c>, in the file and the summary. Null when the zone isn't in the game's data
+    /// (no facts), so its duty can't be told; the field operations' zones are <see cref="Every"/>.
+    /// </summary>
+    public static int? For(DutyFacts? facts) => facts is null ? null : Of(DutyKinds.Of(facts));
+
     /// <summary>Is a duty of this kind recorded at this level?</summary>
     public static bool Records(int level, DutyKind kind) => Of(kind) <= Clamp(level);
 
