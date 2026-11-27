@@ -49,10 +49,11 @@ public sealed record RunInfo(string Id, DateTimeOffset StartedAt)
 }
 
 /// <summary>
-/// A pull's main enemy (since the dungeons round, not yet released; the file's and the summary's <c>boss</c>): of
-/// the enemies that could be targeted, the one with the most max HP: its <paramref name="DataId"/> (BNpcBase),
+/// A pull's main enemy (since the dungeons round; the file's and the summary's <c>boss</c>): of the enemies the party
+/// fought (after 0.11.0: <see cref="RecordingBuilder.Engaged"/>, an idle boss beside a trash pack isn't one) that could be
+/// targeted, the one with the most max HP: its <paramref name="DataId"/> (BNpcBase),
 /// <paramref name="NameId"/> (BNpcName; 0 not known) and <paramref name="Name"/> as the game showed it; its max HP
-/// (<paramref name="Hp"/>, <c>hp</c>) and that of the targetable enemy with the next most (<paramref name="Next"/>,
+/// (<paramref name="Hp"/>, <c>hp</c>) and that of the fought targetable enemy with the next most (<paramref name="Next"/>,
 /// <c>next</c>; 0 when it was alone), so the site can guess a boss from trash in a duty its encounter data doesn't know
 /// (3x the next or more). Both 0 when not known (an older file), and then not written.
 /// </summary>

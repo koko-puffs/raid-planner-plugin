@@ -59,12 +59,25 @@ run at the next pull, timed from then. **A re-entry is a new run**: leaving and 
 disconnect, a crash, the plugin reloaded) can't be told reliably from a new visit to the same duty
 (the game says nothing the plugin can keep that names the instance), so it starts a new run with pull 1;
 the site can join them by the duty and the time between. Each pull also names its **main enemy**
-(`boss`): of the enemies that could be targeted (bosses and adds, never the helpers), the one with the
-most max HP, the first seen on a tie (`RecordingBuilder.MainEnemy`), with its BNpcBase id, its BNpcName
-id (`IBattleNpc.NameId`, read with the enemy), its name as the game showed it, its max HP (`hp`) and
-the max HP of the targetable enemy with the next most (`next`; 0 when it was alone, as much as its own
-on a tie); none when no enemy could be targeted. The two HPs are the site's guess at a boss in a duty its
-encounter data doesn't know: a pull whose main enemy has 3× the next's or more.
+(`boss`): of the enemies the party fought that could be targeted (bosses and adds, never the helpers),
+the one with the most max HP, the first seen on a tie (`RecordingBuilder.MainEnemy`), with its BNpcBase
+id, its BNpcName id (`IBattleNpc.NameId`, read with the enemy), its name as the game showed it, its max
+HP (`hp`) and the max HP of the fought targetable enemy with the next most (`next`; 0 when it was alone,
+as much as its own on a tie); none when no enemy was fought. The two HPs are the site's guess at a boss in
+a duty its encounter data doesn't know: a pull whose main enemy has 3× the next's or more.
+
+**Only an enemy the party fought** (after 0.11.0; `RecordingBuilder.Engaged`, the site's `foughtIds` in
+`components/report/runEnemies.ts`, the same rule) can be the `boss` or the `next`: one that hit one of the
+party, began a cast at one of them, put a status on one of them, killed one of them (a death's cause),
+was tethered to one of them (either end), had its eye on one of them (its target, the `aggro` event), took
+the party's damage (a `combat.fx` row of kind 1), or whose HP fell from the most it had in the frames.
+It's marked as it happens, whether or not the event is kept (past the events' and the combat block's caps
+too). In a duty the recorder sees every enemy around: a trash pack fought at a boss's door had the boss,
+standing idle in its room (full HP, its eye on no one), among its actors, and as the biggest it was the
+pack's `boss` (The Great Gubal Library's packs read as "Demon Tome"). An idle enemy, however big, is
+neither now; the pack's biggest is the `boss`. A boss fight's boss still is, however many adds do the
+hitting (the party's damage on it, its eye on the tank, its HP falling). Actors' kinds (boss, add, helper)
+are as before: by max HP among every targetable enemy.
 
 **How hard the duty is** (since the dungeons round, not yet released; `level`): each pull says the level
 of _Which duties_ its duty is first recorded at, from the same classification the setting uses
@@ -2641,6 +2654,9 @@ entry).
 
 ### Next (not released yet)
 
+- **A trash pack beside a boss's room is no longer read as that boss**: a pull's main enemy is now the biggest enemy
+  the party actually fought (it hit, cast at, put a status on, killed, was tethered to or targeted one of you, took
+  your damage, or lost HP), so a boss standing idle nearby is never it, and a pull where nothing was fought has none.
 - **Uploads wait until you're out of combat**, so a slow connection never competes with the fight: none starts in
   combat, while a pull is recorded or a countdown runs, and one still going when a fight starts stops and goes again
   after. Each upload also has longer to finish on a slow connection (half a minute, and a minute for each MB).

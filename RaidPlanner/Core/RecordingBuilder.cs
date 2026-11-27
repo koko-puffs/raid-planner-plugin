@@ -301,10 +301,32 @@ public sealed class RecordingBuilder
 
     private readonly Dictionary<int, uint> nameIds = new();
 
+    // The enemies the party fought (after 0.11.0: the site's foughtIds), and each one's most HP in the frames so far.
+    private readonly HashSet<int> engaged = new();
+    private readonly Dictionary<int, long> topHp = new();
+
     /// <summary>
-    /// The pull's main enemy (the file's <c>boss</c>): of the enemies that could be targeted, the one with the most max HP
-    /// (the most seen, else the most while targetable), the first seen on a tie; null with none. With its max HP and the
-    /// next most of the others (0 when it was alone; as much as its own on a tie).
+    /// An enemy the party fought (after 0.11.0): it hit, cast at, put a status on, killed, was tethered to or had its eye
+    /// on one of the party, took the party's damage, or its HP fell. Only these can be the pull's <c>boss</c>: in a duty the
+    /// recorder sees every enemy around, and a boss standing idle in its room beside a trash pack was that pack's boss.
+    /// Marked as it happens, whether or not the event is kept (past <see cref="MaxEvents"/> too).
+    /// </summary>
+    private void Fought(int actor)
+    {
+        if (actor > 100) engaged.Add(actor);
+    }
+
+    /// <summary>A recording id of the party's (enemies are 101 up).</summary>
+    private static bool OnParty(int id) => id is > 0 and <= 100;
+
+    /// <summary>Did the party fight this enemy so far (<see cref="Fought"/>)?</summary>
+    public bool Engaged(int actor) => engaged.Contains(actor);
+
+    /// <summary>
+    /// The pull's main enemy (the file's <c>boss</c>): of the enemies the party fought (<see cref="Fought"/>) that could be
+    /// targeted, the one with the most max HP (the most seen, else the most while targetable), the first seen on a tie; null
+    /// with none (an idle enemy, however big, is never it). With its max HP and the next most of the other fought ones (0
+    /// when it was alone; as much as its own on a tie).
     /// </summary>
     private BossInfo? MainEnemy()
     {
@@ -312,7 +334,7 @@ public sealed class RecordingBuilder
         long bestHp = -1, nextHp = 0;
         foreach (var a in recording.Actors)
         {
-            if (a.Kind == ActorKind.Helper) continue;
+            if (a.Kind == ActorKind.Helper || !engaged.Contains(a.Id)) continue;
             var hp = Math.Max(a.MaxHp, maxHp.TryGetValue(a.Id, out var h) ? h : 0);
             if (hp > bestHp)
             {
@@ -458,6 +480,7 @@ public sealed class RecordingBuilder
         bool interruptible = false)
     {
         if (source == 0 || action == 0) return;
+        if (OnParty(target)) Fought(source);
         enemyCasting[source] = (action, t + Math.Max(0, duration));
         Busy(source, t + Math.Max(0, duration));
         if (!Room) return;
@@ -502,6 +525,7 @@ public sealed class RecordingBuilder
         {
             var on = targets[i];
             if (on > 100) continue;
+            Fought(source);
             var dmgI = damage == null ? -1 : Math.Max(0, damage[i]);
             var instant = fx != null && (fx[i] & Meter.Effects.FxInstantDeath) != 0;
             var did = damage == null || dmgI > 0 || instant;
@@ -617,6 +641,7 @@ public sealed class RecordingBuilder
         switch (kind)
         {
             case StatusFrom.Enemy:
+                if (OnParty(on)) Fought(source);
                 // A Raise status the game names no one for: when it landed, if not by whom.
                 if (on <= 100 && kinds.RaiseStatus(id) && Down(on)) raiseStatus[on] = (t, 0);
                 if (!RoomForMany) return;
@@ -677,7 +702,9 @@ public sealed class RecordingBuilder
     /// <summary>One of the party's effects: <paramref name="kind"/> is the kind and flags (<c>combat.fx.k</c>); <paramref name="bonus"/> a damage effect's bonus % (<c>b</c>).</summary>
     public void CombatFx(double t, uint action, int origin, int recipient, long amount, int kind, long hpBefore, int bonus = 0)
     {
-        if (origin == 0 || action == 0 || combat.Fx.Count >= CombatLog.MaxRows) return;
+        if (origin == 0 || action == 0) return;
+        if ((kind & 7) == (int)FxKind.Damage) Fought(recipient);
+        if (combat.Fx.Count >= CombatLog.MaxRows) return;
         Remember(action);
         combat.Fx.Add(new FxRow(t, action, origin, recipient, Math.Max(0, amount), kind, hpBefore < 0 ? -1 : hpBefore, bonus));
     }
@@ -758,6 +785,7 @@ public sealed class RecordingBuilder
     public void Aggro(double t, int actor, int on)
     {
         if (actor == 0) return;
+        if (OnParty(on)) Fought(actor);
         if (aggro.TryGetValue(actor, out var was) && was == on) return;
         aggro[actor] = on;
         if (RoomForMany) recording.Events.Add(new AggroEvent(t, actor, on));
@@ -924,11 +952,12 @@ public sealed class RecordingBuilder
         }
         raiseStatus.Remove(who);
         raiseUse.Remove(who);
-        if (!RoomForDeath) return;
         // What killed them: the last that could (it landed within the time, and was as big as their HP
         // or an instant death), else the last that hit them. A hit's damage is taken off a moment after the
         // game says it landed, so a bleed's tick can come between it and their HP reaching 0.
         var c = lastLethal.TryGetValue(who, out var l) && Within(l.T) ? l : lastHit.TryGetValue(who, out var h) && Within(h.T) ? h : default;
+        Fought(c.Source);
+        if (!RoomForDeath) return;
         recording.Events.Add(new DeathEvent(t, who, c.By, c.Source, c.ByStatus));
 
         bool Within(double at) => t - at <= DeathCause && t >= at - 0.5;
@@ -1033,6 +1062,8 @@ public sealed class RecordingBuilder
         foreach (var added in current.Except(tethers).ToList())
         {
             tethers.Add(added);
+            if (OnParty(added.From)) Fought(added.To);
+            if (OnParty(added.To)) Fought(added.From);
             TethersSeen++;
             if (Room) recording.Events.Add(new TetherEvent(t, added.From, added.To, added.Kind, true));
         }
@@ -1057,6 +1088,14 @@ public sealed class RecordingBuilder
 
     public void Positions(double t, IReadOnlyDictionary<int, (float X, float Z, float Rotation)> at, IReadOnlyDictionary<int, long>? hp = null)
     {
+        // An enemy whose HP fell from the most it had in the frames was fought.
+        if (hp != null)
+            foreach (var (id, v) in hp)
+            {
+                if (id <= 100) continue;
+                if (!topHp.TryGetValue(id, out var top) || v > top) topHp[id] = v;
+                else if (v < top) Fought(id);
+            }
         if (!WantsFrame(t)) return;
         lastFrame = t;
         // Since 0.7.8 the caller's dictionaries become the frame's when nothing in them is left out (the recorder makes new
