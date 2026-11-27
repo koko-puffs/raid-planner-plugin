@@ -2652,8 +2652,10 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.11.1
 
+- **A long pull always goes with its summary**: the summary is made before the pull is kept, so the uploader can't
+  take it in between and send it without one (a pull over 3 MB then had none on the site).
 - **A trash pack beside a boss's room is no longer read as that boss**: a pull's main enemy is now the biggest enemy
   the party actually fought (it hit, cast at, put a status on, killed, was tethered to or targeted one of you, took
   your damage, or lost HP), so a boss standing idle nearby is never it, and a pull where nothing was fought has none.
