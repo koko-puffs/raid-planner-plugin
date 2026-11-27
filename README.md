@@ -10,7 +10,7 @@ Record the fights you're in, then make them into plans on
 
 ## What it does
 
-- **Records each pull by itself** in trials, raids, ultimates and criterion dungeons, from the pull until the fight ends (a wipe, a
+- **Records each pull by itself** in Savage, Ultimate, Extreme and Criterion (normal raids and trials, dungeons and alliance raids too if you pick them), from the pull until the fight ends (a wipe, a
   clear, or combat simply over): the bosses' casts and where they were aimed, where each attack
   landed and whom it hit (which tells a stack from a spread), head markers, tethers, waymarks, the
   arena changing, and where the bosses and (if you like) your party stood; how much each hit did
@@ -87,7 +87,7 @@ Settings has a page for each thing you might want to change, and _Find a setting
 shows what most people change; the rest fold under one "N more" row.
 
 - **Features**: one switch for each main part, what each is doing now, and the setup guide again.
-- **Recording and uploads**: _Record my pulls_ (on), in raids and trials or every duty, _Record where the
+- **Recording and uploads**: _Record my pulls_ (on), in hard content (Savage, Ultimate, Extreme, Criterion), with normal raids and trials too, or with dungeons and alliance raids too, _Record where the
   party stands_ (on; off keeps only the enemies and their attacks), _Keep the last_ 20 pulls (5 to 100;
   the oldest sent go first, pulls still to upload are held up to 200), _Upload my logs_ (on, once linked)
   with _Upload my older pulls_ and _Logs are public_ (every log on the site is, as on FF Logs; _Hide my

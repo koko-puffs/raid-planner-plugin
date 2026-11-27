@@ -18,8 +18,16 @@ public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
     public bool AutoRecord { get; set; } = true;
 
     /// <summary>
-    /// Record in every duty, dungeons and field operations too (off: only fights, like trials, raids,
-    /// ultimates and criterion dungeons, so trash packs don't push out the pulls you keep).
+    /// Settings → Recording → <i>Which duties</i> (since the dungeons round; <see cref="UI.Model.RecordLevels"/>): 1 hard content
+    /// (Savage, Ultimate, Extreme, Unreal, Criterion, Chaotic), 2 normal raids and trials too, 3 dungeons, alliance raids and
+    /// every other duty too. 0 in settings saved before it: <see cref="Migrate"/> makes it 3 with <see cref="RecordAllDuties"/>
+    /// on, else 1 (as a fresh install's).
+    /// </summary>
+    public int RecordLevel { get; set; }
+
+    /// <summary>
+    /// The old <i>In every duty</i> (before the dungeons round): still read from older settings, made <see cref="RecordLevel"/>
+    /// 3 (on) or 1 (off) and cleared by <see cref="Migrate"/>; nothing else reads it.
     /// </summary>
     public bool RecordAllDuties { get; set; }
 
@@ -393,6 +401,13 @@ public sealed class Configuration : IPluginConfiguration, UI.Model.IProfileHost
         if (smooth != (SmoothVersion, SmoothReplays))
         {
             (SmoothVersion, SmoothReplays) = smooth;
+            changed = true;
+        }
+        // The dungeons round: In every duty becomes Which duties' three levels (on: all three; off: hard content).
+        var level = UI.Model.RecordLevels.Migrate(RecordLevel, RecordAllDuties);
+        if (level != (RecordLevel, RecordAllDuties))
+        {
+            (RecordLevel, RecordAllDuties) = level;
             changed = true;
         }
         // 0.7.0: the compact meter isn't sized by hand (its width is its theme's, its height its rows'):

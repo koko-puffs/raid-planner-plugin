@@ -11,7 +11,8 @@ namespace RaidPlanner.Core;
 /// §3): the duty, the pull, how long and how it ended, how far it got (<c>reached</c>, the length;
 /// <c>phase</c>, the furthest phase from 1) and who died to what. Since 0.3.0 also the main boss's HP
 /// left (<c>boss_hp</c>), when each phase began (<c>phases</c>) and each spot's numbers
-/// (<c>stats</c>: <see cref="PullStats.Stats"/>). No names, only spots and jobs.
+/// (<c>stats</c>: <see cref="PullStats.Stats"/>). Since the dungeons round also the visit to the duty
+/// (<c>run</c>) and the main enemy (<c>boss</c>), as the file has them. No party names, only spots and jobs.
 /// </summary>
 public static class PullSummary
 {
@@ -50,7 +51,7 @@ public static class PullSummary
         }
         var bossHp = PullStats.BossHp(r);
         var duration = CastEvent.Round(r.Duration, 2);
-        return new JsonObject
+        var summary = new JsonObject
         {
             ["content"] = r.Duty.Content,
             ["territory"] = r.Duty.Territory,
@@ -69,6 +70,12 @@ public static class PullSummary
                 .Select(t => (JsonNode)(int)Math.Round(double.IsFinite(t) ? Math.Max(0, t) : 0, MidpointRounding.AwayFromZero)).ToArray()),
             ["stats"] = PullStats.Stats(r, failKind, isDot, phaseStarts),
         };
+        // Since the dungeons round, as in the file (each left out when not known): the visit to the duty, and the pull's main enemy.
+        if (r.Run is { } run)
+            summary["run"] = new JsonObject { ["id"] = run.Id, ["startedAt"] = Recording.StampMs(run.StartedAt) };
+        if (r.Boss is { } boss)
+            summary["boss"] = new JsonObject { ["dataId"] = boss.DataId, ["nameId"] = boss.NameId, ["name"] = boss.Name };
+        return summary;
     }
 }
 

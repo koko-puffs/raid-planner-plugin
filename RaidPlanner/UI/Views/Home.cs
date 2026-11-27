@@ -82,8 +82,10 @@ public sealed partial class MainWindow
             return ("Following your plan", recorder.RecordsThisDuty ? "This pull isn't recorded: recording starts with the next" : "This pull isn't recorded", WellTone.Ember);
         var duty = recorder.DutyHere;
         if (!config.AutoRecord) return ("Recording is off", duty != null ? $"{duty.Name} · pulls aren't kept" : "Pulls aren't kept until it's on", WellTone.Off);
-        if (duty == null) return ("Not in a duty", "Pulls in raids and trials are recorded by themselves", WellTone.Quiet);
-        if (!recorder.RecordsThisDuty) return ("Not recorded here", $"{duty.Name} · only raids and trials are recorded", WellTone.Quiet);
+        if (duty == null) return ("Not in a duty", $"Pulls in {RecordLevels.Words(config.RecordLevel)} are recorded by themselves", WellTone.Quiet);
+        if (!recorder.RecordsThisDuty) return ("Not recorded here", RecordLevels.Clamp(config.RecordLevel) == RecordLevels.Every
+                ? $"{duty.Name} · the Occult Crescent is never recorded"
+                : $"{duty.Name} · only {RecordLevels.Words(config.RecordLevel)} is recorded (Settings › Which duties)", WellTone.Quiet);
         var pulls = recorder.PullsHere;
         var next = $"{duty.Name} · Pull {PullNoAt(duty.Name, DateTimeOffset.Now).ToString(CultureInfo.InvariantCulture)}";
         return pulls > 0 ? ("Ready for the next pull", next, WellTone.Ready) : ("Waiting for the pull", next, WellTone.Ready);

@@ -18,15 +18,7 @@ public sealed class GameData
     private readonly Dictionary<uint, ActionInfo?> actions = new();
     private readonly Dictionary<uint, DutyInfo?> duties = new();
     private readonly Dictionary<uint, (string Job, byte Role)> jobs = new();
-    private readonly Dictionary<uint, bool> fights = new();
     private readonly Dictionary<uint, StatusInfo?> statuses = new();
-
-    /// <summary>
-    /// Duty kinds (the ContentType sheet's rows) that aren't one fight to plan: dungeons, guildhests,
-    /// PvP, quest battles, treasure hunts, deep dungeons, Eureka, Bozja and the Occult Crescent (38).
-    /// A trash pack there would otherwise be kept as a pull, and push out the ones you meant to keep.
-    /// </summary>
-    private static readonly HashSet<uint> NotFights = new() { 2, 3, 6, 7, 9, 21, 26, 29, 38 };
 
     /// <summary>The Occult Crescent's open zones (South and North Horn: territory intended use 61), never recorded.</summary>
     private const uint OccultUse = 61;
@@ -281,20 +273,6 @@ public sealed class GameData
         return info;
     }
 
-    /// <summary>
-    /// Is the zone a fight worth recording by itself: a duty from the Duty Finder that's a trial, a
-    /// raid, an ultimate, a criterion dungeon (anything but the kinds in <see cref="NotFights"/>)?
-    /// </summary>
-    public bool IsFight(uint territory)
-    {
-        if (fights.TryGetValue(territory, out var known)) return known;
-        var fight = Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t)
-            && t.ContentFinderCondition.ValueNullable is { } cfc && t.ContentFinderCondition.RowId != 0
-            && !NotFights.Contains(cfc.ContentType.RowId);
-        fights[territory] = fight;
-        return fight;
-    }
-
     private readonly Dictionary<uint, UI.Model.DutyFacts?> facts = new();
 
     /// <summary>
@@ -346,8 +324,8 @@ public sealed class GameData
 
     /// <summary>
     /// Is the zone the Occult Crescent (South or North Horn, the Forked Tower and the critical
-    /// engagements included, by the territory's intended use)? Nothing there is ever recorded, even with
-    /// <i>In every duty</i> on: its fights are a field's, not a planned duty's. The meter still works there.
+    /// engagements included, by the territory's intended use)? Nothing there is ever recorded, at any
+    /// level of <i>Which duties</i>: its fights are a field's, not a planned duty's. The meter still works there.
     /// </summary>
     public bool IsOccultCrescent(uint territory) =>
         Services.Data.GetExcelSheet<TerritoryType>().TryGetRow(territory, out var t)

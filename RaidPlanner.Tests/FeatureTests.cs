@@ -211,7 +211,11 @@ public class PullSummaryTests
         Assert.Equal("Exaflare", deaths[0]!["by"]!.GetValue<string>());
         Assert.Equal(45.5, deaths[0]!["t"]!.GetValue<double>(), 2);
         Assert.Equal("Raidwide Roar", deaths[1]!["by"]!.GetValue<string>());
-        // No one's name: only spots and jobs (the stats name actions and statuses only).
+        // No one's name: only spots and jobs (the stats name actions and statuses only); since the dungeons round the main
+        // enemy's name, in `boss`, is the only name.
+        Assert.Equal("The Boss", s["boss"]!["name"]!.GetValue<string>());
+        Assert.DoesNotContain("Tester", s.ToJsonString());
+        s.Remove("boss");
         Assert.DoesNotContain("\"name\"", s.ToJsonString());
     }
 

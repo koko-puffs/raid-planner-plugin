@@ -5,7 +5,7 @@ using System.Linq;
 namespace RaidPlanner.UI.Model;
 
 /// <summary>What the setup guide's last step says of a feature: its settings that matter, in a few words.</summary>
-public readonly record struct SetupFacts(bool Linked, bool AllDuties, int Keep, bool Compact, string Theme, bool MeterEverywhere, bool CooldownsEverywhere = false);
+public readonly record struct SetupFacts(bool Linked, int RecordLevel, int Keep, bool Compact, string Theme, bool MeterEverywhere, bool CooldownsEverywhere = false);
 
 /// <summary>
 /// The first-time setup guide's rules (0.8.0, the main window's Setup): its five steps, when Next can go on (the
@@ -61,7 +61,7 @@ public static class SetupGuide
         if (!on) return "Turn it on any time in Settings › Features";
         return f switch
         {
-            Feature.Record => $"{(s.AllDuties ? "Every duty" : "Raids and trials")} · keeps the last {s.Keep}",
+            Feature.Record => $"{RecordLevels.Label(s.RecordLevel)} · keeps the last {s.Keep}",
             Feature.Upload => s.Linked ? "Linked · public, as on FF Logs" : "Waits for your account: Settings › Account",
             Feature.Meter => $"{(s.Compact ? "Compact" : "Detailed")} · {s.Theme} · {(s.MeterEverywhere ? "everywhere" : "in duties")}",
             Feature.Plan => "Shows your plan for the duty you’re in",

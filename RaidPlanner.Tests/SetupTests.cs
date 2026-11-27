@@ -60,7 +60,7 @@ public class SetupReviewTests
     [Fact]
     public void TheCooldownsNoteSaysWhereItShows()
     {
-        var facts = new SetupFacts(true, false, 20, false, "Ready Check", false, CooldownsEverywhere: true);
+        var facts = new SetupFacts(true, RecordLevels.Hard, 20, false, "Ready Check", false, CooldownsEverywhere: true);
         Assert.EndsWith("everywhere", SetupGuide.DoneNote(Feature.Cooldowns, true, facts));
         Assert.EndsWith("in duties", SetupGuide.DoneNote(Feature.Cooldowns, true, facts with { CooldownsEverywhere = false }));
     }

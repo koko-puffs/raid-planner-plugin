@@ -265,6 +265,9 @@ public sealed class RecordingBuilder
         recording.StartedAt = serverTime;
     }
 
+    /// <summary>The visit to the duty this pull is in (the file's <c>run</c>; since the dungeons round): set once, as the pull starts.</summary>
+    public void SetRun(RunInfo? run) => recording.Run = run;
+
     /// <summary>The recording player's party id (0 not known).</summary>
     public int SelfId => recording.Party.FirstOrDefault(p => p.Self)?.Id ?? 0;
 
@@ -273,19 +276,43 @@ public sealed class RecordingBuilder
 
     public bool IsParty(ulong key) => partyIds.ContainsKey(key);
 
-    /// <summary>An enemy's (or helper's) number, given one the first time it's seen.</summary>
-    public int Actor(ulong key, string name, float hitbox, uint dataId)
+    /// <summary>
+    /// An enemy's (or helper's) number, given one the first time it's seen. <paramref name="nameId"/> (BNpcName; 0 not known;
+    /// since the dungeons round) is only kept for the main enemy's <c>boss</c>, not written for each actor.
+    /// </summary>
+    public int Actor(ulong key, string name, float hitbox, uint dataId, uint nameId = 0)
     {
         if (actorIds.TryGetValue(key, out var id))
         {
             // A name that only shows once it's targetable (some bosses come in nameless).
             if (name.Length > 0 && actorFacts[id].Name.Length == 0) actorFacts[id] = (name, hitbox, dataId);
+            if (nameId != 0 && !nameIds.ContainsKey(id)) nameIds[id] = nameId;
             return id;
         }
         id = nextActor++;
         actorIds[key] = id;
         actorFacts[id] = (name, hitbox, dataId);
+        if (nameId != 0) nameIds[id] = nameId;
         return id;
+    }
+
+    private readonly Dictionary<int, uint> nameIds = new();
+
+    /// <summary>
+    /// The pull's main enemy (the file's <c>boss</c>): of the enemies that could be targeted, the one with the most max HP
+    /// (the most seen, else the most while targetable), the first seen on a tie; null with none.
+    /// </summary>
+    private BossInfo? MainEnemy()
+    {
+        Actor? best = null;
+        long bestHp = -1;
+        foreach (var a in recording.Actors)
+        {
+            if (a.Kind == ActorKind.Helper) continue;
+            var hp = Math.Max(a.MaxHp, maxHp.TryGetValue(a.Id, out var h) ? h : 0);
+            if (hp > bestHp) (best, bestHp) = (a, hp);
+        }
+        return best == null ? null : new BossInfo(best.DataId, nameIds.TryGetValue(best.Id, out var n) ? n : 0, best.Name.Trim());
     }
 
     public int? KnownActor(ulong key) => actorIds.TryGetValue(key, out var id) ? id : null;
@@ -1096,6 +1123,7 @@ public sealed class RecordingBuilder
             }
             recording.Actors.Add(new Actor(id, name, kind, hitbox, dataId, mostHp.TryGetValue(id, out var most) ? most : 0));
         }
+        recording.Boss = MainEnemy();
         var helpers = recording.Actors.Where(a => a.Kind == ActorKind.Helper).Select(a => a.Id).ToHashSet();
         if (helpers.Count > 0)
         {

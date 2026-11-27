@@ -88,6 +88,15 @@ public sealed unsafe class FightRecorder : IDisposable
     private readonly Dictionary<uint, uint> petOwners = new();
     private uint pullTerritory;
     private int pullInZone;
+
+    /// <summary>
+    /// The visit to the zone the pulls are in (the file's <c>run</c>, since the dungeons round): made at the first pull after
+    /// you enter, kept for every pull until you leave; null until then. <see cref="runZone"/> is the zone it's for,
+    /// <see cref="enteredAt"/> the server's time as you came in (null: not seen, as when the plugin loads in the duty).
+    /// </summary>
+    private RunInfo? run;
+    private uint runZone;
+    private DateTimeOffset? enteredAt;
     private bool stopAsked;
     private DateTime sampleFailedAt;
 
@@ -345,8 +354,38 @@ public sealed unsafe class FightRecorder : IDisposable
         countdown.Clear();
         pullInZone = 0;
         pullTerritory = territory;
+        // A new visit: its run begins with its first pull, timed from now.
+        run = null;
+        runZone = territory;
+        enteredAt = EnteredNow();
         Diagnostics.Flush();
     });
+
+    /// <summary>The server's time now (the computer's when it can't be read), for a run's <c>startedAt</c>.</summary>
+    private static DateTimeOffset EnteredNow()
+    {
+        try
+        {
+            return GameClock.ServerTime() ?? DateTimeOffset.UtcNow;
+        }
+        catch (Exception)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+    }
+
+    /// <summary>The run a pull starting in <paramref name="territory"/> is part of: this visit's, begun now if it has none yet.</summary>
+    private RunInfo RunFor(uint territory)
+    {
+        if (territory != runZone)
+        {
+            // Not seen coming in (the plugin loaded here, or the zone changed unheard): a new run, from this pull.
+            run = null;
+            runZone = territory;
+            enteredAt = null;
+        }
+        return run ??= RunInfo.Begin(enteredAt ?? EnteredNow());
+    }
 
     /// <summary>The held pull, saved as it is (the game didn't say).</summary>
     private void ReleaseHeld()
@@ -369,15 +408,15 @@ public sealed unsafe class FightRecorder : IDisposable
         return false;
     }
 
-    /// <summary>Does this zone get its pulls recorded by itself?</summary>
     /// <summary>
-    /// Whether a pull here is recorded: in a duty, never in the Occult Crescent (even with <i>In every
-    /// duty</i> on), and a fight (<see cref="GameData.IsFight"/>) unless every duty is recorded.
+    /// Whether a pull here is recorded: in a duty, never in the Occult Crescent (whatever the level), and one of the kinds
+    /// Settings' <i>Which duties</i> takes in (<see cref="UI.Model.RecordLevels"/>, the duty's kind from the game's data:
+    /// <see cref="GameData.Facts"/>, <see cref="UI.Model.DutyKinds.Of"/>).
     /// </summary>
     private bool RecordsHere()
     {
         var territory = Services.ClientState.TerritoryType;
-        return InDuty && !data.IsOccultCrescent(territory) && (config.RecordAllDuties || data.IsFight(territory));
+        return InDuty && !data.IsOccultCrescent(territory) && UI.Model.RecordLevels.Records(config.RecordLevel, UI.Model.DutyKinds.Of(data.Facts(territory)));
     }
 
     private void OnUpdate(IFramework framework)
@@ -596,6 +635,9 @@ public sealed unsafe class FightRecorder : IDisposable
         if (!follow) current.SetGear(GearReader.Read(data, Diagnostics));
         // The game's version and its server's time (since 0.6.0; the site's logs tell the patch and the same pull apart by them).
         if (!follow) current.SetGame(GameClock.Version(), GameClock.ServerTime());
+        // The visit to the duty it's part of (since the dungeons round: the site shows a dungeon run boss by boss).
+        var visit = RunFor(territory);
+        if (!follow) current.SetRun(visit);
         partyTouched.Clear();
         partyTouching.Clear();
         casting.Clear();
@@ -797,7 +839,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 if (onlyEngaged && b.KnownActor(key) == null && !Engaged(b, npc, you)) continue;
                 // Its name read only while it's needed (a new enemy, or one still nameless, at most once a second): reading it
                 // makes a string.
-                id = b.Actor(key, b.NeedsName(key, t) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId);
+                id = b.Actor(key, b.NeedsName(key, t) ? npc.Name.TextValue : string.Empty, npc.HitboxRadius, npc.BaseId, npc.NameId);
                 var targetable = npc.IsTargetable && !npc.IsDead;
                 if (targetable) b.SeenTargetable(id, npc.MaxHp);
                 else b.SeenMaxHp(id, npc.MaxHp);
@@ -1098,7 +1140,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (obj is IBattleNpc npc && npc.OwnerId is not (0 or InvalidId))
             return b.PartyId(npc.OwnerId) is { } owner ? (StatusFrom.Party, owner, npc.OwnerId) : (StatusFrom.Other, 0, 0);
         if (obj is IBattleNpc enemy && enemy.BattleNpcKind is BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)
-            return (StatusFrom.Enemy, b.Actor(src, enemy.Name.TextValue, enemy.HitboxRadius, enemy.BaseId), 0);
+            return (StatusFrom.Enemy, b.Actor(src, enemy.Name.TextValue, enemy.HitboxRadius, enemy.BaseId, enemy.NameId), 0);
         return (StatusFrom.Other, 0, 0);
     }
 
@@ -1310,7 +1352,7 @@ public sealed unsafe class FightRecorder : IDisposable
         if (npc.BattleNpcKind is not (BattleNpcSubKind.Combatant or BattleNpcSubKind.BNpcPart or HelperKind)) return null;
         if (npc.OwnerId is not (0 or InvalidId)) return null;
         if (onlyEngaged && !(Services.Objects.LocalPlayer?.Position is { } you && Near(you, npc.Position))) return null;
-        return b.Actor(entityId, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId);
+        return b.Actor(entityId, npc.Name.TextValue, npc.HitboxRadius, npc.BaseId, npc.NameId);
     }
 
     /// <summary>

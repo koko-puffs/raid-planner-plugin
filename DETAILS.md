@@ -14,14 +14,30 @@ below), and says how far each pull got for the site's progress tracker.
 
 ## What's recorded (`Game/FightRecorder.cs`, `Game/GameHooks.cs`, `Core/RecordingBuilder.cs`)
 
-A pull starts when you go into combat in a fight (bound by duty, any of the game's three flags,
-in a Duty Finder duty that isn't a dungeon, guildhest, PvP, quest battle, treasure hunt, deep
-dungeon, Eureka, Bozja or the Occult Crescent: `GameData.IsFight`, by the ContentType sheet's rows
-2, 3, 6, 7, 9, 21, 26, 29, 38; _In every duty_ in Settings records those too, except the Occult
-Crescent) with _Record fights by themselves_ on. **The Occult Crescent is never recorded** (since
-0.3.0): South and North Horn, their critical engagements and FATEs and the Forked Tower, by the
-territory's intended use (61, `GameData.IsOccultCrescent`), even with _In every duty_ on; the meter
-still works there, and an open plan window still follows the pull without keeping it.
+A pull starts when you go into combat in a duty (bound by duty, any of the game's three flags) that
+Settings' _Which duties_ takes in, with _Record my pulls_ on. _Which duties_ (since the dungeons round,
+not yet released; `UI/Model/RecordLevels.cs`, `Configuration.RecordLevel`) is one pick of three, each
+taking in the one before:
+
+1. **Hard content** (the default): Savage, Ultimate, Extreme and Unreal trials, Criterion (normal and
+   Savage), the Chaotic alliance raid, Delubrum Reginae (Savage).
+2. **+ Normal**: normal raids and normal trials too.
+3. **+ Dungeons**: dungeons (Variant and deep dungeons, guildhests), alliance raids (Delubrum Reginae
+   too), the field operations' open zones (Eureka, Bozja and Zadnor: only here, as with the old _In
+   every duty_ on) and every other duty (PvP, quest battles, treasure dungeons, the Gold Saucer) too.
+
+A duty's level is its kind's (`DutyKinds.Of`, the profiles' kinds, from the game's data read by
+`GameData.Facts`: the ContentFinderCondition's ContentType row, its HighEndDuty flag, the alliance
+roulette or three parties, and its English name's "(Savage)", "(Extreme)", "(Unreal)", "(Chaotic)",
+"Another …" and "The Minstrel's Ballad" for what the flags don't say): Ultimate, Savage, Extreme and
+Criterion are 1, Normal raids 2, the rest 3. It replaced _In every duty_ (before, by default every
+Duty Finder duty but dungeons, guildhests, PvP, quest battles, treasure hunts, deep dungeons, Eureka,
+Bozja and the Occult Crescent was recorded: normal raids, alliance raids and Variant dungeons
+included); settings saved with it on are level 3, off level 1 (`RecordLevels.Migrate`).
+**The Occult Crescent is never recorded** (since 0.3.0): South and North Horn, their critical
+engagements and FATEs and the Forked Tower, by the territory's intended use (61,
+`GameData.IsOccultCrescent`), at any level; the meter still works there, and an open plan window still
+follows the pull without keeping it.
 It goes on while you or anyone in your party is in combat (you can be down while they fight on:
 still the same pull), and ends when that's been over for 2 seconds, at once when the duty is wiped
 or completed (then that's its outcome: `wipe`, `clear`; else `ended`; with the whole party down it
@@ -32,6 +48,21 @@ how is held 10 seconds before it's saved: the game's "duty complete" comes a mom
 kill's combat ends, and then it's a clear. A pull shorter than 10 seconds, or with no mechanic in
 it (a named enemy cast, or a hit that isn't an auto-attack: a trash pack that only swung at the
 tank isn't), isn't kept (the window says so). Pulls are numbered from 1 each time you enter a zone.
+
+**Runs** (since the dungeons round, not yet released): each visit to a duty is a run, so the site can
+show a dungeon or an alliance raid run by run, boss by boss, with the trash folded between. Entering a
+zone (`FightRecorder.OnTerritoryChanged`, where the pull count goes back to 0) notes the game server's
+time (`GameClock.ServerTime`, the computer's clock when it can't be read); the zone's first pull makes
+the run (`RunInfo`: 12 random hex digits, and that time), and every pull after it in the zone has the
+same one, until you leave. The plugin loaded inside a duty (or a zone change it didn't hear) starts a
+run at the next pull, timed from then. **A re-entry is a new run**: leaving and coming back (a
+disconnect, a crash, the plugin reloaded) can't be told reliably from a new visit to the same duty
+(the game says nothing the plugin can keep that names the instance), so it starts a new run with pull 1;
+the site can join them by the duty and the time between. Each pull also names its **main enemy**
+(`boss`): of the enemies that could be targeted (bosses and adds, never the helpers), the one with the
+most max HP, the first seen on a tie (`RecordingBuilder.MainEnemy`), with its BNpcBase id, its BNpcName
+id (`IBattleNpc.NameId`, read with the enemy) and its name as the game showed it; none when no enemy
+could be targeted.
 
 **Who the party is** (since 0.5.0, `Game/PartyMembers.cs`, the rule in `Core/PartyPick.cs`, tested
 with fakes): one place reads it, and the recorder (its party, the parser's "is this the party's",
@@ -412,6 +443,15 @@ language; a stat is written only when above 0. Read back leniently (`Gear.Read`)
 outside 0–13 (or a second at a place), no id, or a stat not a whole number above 0 or not one of the
 twelve keys is left out; `gear` that isn't an object reads as none.
 
+Since the dungeons round (not yet released; still version 1, both keys optional and left out when
+there's nothing, so older readers read on): top level `run`, `{ "id": "3f9c2a7d1e4b", "startedAt":
+"2026-11-02T19:41:12.305Z" }` (written before `duty`: the visit to the duty, What's recorded, Runs; its
+time the server's as you entered, ISO 8601 UTC with milliseconds as `startedAt`), and `boss`, `{ "dataId":
+1001, "nameId": 2001, "name": "The Boss" }` (written after `duty`: the pull's main enemy). Read back
+leniently (`Recording.ReadRun`, `ReadBoss`): a `run` without an id or a time, or a `boss` without a
+`dataId`, reads as none; an id is cut to 64 characters, a name to 80. The summary carries both the same
+way (Progress, below). The sample (`RecordingTests.Sample`, the site's `sample.raidrec.json`) has both.
+
 Since 0.7.4 (the mechanics sweep; still version 1, every key optional):
 
 - `{ "k": "turn", "t", "actor": actorId, "rot": radians, "x", "z" }`: an enemy turning or moving at a mechanic (What's
@@ -682,6 +722,10 @@ or null). Since 0.3.0 also (`Core/PullStats.cs`, the site's contract §3):
   null when it isn't known.
 - `phases`: when each phase began, whole seconds, the first 0 (the site's `phaseStarts`), as the
   recorder counted them while it recorded (the same count as `phase`, even past the events' cap).
+- Since the dungeons round (not yet released), as the file has them and each left out when it has
+  none: `run` (`{ id, startedAt }`, the visit to the duty) and `boss` (`{ dataId, nameId, name }`, the
+  pull's main enemy: the only name in a summary, an enemy's, never a player's), so the site's Logs and
+  Home tell boss pulls from trash without the whole recording.
 - `stats` (at most 7 KB as the server measures it, `PullStats.Size`: Postgres's jsonb text, a space after
   each `:` and `,`, so the server's 8,192-byte check always has a kilobyte to spare; 6 KB compact before the
   round-five review, which a summary of small numbers could have taken past 8,192): `{ v: 1, slots, lb, hits, debuffs, names }`. `slots`, the party in the
@@ -1116,7 +1160,9 @@ above, 18 below), a footer on the basalt band where a screen has one.
   "Ready for the next pull" (a pull has gone in this zone) or "Waiting for the pull" (none yet), with
   "Example Arena · Pull 13" under it (tonight's kept pulls of the duty and one, `PullNoAt`; `FightRecorder.PullsHere` + 1 before 0.9.1); "Following your plan" while a
   pull is only followed; "Recording is off" (with _Turn it on_); "Not recorded here" in a duty that
-  isn't recorded; "Not in a duty". Under it a **chip per main part** (`SetupGuide.ChipName`:
+  isn't recorded ("Alexandria · only hard content is recorded (Settings › Which duties)", the level's
+  `RecordLevels.Words`; at + Dungeons, the Occult Crescent's own line); "Not in a duty" ("Pulls in hard
+  content are recorded by themselves"). Under it a **chip per main part** (`SetupGuide.ChipName`:
   Recording, Uploading, Meter, "Plan: <the plan's name>" when you have one for the duty, Cooldowns,
   Progress): a 6px dot green when on, faint when off, yellow when it's on but waits for your account;
   each opens its Settings page (Recording, Meter, Plan window, Cooldowns; Uploading and Progress
@@ -1237,8 +1283,9 @@ above, 18 below), a footer on the basalt band where a screen has one.
     "Plan: TOP v3" plain, "Off" faint, "Needs an account" or "Stopped" amber) and _Settings ›_ to its page
     (_Link ›_ to Account while it needs an account, its switch dimmed). Under them a box: "Not sure what you
     need? The setup guide walks through it again." with _Run the setup guide_.
-  - **Recording and uploads**: **Recording**: _Record my pulls_, then _Which duties_ (Raids and trials, Every
-    duty: the old _In every duty_), _Record where the party stands_ and _Keep the last_ under it. **Uploads**:
+  - **Recording and uploads**: **Recording**: _Record my pulls_, then _Which duties_ (since the dungeons
+    round: Hard content, + Normal, + Dungeons, What's recorded; before, Raids and trials or Every duty, the
+    old _In every duty_; its tooltip each level's line, `RecordLevels.Hints`), _Record where the party stands_ and _Keep the last_ under it. **Uploads**:
     _Upload my logs_ (waiting for a link), _Upload my older pulls_ · Upload (its line what's waiting, what
     holds it up, or why it stopped; dimmed until linked with Upload my logs on), _Logs are public_ · Hide my character
     (since 0.9.1, as every log on the site is: the site's Settings → Your logs, where a player hides their character;
@@ -1307,7 +1354,7 @@ one button (the telegraph). Nothing in it reads a key: typing the token is the o
    cooldowns, Meter), and _Arrange them on my screen_ (`StartArrange`: every overlay shown at once to
    drag into place; "Arranging on your screen…" while it is), "Or later: Settings › Windows".
 5. **Done**: a green tick in a ring, "You're set", and a row per main part with an _On_ (green) or
-   _Off_ tag and a short note (`SetupGuide.DoneNote`: "Raids and trials · keeps the last 20",
+   _Off_ tag and a short note (`SetupGuide.DoneNote`: "Hard content · keeps the last 20" (the level's word),
    "Linked · public, as on FF Logs", "Detailed · Ready Check · in duties", "Turn it on any time in Settings ›
    Features"…). _Play a sample fight on the meter_ (the meter's sample; _Stop the sample fight_ while
    it plays, waiting while a real fight is on) and _Show sample callouts_; "Type /raidcodex to open
@@ -2366,7 +2413,7 @@ RaidPlanner/
               queue (DeathRecap), Arrange windows' state, places and layout (ArrangeWindows), Settings'
               pages, rows, search and the Features cards' tags (SettingsIndex), 0.8.0's main parts (Features), the setup guide's rules (SetupGuide), a pull in a sentence
               (PullGist), pulls by night (PullNights), the plan's next step (PlanProgress),
-              /raidcodex's words (Commands), settings profiles and their layer (Profiles) and the duty kinds
+              /raidcodex's words (Commands), which duties are recorded (RecordLevels), settings profiles and their layer (Profiles) and the duty kinds
               (DutyKinds), SVG paths, dashes), tested; Views/Profiles.cs and ProfileNotice (0.9.0)
 Resources/Fonts/  the faces (Geist, Geist Mono, Archivo; since 0.7.0 Zen Maru Gothic and Fraunces for the meter's
               themes) and their OFL licences, embedded in the DLL (the licences beside it)
@@ -2551,6 +2598,15 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### Next (not released yet)
+
+- **Dungeon and alliance runs**: each pull now says which visit to the duty it was and its main enemy, so the Raid
+  Codex can show a run boss by boss with trash folded between.
+- **Which duties is now three levels**: _Hard content_ (the default: Savage, Ultimate, Extreme and Unreal trials,
+  Criterion, the Chaotic alliance raid), _+ Normal_ (normal raids and trials too) and _+ Dungeons_ (dungeons, alliance
+  raids and every other duty too). Normal raids, alliance raids and Variant dungeons are no longer recorded by default.
+  If you had _Every duty_ on, you're on _+ Dungeons_; if not, on _Hard content_.
 
 ### 0.10.2
 

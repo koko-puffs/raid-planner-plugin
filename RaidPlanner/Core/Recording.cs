@@ -31,6 +31,31 @@ public enum Outcome
 public sealed record DutyInfo(string Name, uint Territory, uint Content, bool Field = false);
 
 /// <summary>
+/// One visit to a duty (since the dungeons round, not yet released; the file's and the summary's <c>run</c>): an
+/// <paramref name="Id"/> made as you enter the duty, the same on every pull until you leave its zone, and
+/// <paramref name="StartedAt"/>, the game server's time as you entered. The site tells a dungeon's or an alliance
+/// raid's pulls apart run by run with it.
+/// </summary>
+public sealed record RunInfo(string Id, DateTimeOffset StartedAt)
+{
+    /// <summary>The longest id read back (one made here is 12).</summary>
+    public const int MaxId = 64;
+
+    /// <summary>A new run's id: 12 random hex digits.</summary>
+    public static string NewId() => Guid.NewGuid().ToString("N")[..12];
+
+    /// <summary>A run begun now, at <paramref name="startedAt"/>, with a new id.</summary>
+    public static RunInfo Begin(DateTimeOffset startedAt) => new(NewId(), startedAt);
+}
+
+/// <summary>
+/// A pull's main enemy (since the dungeons round, not yet released; the file's and the summary's <c>boss</c>): of
+/// the enemies that could be targeted, the one with the most max HP: its <paramref name="DataId"/> (BNpcBase),
+/// <paramref name="NameId"/> (BNpcName; 0 not known) and <paramref name="Name"/> as the game showed it.
+/// </summary>
+public sealed record BossInfo(uint DataId, uint NameId, string Name);
+
+/// <summary>
 /// One player in the party, as the plan will have them: a spot (MT, OT, H1…), their job and role.
 /// <paramref name="Id"/> is the recording's own number for them (1 to 8, or more in an alliance);
 /// <paramref name="MaxHp"/> their max HP as the pull began (0 unknown; since 0.3.0); <paramref name="Self"/> the
@@ -578,6 +603,18 @@ public sealed class Recording
     /// </summary>
     public DateTimeOffset? StartedAt { get; set; }
 
+    /// <summary>
+    /// The visit to the duty the pull was in (<c>run</c>, since the dungeons round): the same on every pull from entering the
+    /// duty to leaving its zone; null in older files.
+    /// </summary>
+    public RunInfo? Run { get; set; }
+
+    /// <summary>The pull's main enemy (<c>boss</c>, since the dungeons round), or null: no enemy, or an older file.</summary>
+    public BossInfo? Boss { get; set; }
+
+    /// <summary>A server time as the file writes it: UTC, to the millisecond ("2026-11-02T19:59:58.640Z").</summary>
+    public static string StampMs(DateTimeOffset at) => at.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+
     /// <summary>The mechanics in it: the enemies' casts, and their hits that came without one.</summary>
     public int MechanicCount => Timeline.Build(this).Count;
 
@@ -614,7 +651,14 @@ public sealed class Recording
         w.WriteString("outcome", Words.OutcomeKey(Outcome));
         w.WriteNumber("pull", Pull);
         if (!string.IsNullOrWhiteSpace(GameVersion)) w.WriteString("game", GameVersion);
-        if (StartedAt is { } started) w.WriteString("startedAt", started.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture));
+        if (StartedAt is { } started) w.WriteString("startedAt", StampMs(started));
+        if (Run is { } run)
+        {
+            w.WriteStartObject("run");
+            w.WriteString("id", run.Id);
+            w.WriteString("startedAt", StampMs(run.StartedAt));
+            w.WriteEndObject();
+        }
 
         w.WriteStartObject("duty");
         w.WriteString("name", Duty.Name);
@@ -622,6 +666,14 @@ public sealed class Recording
         w.WriteNumber("content", Duty.Content);
         if (Duty.Field) w.WriteBoolean("field", true);
         w.WriteEndObject();
+        if (Boss is { } boss)
+        {
+            w.WriteStartObject("boss");
+            w.WriteNumber("dataId", boss.DataId);
+            w.WriteNumber("nameId", boss.NameId);
+            w.WriteString("name", boss.Name);
+            w.WriteEndObject();
+        }
 
         w.WriteBoolean("partyPositions", PartyPositions);
         w.WriteStartArray("party");
@@ -777,6 +829,8 @@ public sealed class Recording
             PartyPositions = partyPositions,
             GameVersion = GameVersion,
             StartedAt = StartedAt,
+            Run = Run,
+            Boss = Boss,
         };
         r.Party.AddRange(Party);
         r.Actors.AddRange(Actors);
@@ -816,6 +870,8 @@ public sealed class Recording
             GameVersion = Str(o["game"]) is { } game && !string.IsNullOrWhiteSpace(game) ? (game.Length > 40 ? game[..40] : game).Trim() : null,
             StartedAt = Str(o["startedAt"]) is { } started
                 && DateTimeOffset.TryParse(started, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var serverAt) ? serverAt : null,
+            Run = ReadRun(o["run"]),
+            Boss = ReadBoss(o["boss"]),
         };
         if (o["duty"] is JsonObject d)
             r.Duty = new DutyInfo(Str(d["name"]) ?? "Unknown duty", (UInt(d["territory"]) ?? 0), (UInt(d["content"]) ?? 0),
@@ -859,6 +915,24 @@ public sealed class Recording
         if (o["combat"] is JsonObject combat) r.Combat = CombatLog.Read(combat);
         r.Gear = Gear.Read(o["gear"], Num, Str, Bool);
         return r;
+    }
+
+    /// <summary>A file's <c>run</c>: none unless it has an id (cut to <see cref="RunInfo.MaxId"/>) and a time.</summary>
+    internal static RunInfo? ReadRun(JsonNode? n)
+    {
+        if (n is not JsonObject o || Str(o["id"]) is not { } id || string.IsNullOrWhiteSpace(id)) return null;
+        if (Str(o["startedAt"]) is not { } at
+            || !DateTimeOffset.TryParse(at, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var started)) return null;
+        id = id.Trim();
+        return new RunInfo(id.Length > RunInfo.MaxId ? id[..RunInfo.MaxId] : id, started);
+    }
+
+    /// <summary>A file's <c>boss</c>: none unless it has a <c>dataId</c>; a name cut to 80 characters.</summary>
+    internal static BossInfo? ReadBoss(JsonNode? n)
+    {
+        if (n is not JsonObject o || UInt(o["dataId"]) is not { } dataId) return null;
+        var name = (Str(o["name"]) ?? string.Empty).Trim();
+        return new BossInfo(dataId, UInt(o["nameId"]) ?? 0, name.Length > 80 ? name[..80] : name);
     }
 
     private static RecEvent? ReadEvent(JsonObject e)

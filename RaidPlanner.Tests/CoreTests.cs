@@ -203,7 +203,9 @@ public class RecordingTests
         b.SetSelf(18);
         b.SetGear(SampleGear);
         b.SetGame("2026.10.30.0000.0000", new DateTimeOffset(2026, 11, 2, 19, 59, 58, 640, TimeSpan.Zero));
-        var boss = b.Actor(900, "The Boss", 5, 1001);
+        // Since the dungeons round: the visit to the duty (entered 18 minutes before the pull), and the boss's BNpcName (its `boss`).
+        b.SetRun(new RunInfo("3f9c2a7d1e4b", new DateTimeOffset(2026, 11, 2, 19, 41, 12, 305, TimeSpan.Zero)));
+        var boss = b.Actor(900, "The Boss", 5, 1001, 2001);
         var helper = b.Actor(901, "", 0.5f, 1002);
         b.SeenTargetable(boss, 1_000_000);
         b.Waymarks(0, new Dictionary<string, (float, float)> { ["A"] = (100, 85), ["B"] = (115, 100) });

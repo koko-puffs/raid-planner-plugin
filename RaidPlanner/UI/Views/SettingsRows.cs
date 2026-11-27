@@ -25,7 +25,10 @@ public sealed partial class MainWindow
     private static readonly string[] RoleItems = { "The theme's", "The game's" };
     private static readonly string[] RoleShortItems = { "Theme's", "Game's" };
     private static readonly string[] SizeItems = { "Compact", "Detailed" };
-    private static readonly string[] DutyItems = { "Raids and trials", "Every duty" };
+    private static readonly string[] DutyItems = RecordLevels.Labels.ToArray();
+
+    /// <summary>Which duties' tooltip: each level's word and its line.</summary>
+    private static readonly string DutyTip = string.Join(" ", RecordLevels.Labels.Select((w, k) => $"{w}: {RecordLevels.Hints[k]}"));
     private static readonly string[] RankItems = { "ENCDPS", "DPS" };
     private static readonly string[] NameItems = { "Names", "Jobs only" };
     private static readonly string[] PaceItems = { "Best", "Last", "Off" };
@@ -84,14 +87,14 @@ public sealed partial class MainWindow
                     config.Save();
                 }
                 break;
-            case SettingId.RecordAllDuties:
+            case SettingId.RecordDuties:
             {
-                var picked = SegmentRow(i, "##everywhere", n, l, DutyItems, config.RecordAllDuties ? 1 : 0, sub, !config.AutoRecord,
-                    "Raids and trials: only fights are recorded (trials, raids, ultimates, criterion dungeons), so a run of trash packs never pushes out the pulls you want. "
-                    + "Every duty: every duty's pulls are, but never the Occult Crescent's.");
-                if (picked != (config.RecordAllDuties ? 1 : 0))
+                // Since the dungeons round: three levels, each taking in the one before (RecordLevels); the hints its tooltip.
+                var level = RecordLevels.Clamp(config.RecordLevel);
+                var picked = SegmentRow(i, "##everywhere", n, l, DutyItems, level - 1, sub, !config.AutoRecord, DutyTip);
+                if (picked != level - 1)
                 {
-                    config.RecordAllDuties = picked == 1;
+                    config.RecordLevel = picked + 1;
                     config.Save();
                 }
                 break;

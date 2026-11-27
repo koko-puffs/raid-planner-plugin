@@ -453,7 +453,7 @@ public sealed partial class MainWindow
         switch (id)
         {
             case SettingId.AutoRecord: c.AutoRecord = d.AutoRecord; break;
-            case SettingId.RecordAllDuties: c.RecordAllDuties = d.RecordAllDuties; break;
+            case SettingId.RecordDuties: c.RecordLevel = UI.Model.RecordLevels.Hard; break;
             case SettingId.RecordParty: c.RecordParty = d.RecordParty; break;
             case SettingId.Keep:
                 c.Keep = d.Keep;

@@ -42,7 +42,7 @@ namespace RaidPlanner.UI.Model
     {
         // Recording and uploads.
         AutoRecord,
-        RecordAllDuties,
+        RecordDuties,
         RecordParty,
         Keep,
         UploadLogs,
@@ -229,7 +229,7 @@ namespace RaidPlanner.UI.Model
         {
             // Recording and uploads.
             new(SettingId.AutoRecord, Rec, "Recording", "Record my pulls", "Every pull, by itself, from the pull until the fight ends."),
-            new(SettingId.RecordAllDuties, Rec, "Recording", "Which duties", "Raids and trials, or every duty's pulls (dungeons too).", Sub: true),
+            new(SettingId.RecordDuties, Rec, "Recording", "Which duties", "Hard content, normal raids and trials too, or dungeons and alliance raids too.", Sub: true),
             new(SettingId.RecordParty, Rec, "Recording", "Record where the party stands", "Their places come along into the plan and the replay.", Sub: true),
             new(SettingId.Keep, Rec, "Recording", "Keep the last", "Past that, the oldest already on the site go first.", Sub: true),
             // Kept by Reset this page: on would upload pulls, and uploads are public on the site (as on FF Logs).

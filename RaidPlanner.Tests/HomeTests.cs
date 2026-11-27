@@ -147,8 +147,9 @@ public class HomeTests
     [Fact]
     public void The_last_step_says_each_part_as_set()
     {
-        var facts = new SetupFacts(true, false, 20, false, "Ready Check", false);
-        Assert.Equal("Raids and trials · keeps the last 20", SetupGuide.DoneNote(Feature.Record, true, facts));
+        var facts = new SetupFacts(true, RecordLevels.Hard, 20, false, "Ready Check", false);
+        Assert.Equal("Hard content · keeps the last 20", SetupGuide.DoneNote(Feature.Record, true, facts));
+        Assert.Equal("+ Dungeons · keeps the last 20", SetupGuide.DoneNote(Feature.Record, true, facts with { RecordLevel = RecordLevels.Every }));
         Assert.Equal("Linked · public, as on FF Logs", SetupGuide.DoneNote(Feature.Upload, true, facts));
         Assert.Equal("Detailed · Ready Check · in duties", SetupGuide.DoneNote(Feature.Meter, true, facts));
         Assert.Equal("Compact · Readout · everywhere", SetupGuide.DoneNote(Feature.Meter, true, facts with { Compact = true, Theme = "Readout", MeterEverywhere = true }));

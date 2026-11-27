@@ -49,7 +49,7 @@ public static class DutyKinds
     /// <summary>Every kind, in the order the profile's Used in lists them.</summary>
     public static readonly IReadOnlyList<DutyKind> All = (DutyKind[])Enum.GetValues(typeof(DutyKind));
 
-    // The ContentType sheet's rows read here (the same numbers GameData's NotFights uses).
+    // The ContentType sheet's rows read here.
     public const uint Dungeons = 2, Guildhests = 3, Trials = 4, Raids = 5, DeepDungeons = 21, Eureka = 26, UltimateRaids = 28, Bozja = 29;
 
     /// <summary>Variant and Criterion dungeons ("V&amp;C Dungeon Finder").</summary>

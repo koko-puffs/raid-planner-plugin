@@ -575,7 +575,7 @@ public sealed partial class MainWindow
             ? "The next pull in a raid or trial is recorded by itself. Here’s what’s on:"
             : "Recording is off, so no pull is kept until you turn it on. Here’s what’s on:"), 10);
         Kit.Gap(18);
-        var facts = new SetupFacts(Linked, config.RecordAllDuties, config.Keep, config.MeterCompact, MeterThemes.Of(config.MeterTheme).Name, config.MeterEverywhere, config.Cooldowns.Everywhere);
+        var facts = new SetupFacts(Linked, config.RecordLevel, config.Keep, config.MeterCompact, MeterThemes.Of(config.MeterTheme).Name, config.MeterEverywhere, config.Cooldowns.Everywhere);
         Kit.BeginPanel("##setup-done", 4, 16, 4, Palette.Slab, Palette.Line);
         for (var i = 0; i < Features.All.Count; i++)
         {

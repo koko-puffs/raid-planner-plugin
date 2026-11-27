@@ -84,7 +84,7 @@ public static class Features
     /// <summary>What it does, in one line.</summary>
     public static string Line(Feature f) => f switch
     {
-        Feature.Record => "Every pull in raids and trials, kept on this PC.",
+        Feature.Record => "Every pull in the duties you pick, kept on this PC.",
         Feature.Upload => "Each pull goes to your Raid Codex as it ends, public as on FF Logs.",
         Feature.Meter => "A live damage meter in duties. No ACT needed.",
         Feature.Plan => "Your plan's next steps on screen during the fight.",
