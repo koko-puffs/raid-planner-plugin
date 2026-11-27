@@ -2618,7 +2618,7 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.11.0
 
 - **Dungeon and alliance runs**: each pull now says which visit to the duty it was and its main enemy (with its max
   HP and the next enemy's, so a duty the site doesn't know still tells its bosses from trash), so the Raid
