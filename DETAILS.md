@@ -837,7 +837,9 @@ writes the shared `sample.raidrec.json`). Since 0.5.0 both recordings carry the 
 the Item sheet's, the attributes made up but of a level-100 caster's size).
 
 No names. The
-summary is made on the worker that writes the pull, so it's there whatever happens to the file.
+summary is made on the worker that writes the pull, so it's there whatever happens to the file; since the uploads
+round it's made before the file is written (once the store lists a pull the uploader may take it, and an upload
+that went before its summary came went without one: a long pull's, which the site's Worker doesn't sum up itself).
 They wait in a queue of 20 (`SummaryQueue`; past that the oldest goes), sent one at a time; with no
 connection, the site down or a `rate` refusal, the same one is tried again later (30 seconds doubling
 to 15 minutes); a refused token empties the queue; any other refusal drops that one. The one on its

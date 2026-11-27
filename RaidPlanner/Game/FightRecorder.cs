@@ -785,7 +785,8 @@ public sealed unsafe class FightRecorder : IDisposable
                     return;
                 }
                 var recording = b.Finish(t, how);
-                var info = store.Save(recording);
+                // Summed up before it's saved: once the store lists it the uploader may take it (it looks four times a second),
+                // and until the summary reaches it (below) the upload would go without one.
                 string? summary = null;
                 try
                 {
@@ -796,6 +797,7 @@ public sealed unsafe class FightRecorder : IDisposable
                 {
                     Services.Log.Warning(ex, "Raid Codex couldn't sum the pull up");
                 }
+                var info = store.Save(recording);
                 if (disposed) return;
                 Services.Framework.RunOnFrameworkThread(() => Guarded(() =>
                 {
