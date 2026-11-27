@@ -360,8 +360,17 @@ public sealed class CooldownBook
     }
 }
 
-/// <summary>A party member as the tracker shows them: the game's id, their spot, job and role, whether it's you, and their level now (synced; 0 when not known).</summary>
-public sealed record CooldownMember(uint Id, string Slot, string Job, byte Role, bool IsYou, int Level = 0);
+/// <summary>
+/// A party member as the tracker shows them: the game's id, their spot (the plugin's guess from jobs and the party list's order: for the
+/// order and to match a plan's cooldowns to them, never shown), job and role, whether it's you, and their level now (synced; 0 when not
+/// known); their name (the game's; "" not read) and <paramref name="Tag"/>, their job as a window calls them without a name ("WAR 2" for
+/// the second of it; <see cref="PartyNames"/>).
+/// </summary>
+public sealed record CooldownMember(uint Id, string Slot, string Job, byte Role, bool IsYou, int Level = 0, string Name = "", string Tag = "")
+{
+    /// <summary>What the tracker calls them: their name, or with Jobs only (or no name) their job.</summary>
+    public string Called(bool jobsOnly) => PartyNames.Who(Name, Tag.Length > 0 ? Tag : Job, jobsOnly);
+}
 
 /// <summary>What the game says about a tracked cooldown: the action's id, name (in the client's language) and icon, its base recast (s), charges, and the level it's first had at (0: not known).</summary>
 public sealed record CooldownAction(string Key, uint Id, string Name, uint Icon, double Recast, int Charges, int Level = 0);
@@ -476,10 +485,10 @@ public static class CooldownView
     public static string? Charges(CooldownLine line) =>
         line.MaxCharges > 1 ? line.Charges.ToString(CultureInfo.InvariantCulture) + "/" + line.MaxCharges.ToString(CultureInfo.InvariantCulture) : null;
 
-    /// <summary>A row's tooltip: whose and how it's known.</summary>
-    public static string Tip(CooldownLine line)
+    /// <summary>A row's tooltip: whose (their name, or their job: never a spot) and how it's known.</summary>
+    public static string Tip(CooldownLine line, bool jobsOnly = false)
     {
-        var who = line.Who.IsYou ? "Yours" : $"{line.Who.Slot} · {line.Who.Job}";
+        var who = line.Who.IsYou ? "Yours" : line.Who.Called(jobsOnly);
         var how = line.Exact ? "the game's own timer"
             : !line.Seen ? "not used since the tracker began watching, so taken to be ready"
             : line.Learned ? $"a {Format.Clock(line.Recast)} recast learned from their own uses"
@@ -498,10 +507,10 @@ public static class CooldownSample
 {
     public static readonly IReadOnlyList<CooldownMember> Party = new[]
     {
-        new CooldownMember(1, "MT", "PLD", 1, true), new CooldownMember(2, "OT", "DRK", 1, false),
-        new CooldownMember(3, "H1", "WHM", 4, false), new CooldownMember(4, "H2", "SCH", 4, false),
-        new CooldownMember(5, "M1", "DRG", 2, false), new CooldownMember(6, "M2", "NIN", 2, false),
-        new CooldownMember(7, "R1", "BRD", 3, false), new CooldownMember(8, "R2", "SMN", 3, false),
+        new CooldownMember(1, "MT", "PLD", 1, true, 0, "Koko"), new CooldownMember(2, "OT", "DRK", 1, false, 0, "Brann"),
+        new CooldownMember(3, "H1", "WHM", 4, false, 0, "Sylvie"), new CooldownMember(4, "H2", "SCH", 4, false, 0, "Odette"),
+        new CooldownMember(5, "M1", "DRG", 2, false, 0, "Rook"), new CooldownMember(6, "M2", "NIN", 2, false, 0, "Tamsin"),
+        new CooldownMember(7, "R1", "BRD", 3, false, 0, "Fenn"), new CooldownMember(8, "R2", "SMN", 3, false, 0, "Ilya"),
     };
 
     /// <summary>A made-up action for a cooldown (no icon: the tracker draws its kind's mark): 120 s for raid buffs, 90 for the rest, 40 for Swiftcast.</summary>

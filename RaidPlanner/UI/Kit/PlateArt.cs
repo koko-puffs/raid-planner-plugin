@@ -347,7 +347,8 @@ public static class PlateArt
 
     /// <summary>
     /// A member's job icon where the windows drew their spot (since 0.7.0): centred, <paramref name="diameter"/> CSS px,
-    /// in Ready Check's socket when the icon isn't there; the spot's label ("M1") in a tooltip when pointed at.
+    /// in Ready Check's socket when the icon isn't there; <paramref name="tip"/> (the job, "DRG") in a tooltip when pointed at. Never a spot:
+    /// the game never says who's M1.
     /// </summary>
     public static void JobBadge(ImDrawListPtr dl, Vector2 center, float diameter, string? job, string? role, MeterRoleColours roles, bool dead = false,
         string? tip = null)

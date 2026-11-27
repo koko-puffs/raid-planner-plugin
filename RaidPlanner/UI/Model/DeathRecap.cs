@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.UI.Model;
@@ -32,7 +33,7 @@ public sealed record RecapCard(
     int Index,
     int PartyId,
     string Name,
-    string Slot,
+    string Tag,
     string Job,
     string Role,
     bool IsYou,
@@ -50,8 +51,8 @@ public sealed record RecapCard(
     bool Weakness,
     long MaxHp)
 {
-    /// <summary>Who it's about: their name, or with Show: Jobs only (Settings → Damage meter) their spot.</summary>
-    public string Who(bool jobsOnly) => jobsOnly || Name.Length == 0 ? Slot : Name;
+    /// <summary>Who it's about: their name, or with Show: Jobs only (Settings → Damage meter) their job ("WAR 2" for the second of it; <see cref="Tag"/>). Never their spot.</summary>
+    public string Who(bool jobsOnly) => PartyNames.Who(Name, Tag.Length > 0 ? Tag : Job, jobsOnly);
 }
 
 /// <summary>The death recap's words and lines (since 0.9.0), worked out away from ImGui so they're tested.</summary>
@@ -95,7 +96,7 @@ public static class DeathRecapView
         // Up at the hit: the mitigations first, the barriers after; for a tank, their big cooldowns that weren't.
         var words = up.Where(m => m.Kind != MitigationRole.Shield).Select(m => m.Key).Concat(up.Where(m => m.Kind == MitigationRole.Shield).Select(m => m.Key)).ToList();
         var missing = tank && d.MitigationKnown ? Mitigations.MissingFor(job, d.Mitigation) : new List<string>();
-        return new RecapCard(fightId, index, d.PartyId, d.Name, d.Slot, job, role, you, d.At, d.Phase, d.KilledBy, d.Amount, d.Overkill, d.Hit, rows, words,
+        return new RecapCard(fightId, index, d.PartyId, d.Name, d.Tag, job, role, you, d.At, d.Phase, d.KilledBy, d.Amount, d.Overkill, d.Hit, rows, words,
             d.MitigationKnown, d.MitigationKnown && !Mitigations.AnyMitigation(d.Mitigation), missing, d.HadWeakness, maxHp);
     }
 

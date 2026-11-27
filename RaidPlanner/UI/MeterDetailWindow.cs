@@ -525,10 +525,10 @@ public sealed class MeterDetailWindow : Window
         plate.YouMark(dl, min, max, rad, max.Y - min.Y, style);
     }
 
-    /// <summary>A player's mark at a size: Ready Check's spot badge (its centre); a theme's job icon in its socket (from its top-left).</summary>
-    private void Badge(ImDrawListPtr dl, Vector2 center, float size, string? job, string? role, bool dead, string? slot)
+    /// <summary>A player's mark at a size: Ready Check's job badge (its centre; the job in its tooltip); a theme's job icon in its socket (from its top-left).</summary>
+    private void Badge(ImDrawListPtr dl, Vector2 center, float size, string? job, string? role, bool dead)
     {
-        if (Rc) PlateArt.JobBadge(dl, center, size, job, role, config.MeterRoleColours, dead, slot);
+        if (Rc) PlateArt.JobBadge(dl, center, size, job, role, config.MeterRoleColours, dead, job);
         else PlateArt.JobIcon(dl, center - new Vector2(S(size) / 2), size, job, role, T.RoleColor(role, config.MeterRoleColours), T.Icon, dead, T.DeadIcon);
     }
 
@@ -607,7 +607,7 @@ public sealed class MeterDetailWindow : Window
     };
 
     /// <summary>
-    /// The table (`.xg`, a slab): heads in mono capitals, a 34px row a player (the spot, the name, the
+    /// The table (`.xg`, a slab): heads in mono capitals, a 34px row a player (the job icon, the name, the
     /// job in mono, the columns in mono, the main number white), the limit break, the party's total
     /// under a stronger rule. The picked row on a white wash under the reticle; a death's name muted with a skull.
     /// </summary>
@@ -661,8 +661,8 @@ public sealed class MeterDetailWindow : Window
                 if (Rc) Kit.LimitMark(dl, new Vector2(left, y + (rowH - S(18)) / 2));
                 else PlateArt.Glyph(dl, T.Id == MeterThemeId.Mochi ? PlateGlyph.Star : PlateGlyph.LimitBreak, new Vector2(left + S(3), y + (rowH - S(14)) / 2), S(14), T.Lb);
             }
-            else Badge(dl, new Vector2(left + S(10), y + rowH / 2), 20, r.Job, r.Role, r.Dead, r.Slot);
-            var name = r.IsLimitBreak ? "Limit break" : config.MeterJobsOnly ? r.Job : r.Name;
+            else Badge(dl, new Vector2(left + S(10), y + rowH / 2), 20, r.Job, r.Role, r.Dead);
+            var name = r.IsLimitBreak ? "Limit break" : MeterText.Called(r, config.MeterJobsOnly);
             var deathStyle = T.DeathDrawn(config.MeterDecorations);
             var nameRoom = jobX - S(10) - nameX - (r.Dead ? S(18) : 0);
             var nameText = PlateArt.Fit(name, F.Name, nameRoom);
@@ -779,7 +779,7 @@ public sealed class MeterDetailWindow : Window
     }
 
     /// <summary>
-    /// By ability (`.ab`), for the picked player: the head (their spot, "Rook · DRG", how many abilities
+    /// By ability (`.ab`), for the picked player: the head (their job's icon, "Rook · DRG", how many abilities
     /// and hits, their total), then a 30px row an ability, biggest first (a DoT's ticks tagged, est. when
     /// shared), a slim bar each to the biggest; the rest summed as "9 more".
     /// </summary>
@@ -792,7 +792,7 @@ public sealed class MeterDetailWindow : Window
         var x = at.X + S(8) + S(10);
         var right = at.X + w - S(8) - S(10);
         var y = at.Y + S(12);
-        Badge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, false, row.Slot);
+        Badge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, false);
         var tx = x + S(26) + S(12);
         var total = tab switch
         {
@@ -802,7 +802,7 @@ public sealed class MeterDetailWindow : Window
         };
         var view = AbilitiesOf(abilities, total);
         var totalW = PlateArt.Width(view.Total, F.NumStrong);
-        var title = config.MeterJobsOnly ? row.Job : $"{row.Name} · {row.Job}";
+        var title = config.MeterJobsOnly || row.Name.Length == 0 ? MeterText.Called(row, true) : $"{row.Name} · {row.Job}";
         PlateArt.Line(dl, new Vector2(tx, y), PlateArt.Fit(title, F.Title, right - totalW - S(12) - tx), F.Title, I.Strong, 15 * 1.25f);
         PlateArt.Line(dl, new Vector2(tx, y + S(15 * 1.25f)), PlateArt.Fit(view.Sub, F.Body, right - tx), F.Body, I.Muted, 19.5f);
         PlateArt.LineRight(dl, right, y, view.Total, F.NumStrong, I.Strong, 15 * 1.25f);
@@ -956,10 +956,10 @@ public sealed class MeterDetailWindow : Window
         var x = at.X + S(8) + S(10);
         var right = at.X + w - S(8) - S(10);
         var y = at.Y + S(12);
-        Badge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, false, row.Slot);
+        Badge(dl, new Vector2(x + S(13), y + S(19)), 26, row.Job, row.Role, false);
         var tx = x + S(26) + S(12);
         var totalW = PlateArt.Width(total, F.NumStrong);
-        var title = config.MeterJobsOnly ? row.Job : $"{row.Name} · {row.Job}";
+        var title = config.MeterJobsOnly || row.Name.Length == 0 ? MeterText.Called(row, true) : $"{row.Name} · {row.Job}";
         PlateArt.Line(dl, new Vector2(tx, y), PlateArt.Fit(title, F.Title, right - totalW - S(12) - tx), F.Title, I.Strong, 15 * 1.25f);
         PlateArt.Line(dl, new Vector2(tx, y + S(15 * 1.25f)), PlateArt.Fit(sub, F.Body, right - tx), F.Body, I.Muted, 19.5f);
         PlateArt.LineRight(dl, right, y, total, F.NumStrong, I.Strong, 15 * 1.25f);
@@ -1117,7 +1117,7 @@ public sealed class MeterDetailWindow : Window
         var right = at.X + w - S(8) - S(10);
         var y = SideHead(dl, row, at, w, view.Sub, view.Total);
         y = Cards(dl, view.Cards, x, y, right - x, "##guard-cards") + S(14);
-        HeadWords(dl, x, y, config.MeterJobsOnly ? "Busters and raid-wides" : $"Busters and raid-wides on {row.Name}", F.HeadSmall, 22);
+        HeadWords(dl, x, y, config.MeterJobsOnly ? "Busters and raid-wides" : $"Busters and raid-wides on {MeterText.Called(row, false)}", F.HeadSmall, 22);
         y += S(22);
         Kit.Rule(dl, at.X + S(8), at.X + w - S(8), y - 1, I.Rule);
         var listH = at.Y + h - S(4) - y;
@@ -1249,12 +1249,16 @@ public sealed class MeterDetailWindow : Window
     private (MeterProtection? Prot, MeterRow? Row, StatCard[] Cards, HitLine[] Lines, string Sub, string Total) guardView =
         (null, null, Array.Empty<StatCard>(), Array.Empty<HitLine>(), string.Empty, string.Empty);
 
-    /// <summary>The mitigation side in words, made again only for a new protection or row.</summary>
+    private bool guardJobsOnly;
+
+    /// <summary>The mitigation side in words, made again only for a new protection or row (or Jobs only switched).</summary>
     private (StatCard[] Cards, HitLine[] Lines, string Sub, string Total) GuardOf(MeterRow row, MeterProtection? prot)
     {
-        if (!ReferenceEquals(guardView.Prot, prot) || !ReferenceEquals(guardView.Row, row) || (prot == null && guardView.Cards.Length == 0))
+        if (!ReferenceEquals(guardView.Prot, prot) || !ReferenceEquals(guardView.Row, row) || (prot == null && guardView.Cards.Length == 0)
+            || guardJobsOnly != config.MeterJobsOnly)
         {
-            var lines = prot == null ? Array.Empty<HitLine>() : prot.Hits.Select(MeterGuard.Line).ToArray();
+            guardJobsOnly = config.MeterJobsOnly;
+            var lines = prot == null ? Array.Empty<HitLine>() : prot.Hits.Select(h => MeterGuard.Line(h, guardJobsOnly)).ToArray();
             var busters = prot?.Busters ?? 0;
             var raidwides = prot == null ? 0 : prot.Hits.Count - busters;
             var sub = $"Mitigation · {CountOf(busters, "buster", "busters")}, {CountOf(raidwides, "raid-wide", "raid-wides")}";
@@ -1268,7 +1272,7 @@ public sealed class MeterDetailWindow : Window
 
     /// <summary>
     /// The fight's events (`.ab`'s slab), oldest first, scrolling: a 34px row each, the time in mono, the
-    /// kind's mark in its colour, the member's spot, what happened, its kind in faint mono capitals on
+    /// kind's mark in its colour, the member's job icon, what happened, its kind in faint mono capitals on
     /// the right; a death's row in its red. Pressed, a death opens its recap (Deaths) and a member's
     /// event picks them in the table. Only the rows in view are drawn.
     /// </summary>
@@ -1369,7 +1373,7 @@ public sealed class MeterDetailWindow : Window
             if (ev.Slot.Length > 0)
             {
                 var who = e.Rows.FirstOrDefault(r => r.PartyId == ev.PartyId && !r.IsLimitBreak);
-                Badge(dl, new Vector2(x + S(9), min.Y + rowH / 2), 18, who?.Job, who?.Role ?? Format.RoleOfSlot(ev.Slot), false, ev.Slot);
+                Badge(dl, new Vector2(x + S(9), min.Y + rowH / 2), 18, who?.Job, who?.Role ?? Format.RoleOfSlot(ev.Slot), false);
                 x += S(18) + S(8);
             }
             var kindWord = MeterText.KindWord(ev.Kind);
@@ -1420,14 +1424,14 @@ public sealed class MeterDetailWindow : Window
             Picked(dl, $"##dd-ret{index}", plateMin, plateMax, picked, hovered);
             var x = min.X + S(12);
             var dr = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId && !r.IsLimitBreak);
-            Badge(dl, new Vector2(x + S(10), y + rowH / 2), 20, dr?.Job, dr?.Role, false, d.Slot);
+            Badge(dl, new Vector2(x + S(10), y + rowH / 2), 20, dr?.Job, dr?.Role, false);
             x += S(20) + S(10);
-            var name = config.MeterJobsOnly ? d.Slot : d.Name;
+            var name = MeterText.Called(d, config.MeterJobsOnly, dr);
             var color = d.PartOfWipe ? I.Muted : I.Strong;
             var time = Format.Clock(d.At);
             var timeW = PlateArt.Width(time, F.SmallStrong);
             PlateArt.Line(dl, new Vector2(x, y + S(6)), PlateArt.Fit(name, F.Name, MathF.Min(w * 0.4f, max.X - S(12) - timeW - S(12) - x)), F.Name, color, 18);
-            var sub = d.PartOfWipe ? $"The wipe · {d.KilledBy}" : MeterText.DeathLine(d);
+            var sub = d.PartOfWipe ? $"The wipe · {d.KilledBy}" : MeterText.DeathLine(d, config.MeterJobsOnly);
             PlateArt.Line(dl, new Vector2(x, y + S(24)), PlateArt.Fit(sub, F.Note, max.X - S(12) - timeW - S(12) - x), F.Note, I.Muted, 16);
             PlateArt.LineRight(dl, max.X - S(12), y, time, F.SmallStrong, d.PartOfWipe ? I.Muted : I.Bad, 46);
             y += rowH;
@@ -1451,9 +1455,9 @@ public sealed class MeterDetailWindow : Window
         var inner = w - S(36);
         var y = at.Y + S(14);
         var dr = e.Rows.FirstOrDefault(r => r.PartyId == d.PartyId && !r.IsLimitBreak);
-        Badge(dl, new Vector2(x + S(13), y + S(18)), 26, dr?.Job, dr?.Role, false, d.Slot);
+        Badge(dl, new Vector2(x + S(13), y + S(18)), 26, dr?.Job, dr?.Role, false);
         var tx = x + S(26) + S(12);
-        var who = config.MeterJobsOnly ? d.Slot : d.Name;
+        var who = MeterText.Called(d, config.MeterJobsOnly, dr);
         var headline = $"{who} died at {Format.Clock(d.At)}";
         float th;
         if (Rc) th = Kit.Callout(dl, new Vector2(tx, y), headline, 17, inner - S(38), 1, 1.05f);
@@ -1468,7 +1472,7 @@ public sealed class MeterDetailWindow : Window
             F.Body, I.Muted, 19.5f);
         var headH = th + S(4) + S(19.5f);
         // Since 0.4.0: Weakness on as they died, and the raise (when, by whom, how long they were down).
-        if (MeterText.AfterDeath(d) is { } after)
+        if (MeterText.AfterDeath(d, config.MeterJobsOnly) is { } after)
         {
             PlateArt.Line(dl, new Vector2(tx, y + headH), PlateArt.Fit(after, F.BodyStrong, inner - S(38)), F.BodyStrong, d.RaisedAt != null ? I.Good : I.Muted, 19.5f);
             headH += S(19.5f);

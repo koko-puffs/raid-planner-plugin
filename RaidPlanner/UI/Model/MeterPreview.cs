@@ -558,7 +558,7 @@ public sealed class MeterPreview : IMeterSource
             LimitBreakDamage, "Bladedance", 3707310, 1200000, 19410, 0.3, 1, 0.2, 40000, taken, taken / duration, 1, 104880, 1, false, null, duration);
         // Odette was raised in the earlier pulls that lasted long enough (by Sylvie, H1, nine seconds after she died).
         var raised = duration >= 180.4;
-        var deaths = new List<DeathEntry> { raised ? Deaths[0] with { RaisedAt = 180.4, RaisedBy = "H1" } : Deaths[0] };
+        var deaths = new List<DeathEntry> { raised ? Deaths[0] with { RaisedAt = 180.4, RaisedBy = "H1", RaisedByName = "Sylvie", RaisedByTag = "WHM" } : Deaths[0] };
         for (var i = 0; i < rows.Count; i++)
         {
             var r = rows[i];

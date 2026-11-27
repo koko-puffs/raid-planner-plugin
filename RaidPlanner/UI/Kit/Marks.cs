@@ -154,7 +154,7 @@ public static partial class Kit
 
     /// <summary>
     /// A spot (`.rp-spot`): round in its role's colour, a dark halo round it and a faint white ring
-    /// inside, its label in white (26px with 10px words, 20 with 8, 18 with 7).
+    /// inside, its label in white (26px with 10px words, 20 with 8, 18 with 7; none for "": a pull's party, whose spots the game never says).
     /// </summary>
     public static void Spot(ImDrawListPtr dl, Vector2 center, float diameter, string label, Vector4 color, float halo = 2)
     {
@@ -163,6 +163,7 @@ public static partial class Kit
         dl.AddCircleFilled(center, r + S(halo), Palette.U32(Palette.OnLight), 28);
         dl.AddCircleFilled(center, r, Palette.U32(color), 28);
         dl.AddCircle(center, r - 0.5f, Palette.U32(Palette.Rgba(255, 255, 255, 0.28f)), 28, 1f);
+        if (label.Length == 0) return;
         var px = diameter >= 26 ? 10 : diameter >= 20 ? 8 : 7;
         var text = label.Length > 3 ? label[..3] : label;
         var size = Txt.Measure(text, Face.SansSemibold, px);

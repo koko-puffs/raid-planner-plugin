@@ -252,14 +252,15 @@ public sealed partial class MainWindow
         if (mood is { } m) Boss.Empty(dl, c, 58, m);
         else
         {
-            // The party runs to its spots, as the site's loading does.
-            string[] spots = { "MT", "OT", "H1", "H2", "M1", "M2", "R1", "R2" };
+            // The party runs in, as the site's loading does: two tanks, two healers, four DPS in their roles' colours, unlabelled
+            // (a pull's party has no spots: the game never says who's MT or H1).
+            string[] roles = { "tank", "tank", "healer", "healer", "dps", "dps", "dps", "dps" };
             var x = c.X - (S(20) * 8 + S(4) * 7) / 2 + S(10);
             var t = Running(1.4f);
             for (var i = 0; i < 8; i++)
             {
                 var lift = ReducedMotion ? 0 : MathF.Max(0, MathF.Sin((t * 8 - i) * MathF.PI / 2)) * S(2);
-                Kit.Spot(dl, new Vector2(x, c.Y - lift), 20, spots[i], Palette.SpotColor(spots[i]));
+                Kit.Spot(dl, new Vector2(x, c.Y - lift), 20, string.Empty, Palette.RoleColor(roles[i]));
                 x += S(24);
             }
         }
@@ -296,7 +297,7 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// The rows (`.ml`, 42 tall): the time in mono right-aligned, the rail with a hollow dot, the
-    /// mechanic in a 30px square well, what it asks and its name, "×12"; a death in red with its spot.
+    /// mechanic in a 30px square well, what it asks and its name, "×12"; a death in red with the job's icon and who (name, else job).
     /// Only the rows in view are drawn; the words fade at the foot when there's more.
     /// </summary>
     private static void DrawRows(PullView view, float height)
@@ -357,7 +358,7 @@ public sealed partial class MainWindow
                 var nameRoom = max.X - S(8) - countW - x;
                 if (row.Death)
                 {
-                    PlateArt.JobBadge(dl, new Vector2(x + S(10), min.Y + rowH / 2), 20, row.DeathJob, Format.RoleOfSlot(row.DeathSlot), MeterRoleColours.Theme, false, row.DeathSlot);
+                    PlateArt.JobBadge(dl, new Vector2(x + S(10), min.Y + rowH / 2), 20, row.DeathJob, row.DeathRole, MeterRoleColours.Theme, false, row.DeathJob);
                     x += S(20) + S(9.6f);
                     Txt.Line(dl, new Vector2(x, min.Y), Txt.Fit(row.Name, Face.SansMedium, 14, nameRoom - S(30)), Face.SansMedium, 14, Palette.DangerName, 42);
                 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Dalamud.Game;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -51,7 +52,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
     /// <summary>The others' uses and what's learned from them.</summary>
     public CooldownBook Book { get; } = new();
 
-    /// <summary>The party now, in the party list's order with their spots.</summary>
+    /// <summary>The party now, in the party list's order with their spots (kept for the order and a plan's cooldowns, never shown).</summary>
     public IReadOnlyList<CooldownMember> Party => party;
 
     /// <summary>The tracker is shown and wants the parser's uses (set by the window each frame).</summary>
@@ -185,7 +186,7 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         foreach (var m in PartyMembers.Read())
         {
             var (job, role) = data.Job(m.ClassJob);
-            partiers.Add(new Partier(m.Key, job, role));
+            partiers.Add(new Partier(m.Key, job, role, Name: m.Name));
             if (m.EntityId is not (0 or InvalidId)) levels[m.EntityId] = m.Level;
         }
         if (partiers.Count == 0)
@@ -197,10 +198,14 @@ public sealed unsafe class PartyCooldowns : ICombatSink, IDisposable
         levels[meId] = myLevel;
         this.myLevel = myLevel;
         party.Clear();
+        // What a window calls each without a name: their job, "WAR 2" for the second of it in the party list's order (never their spot).
+        var tags = PartyNames.Labels(partiers.Select(p => ((string?)null, (string?)p.Job)).ToList(), jobsOnly: true);
+        var tagOf = new Dictionary<ulong, string>(partiers.Count);
+        for (var i = 0; i < partiers.Count; i++) tagOf[partiers[i].Key] = tags[i];
         foreach (var (who, slot) in Roles.Assign(partiers))
             // A key in the levels is a known entity id (yours always is).
             if (who.Key <= uint.MaxValue && levels.TryGetValue((uint)who.Key, out var lv))
-                party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId, lv));
+                party.Add(new CooldownMember((uint)who.Key, slot, who.Job, who.Role, who.Key == meId, lv, who.Name ?? string.Empty, tagOf.GetValueOrDefault(who.Key, who.Job)));
     }
 
     /// <summary>Your own tracked cooldowns, from the game's timers (and the recast your role's actions have for you, for the others').</summary>

@@ -450,7 +450,7 @@ public sealed partial class MeterWindow
         var markW = dead ? S(mark == DeathStyle.Broken ? 13 : mark == DeathStyle.Skull ? 12 : 11) + S(5) : 0;
         var nameEnd = (config.MeterJobsOnly ? g.ValueR - g.ValueW : g.Job) - g.Gap;
         var nameFont = you && t.Id != MeterThemeId.Readout ? f.Name with { Face = MeterThemes.Heavier(f.Name.Face) } : f.Name;
-        var nameText = PlateArt.Fit(config.MeterJobsOnly ? r.Job : r.Name, nameFont, MathF.Max(S(10), nameEnd - markW - nameX));
+        var nameText = PlateArt.Fit(MeterText.Called(r, config.MeterJobsOnly), nameFont, MathF.Max(S(10), nameEnd - markW - nameX));
         var nameInk = inv ? ink2 : dead ? ink.Muted : ink.Strong;
         if (dead && deathStyle == DeathStyle.Glitch)
         {
@@ -668,7 +668,7 @@ public sealed partial class MeterWindow
         var rx = max.X - S(8);
         var tw = PlateArt.LineRight(dl, rx, y + S(6), said.DeathTimes[i], f.SmallStrong, t.Death, nameH / S(1));
         var job = row?.Job ?? string.Empty;
-        var name = config.MeterJobsOnly ? job : d.Name;
+        var name = MeterText.Called(d, config.MeterJobsOnly, row);
         var jw = config.MeterJobsOnly ? 0 : PlateArt.Width(job, f.HeadSmall) + S(5);
         var nw = PlateArt.Line(dl, new Vector2(nx, y + S(6)), PlateArt.Fit(name, f.Name, rx - tw - S(10) - jw - nx), f.Name, ink.Strong, nameH / S(1));
         if (!config.MeterJobsOnly && nx + nw + jw <= rx - tw - S(10)) PlateArt.Line(dl, new Vector2(nx + nw + S(5), y + S(6)), job, f.HeadSmall, ink.Faint, nameH / S(1));

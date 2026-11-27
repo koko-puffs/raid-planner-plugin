@@ -49,7 +49,7 @@ Record the fights you're in, then make them into plans on
   out before your average pull here), your tinctures and food, and a warning when your gear needs repairing.
 - **A death recap**: when you die (or anyone, if you like), what killed you, your last six seconds, and what
   mitigation was up, with a button to open it in the meter.
-- **Tracks your progress** (once linked): how far each pull got, the boss's HP left and each spot's
+- **Tracks your progress** (once linked): how far each pull got, the boss's HP left and each player's
   numbers, for the site's progress tracker.
 - **Only watches.** It never acts in the game or sends anything to it.
 
@@ -92,7 +92,7 @@ shows what most people change; the rest fold under one "N more" row.
   the oldest sent go first, pulls still to upload are held up to 200), _Upload my logs_ (on, once linked)
   with _Upload my older pulls_ and _Logs are public_ (every log on the site is, as on FF Logs; _Hide my
   character_ opens the site's Settings → Your logs), _Track my progress_ (on: how far each pull got,
-  who died to what, the boss's HP left and each spot's numbers, no names). More: smoother replays, the
+  who died to what, the boss's HP left and each player's numbers by job, no names). More: smoother replays, the
   server info bar, the recordings folder.
 - **Damage meter**: when it shows (it stays open between pulls in duties, or folds to a line), its size (Detailed, or Compact) and theme with a live preview, role
   colours, ENCDPS or DPS, names or jobs only, a sample fight; more: which way it grows, its head and

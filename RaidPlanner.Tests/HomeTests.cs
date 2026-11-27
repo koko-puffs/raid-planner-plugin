@@ -68,7 +68,8 @@ public class HomeTests
         var deaths = view.Rows.Where(x => x.Death).ToList();
         Assert.Equal("Velka Moor died to Latent Defect", deaths[0].Name);
         Assert.Equal(("Velka Moor", "Latent Defect"), (deaths[0].DeathWho, deaths[0].DeathBy));
-        Assert.Equal("H2 died", deaths[1].Name);
+        // No name: their job, never the spot the plugin guessed.
+        Assert.Equal("SCH died", deaths[1].Name);
         Assert.Null(view.WipeAt);
         r.Outcome = Outcome.Wipe;
         // The wipe is the deaths in the 6 s before the last one: here only the last.

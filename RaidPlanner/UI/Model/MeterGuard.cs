@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using RaidPlanner.Core;
 using RaidPlanner.Core.Meter;
 
 namespace RaidPlanner.UI.Model;
@@ -88,7 +89,7 @@ public static class MeterGuard
     }
 
     /// <summary>A big hit as its line says it.</summary>
-    public static HitLine Line(BigHit h)
+    public static HitLine Line(BigHit h, bool jobsOnly = false)
     {
         var kind = h.Kind switch
         {
@@ -97,7 +98,8 @@ public static class MeterGuard
             _ => $"Raid-wide · {h.Targets.ToString(CultureInfo.InvariantCulture)} hit",
         };
         var after = h.Absorbed > 0 ? Format.Thousands(Math.Max(0, h.Amount - h.Absorbed)) : null;
-        var up = h.Up.Select(u => u.Own || u.By.Length == 0 ? u.Name : $"{u.Name} ({u.By})").ToList();
+        // Another's with who put it on: their name, or their job (never a spot).
+        var up = h.Up.Select(u => u.Own || (u.By.Length == 0 && u.ByName.Length == 0) ? u.Name : $"{u.Name} ({PartyNames.Who(u.ByName, u.By, jobsOnly)})").ToList();
         var tip = h.Absorbed > 0
             ? $"{Format.Thousands(h.Amount)} hit them; barriers soaked about {Format.Thousands(h.Absorbed)} of it (an estimate), so it took about {after} HP."
             : $"{Format.Thousands(h.Amount)} hit them; no barrier soaked any of it.";

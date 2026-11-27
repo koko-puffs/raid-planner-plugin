@@ -149,7 +149,7 @@ public sealed partial class MainWindow
             case SettingId.TrackProgress:
                 if (SwitchRow(i, "##progress", n, l, config.TrackProgress,
                         "After each kept pull, a few numbers go to your account: the duty, how long it lasted, the furthest phase, the boss's HP left, who died to what and what hit the "
-                        + "party (by spot and job, never names). The site charts your progress from them.", off: !Linked, linkFirst: !Linked))
+                        + "party (by job, never names). The site charts your progress from them.", off: !Linked, linkFirst: !Linked))
                 {
                     config.TrackProgress = !config.TrackProgress;
                     config.Save();
@@ -448,8 +448,8 @@ public sealed partial class MainWindow
             {
                 var note = found && rosterNote is { } r && DateTime.UtcNow - r.At < TimeSpan.FromMinutes(1) ? r.Text : l;
                 if (ButtonRow(i, "##roster", n, note, uploads.RosterSending ? "Sending…" : "Send", Btn.Outline, !Linked || uploads.RosterSending, null,
-                        "Your party's names go to your roster on the site, each in their spot (MT, OT, H1…), so your plans show who stands where. It replaces the roster there. Only "
-                        + "when you press this.", off: !Linked, linkFirst: !Linked))
+                        "Your party's names go to your roster on the site, placed by their jobs and the party list's order (the game doesn't say who stands where, so move them there "
+                        + "if your party plays it otherwise), so your plans show their names. It replaces the roster there. Only when you press this.", off: !Linked, linkFirst: !Linked))
                     uploads.SendRoster((text, ok) => rosterNote = (text, ok, DateTime.UtcNow));
                 break;
             }

@@ -33,7 +33,12 @@ public readonly record struct ReadyMember(string Name, string Job, string Role, 
 public readonly record struct ReadyYou(int Tinctures, int Meals, int? GearLowest);
 
 /// <summary>A member's row: them, its colour, and its words ("52:10", "No food", "can't see").</summary>
-public sealed record ReadyRow(ReadyMember Member, FoodTone Tone, string Text);
+/// <summary>A member's row: them, their food's tone and words, and <paramref name="Tag"/>, their job as the card calls them without a name ("WAR 2" for the second of it).</summary>
+public sealed record ReadyRow(ReadyMember Member, FoodTone Tone, string Text, string Tag = "")
+{
+    /// <summary>What the card calls them: their name, or with Jobs only (or no name) their job. Never a spot.</summary>
+    public string Called(bool jobsOnly) => PartyNames.Who(Member.Name, Tag.Length > 0 ? Tag : Member.Job, jobsOnly);
+}
 
 /// <summary>
 /// The ready check's card (since 0.9.0): the rows, the headline ("7 of 8 fed · one runs out mid-pull"), the average pull's line,
@@ -94,6 +99,7 @@ public static class ReadyCheckView
         var none = 0;
         var unseen = 0;
         double shortest = double.PositiveInfinity;
+        var tags = PartyNames.Labels(members.Select(m => ((string?)null, (string?)m.Job)).ToList(), jobsOnly: true);
         foreach (var m in members)
         {
             var tone = Tone(m, average);
@@ -103,7 +109,7 @@ public static class ReadyCheckView
                 FoodState.Unseen => "can't see",
                 _ => FoodTime(m.Left),
             };
-            rows.Add(new ReadyRow(m, tone, text));
+            rows.Add(new ReadyRow(m, tone, text, tags[rows.Count]));
             switch (m.Food)
             {
                 case FoodState.Fed:

@@ -167,7 +167,7 @@ public sealed class CooldownWindow : OverlayWindow
         }
     }
 
-    /// <summary>A cooldown's row: its ground, the icon, the member's job (their spot in its tooltip), the name, a planned use's chip, the charges, the time and its ring.</summary>
+    /// <summary>A cooldown's row: its ground, the icon, the member's job (the job in its tooltip), the name, a planned use's chip, the charges, the time and its ring.</summary>
     private void Row(ImDrawListPtr dl, CooldownLine l, float left, float y, float w, float h, Vector4 ground)
     {
         var compact = Compact;
@@ -182,11 +182,11 @@ public sealed class CooldownWindow : OverlayWindow
             dl.AddRect(min, max, Palette.U32(Palette.EmberLine), r, ImDrawFlags.None, 1);
         }
         else if (l.Ready) dl.AddRectFilled(min, max, Palette.U32(Palette.WithAlpha(Palette.Ready, 0.06f)), r);
-        if (Kit.Pointed(min, max)) Kit.Tooltip(CooldownView.Tip(l));
+        if (Kit.Pointed(min, max)) Kit.Tooltip(CooldownView.Tip(l, Config.MeterJobsOnly));
         var x = left + S(compact ? 6 : 8);
         DrawIcon(dl, l, new Vector2(x, y + (h - S(IconCss)) / 2), IconCss);
         x += S(IconCss) + S(7);
-        PlateArt.JobBadge(dl, new Vector2(x + S(JobCss) / 2, y + h / 2), (int)JobCss, l.Who.Job, Core.Roles.RoleWord(l.Who.Role), Config.MeterRoleColours, false, l.Who.Slot);
+        PlateArt.JobBadge(dl, new Vector2(x + S(JobCss) / 2, y + h / 2), (int)JobCss, l.Who.Job, Core.Roles.RoleWord(l.Who.Role), Config.MeterRoleColours, false, l.Who.Job);
         x += S(JobCss) + S(7);
 
         // At the right: the ring, the time before it, the charges before that.

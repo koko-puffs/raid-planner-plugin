@@ -429,7 +429,7 @@ public sealed partial class MainWindow
                 Txt.Note("Whoever has the token can send pulls to your account, so keep it to yourself. Revoke it on the site if it gets out.");
                 Kit.Gap(10);
                 Txt.Note("What goes to the site: your logs (Upload my logs) carry each pull with your party's names and home worlds, as on FFLogs. Track my progress sends a few "
-                    + "numbers (by spot and job, never names). Send my party sends names to your own roster, only when you press it. Share my step sends only the plan and "
+                    + "numbers (by job, never names). Send my party sends names to your own roster, only when you press it. Share my step sends only the plan and "
                     + "the step. The meter's numbers and names stay in the plugin.");
                 break;
         }

@@ -672,8 +672,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         kept = null;
     }
 
-    /// <summary>A member's name for the events (their job when the party list gave none).</summary>
-    private static string Who(Member? m) => m == null ? "Someone" : m.Name.Length > 0 ? m.Name : m.Job.Length > 0 ? m.Job : m.Slot;
+    /// <summary>A member's name for the events (their job when the party list gave none, "WAR 2" for the second: never their spot).</summary>
+    private static string Who(Member? m) => m == null ? "Someone" : PartyNames.Who(m.Name, m.Tag, false);
 
     private string Name(AbilityKey key) => key.Id == 0 ? (key.Tick ? "Damage over time" : "Unknown") : key.IsStatus ? statusName(key.Id) : actionName(key.Id);
 
@@ -694,6 +694,9 @@ public sealed class MeterSession : IMeterSource, ICombatSink
         public required string Job;
         public required string Role;
         public required string Slot;
+
+        /// <summary>What the windows call them without a name: their job, numbered from the second of it in the party list's order ("WAR 2").</summary>
+        public required string Tag;
         public bool You;
         public bool Dead;
 
@@ -867,9 +870,11 @@ public sealed class MeterSession : IMeterSource, ICombatSink
 
         public Member Add(PartyState p, string slot)
         {
+            var job = string.IsNullOrWhiteSpace(p.Job) ? PartyNames.NoJob : p.Job.Trim().ToUpperInvariant();
+            var nth = 1 + Members.Count(x => string.Equals(string.IsNullOrWhiteSpace(x.Job) ? PartyNames.NoJob : x.Job.Trim(), job, StringComparison.OrdinalIgnoreCase));
             var m = new Member
             {
-                Id = Members.Count + 1, Entity = p.Id, Name = p.Name, Job = p.Job, Role = Roles.RoleWord(p.Role), Slot = slot, You = p.You,
+                Id = Members.Count + 1, Entity = p.Id, Name = p.Name, Job = p.Job, Role = Roles.RoleWord(p.Role), Slot = slot, Tag = PartyNames.Numbered(job, nth), You = p.You,
                 MaxHp = Math.Max(0, p.MaxHp),
             };
             Members.Add(m);
@@ -1226,7 +1231,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                     var name = s.statusName(w.Status);
                     if (up.Exists(u => u.Name == name)) continue;
                     var by = w.Source == 0 ? null : Of(w.Source);
-                    up.Add(new MitigationUp(name, w.Kind, w.Source == m.Entity, by?.Slot ?? string.Empty));
+                    up.Add(new MitigationUp(name, w.Kind, w.Source == m.Entity, by?.Tag ?? string.Empty, by?.Name ?? string.Empty));
                 }
                 if (absorbed > 0 && !up.Exists(u => u.Kind == MitigationKind.Shield)) up.Add(new MitigationUp("Barrier", MitigationKind.Shield, false, string.Empty));
                 var at = g.T - Start;
@@ -1331,7 +1336,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                     Tally.Heal(m.Id, e.Action, e.Amount, e.Overheal, e.Flags);
                     if (e.RecipientParty && Of(e.Recipient, s) is { } healed)
                         healed.Remember(new Recap(e.T, new AbilityKey(e.Action, false, (e.Flags & FxFlags.Pet) != 0, false), e.Amount, e.HpBefore,
-                            (e.Flags & FxFlags.Pet) != 0 ? $"{m.Name}'s pet" : m.Name, false));
+                            (e.Flags & FxFlags.Pet) != 0 ? $"{Who(m)}'s pet" : Who(m), false));
                     if (e.Recipient == m.Entity && (e.Flags & FxFlags.LimitBreak) == 0)
                     {
                         var key = new AbilityKey(e.Action, false, (e.Flags & FxFlags.Pet) != 0, false);
@@ -1345,7 +1350,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                     Tally.Shield(m.Id);
                     if (e.RecipientParty && Of(e.Recipient, s) is { } shielded)
                     {
-                        shielded.Remember(new Recap(e.T, new AbilityKey(e.Status, false, false, true), 0, e.HpBefore, $"Shield from {m.Name}", false));
+                        shielded.Remember(new Recap(e.T, new AbilityKey(e.Status, false, false, true), 0, e.HpBefore, $"Shield from {Who(m)}", false));
                         if (shielded.ShieldsPut.Count >= 8) shielded.ShieldsPut.RemoveAt(0);
                         shielded.ShieldsPut.Add((e.Status, m.Entity, e.T));
                     }
@@ -1394,7 +1399,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 }
                 else
                 {
-                    var by = e.SourceParty && Of(e.Source) is { } healer ? $"{healer.Name}, over time" : "Over time";
+                    var by = e.SourceParty && Of(e.Source) is { } healer ? $"{Who(healer)}, over time" : "Over time";
                     on.Remember(new Recap(e.T, new AbilityKey(e.Status, true, false, true), e.Amount, e.HpBefore, by, false));
                 }
             }
@@ -1465,7 +1470,7 @@ public sealed class MeterSession : IMeterSource, ICombatSink
                 t.Taken, t.Taken / clock, Tally.PartyTaken == 0 ? 0 : (double)t.Taken / Tally.PartyTaken, t.MaxTaken,
                 deaths, dead, diedAt, lb ? 0 : t.Active,
                 m?.Casts ?? 0, m?.Potions ?? 0, m?.RaisesGiven ?? 0, m?.Raised ?? 0, deadFor, m?.Interrupts ?? 0,
-                m?.Absorbed ?? 0, (m?.Absorbed ?? 0) / clock);
+                m?.Absorbed ?? 0, (m?.Absorbed ?? 0) / clock, m?.Tag ?? string.Empty);
         }
 
         private MeterRow PartyRow(List<MeterRow> rows, double clock)
@@ -1509,7 +1514,8 @@ public sealed class MeterSession : IMeterSource, ICombatSink
             var overkill = blow is { } k && k.HpBefore >= 0 ? Math.Max(0, amount - k.HpBefore) : 0;
             var (phase, _) = Phases.At(d.T);
             return new DeathEntry(d.Who.Id, d.Who.Slot, d.Who.Name, d.T, blow is { } w ? s.Name(w.What) : "Unknown", amount, overkill, d.PartOfWipe, recap,
-                d.MaxHp, d.RaisedAt, d.RaisedBy?.Slot, d.HadWeakness, d.Mitigation, d.MitigationKnown, d.Hit, Phases.Starts.Count > 1 ? $"P{phase + 1}" : null);
+                d.MaxHp, d.RaisedAt, d.RaisedBy?.Slot, d.HadWeakness, d.Mitigation, d.MitigationKnown, d.Hit, Phases.Starts.Count > 1 ? $"P{phase + 1}" : null,
+                d.Who.Tag, d.RaisedBy is { Name.Length: > 0 } rb ? rb.Name : null, d.RaisedBy?.Tag);
         }
 
         /// <summary>

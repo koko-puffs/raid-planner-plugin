@@ -329,8 +329,8 @@ internal sealed class PlateMeter
                 var it = i < itemPool.Count ? itemPool[i] : Add(itemPool);
                 var r = RowOf(e, d.PartyId);
                 it.Time = Format.Clock(d.At);
-                it.Text = MeterText.DeathLine(d);
-                it.Name = d.Name;
+                it.Text = MeterText.DeathLine(d, JobsOnly);
+                it.Name = MeterText.Called(d, JobsOnly, r);
                 it.Job = r?.Job;
                 it.Role = r?.Role;
                 it.Kind = MeterEventKind.Death;
@@ -353,7 +353,7 @@ internal sealed class PlateMeter
                 var r = ev.PartyId > 0 ? RowOf(e, ev.PartyId) : null;
                 it.Time = Format.Clock(ev.At);
                 it.Text = ev.Text;
-                it.Name = r?.Name ?? string.Empty;
+                it.Name = r == null ? string.Empty : MeterText.Called(r, JobsOnly);
                 it.Job = r?.Job;
                 it.Role = r?.Role;
                 it.Kind = ev.Kind;
@@ -993,7 +993,7 @@ internal sealed class PlateMeter
         }
         // The name (or the job alone), cut to fit; yours a weight heavier; struck through or glitched when dead.
         var nameFont = you && t.Id != MeterThemeId.Readout ? t.Font.Name with { Face = MeterThemes.Heavier(t.Font.Name.Face) } : t.Font.Name;
-        var nameText = JobsOnly ? r.Job : r.Name;
+        var nameText = MeterText.Called(r, JobsOnly);
         var room = rx - x - (pinned ? PlateArt.Width(l.PinnedRank, t.Font.Small) + S(5) : 0);
         var name = PlateArt.Fit(nameText, nameFont, MathF.Max(S(10), room));
         var nameColor = inv ? ink : dead ? t.Row.Muted : t.Row.Text;
@@ -1339,7 +1339,7 @@ internal sealed class PlateMeter
             PlateArt.JobIcon(dl, new Vector2(x, y + (rh - S(14)) / 2), 14, it.Job, it.Role, Role(it.Role), t.Icon, false, t.DeadIcon);
             x += S(14) + S(6);
             rx -= PlateArt.LineRight(dl, rx, y, it.Time, t.Font.Small, t.Death, lineCss) + S(8);
-            var who = JobsOnly ? it.Job ?? it.Name : it.Name;
+            var who = it.Name;
             var nw = PlateArt.Line(dl, new Vector2(x, y), PlateArt.Fit(who, t.Font.Name, MathF.Max(S(20), (rx - x) * 0.5f)), t.Font.Name, t.Row.Text, lineCss);
             x += nw + S(6);
             if (rx - x > S(20)) PlateArt.Line(dl, new Vector2(x, y), PlateArt.Fit(it.Text, t.Font.Label, rx - x), t.Font.Label, t.Row.Muted, lineCss);
@@ -1538,10 +1538,10 @@ internal sealed class PlateMeter
         d.PartyId = partyId;
         d.Tab = tab;
         d.Row = r;
-        d.Name = JobsOnly ? r.Job : r.Name;
+        d.Name = MeterText.Called(r, JobsOnly);
         var where = phase is { } ph ? (T.Id == MeterThemeId.Readout ? " · " + ph.Short : " · in " + ph.Short) : string.Empty;
-        // The job, and the spot (the meter's rows show the job's icon in its place).
-        d.Sub = (JobsOnly ? r.Slot : r.Job + " · " + r.Slot) + " · #" + l.Rank.ToString(CultureInfo.InvariantCulture) + " of " + lines.Count.ToString(CultureInfo.InvariantCulture) + where;
+        // The job (unless the name is the job already), and where they rank: never the spot, which the game never says.
+        d.Sub = (JobsOnly || r.Name.Length == 0 ? string.Empty : r.Job + " · ") + "#" + l.Rank.ToString(CultureInfo.InvariantCulture) + " of " + lines.Count.ToString(CultureInfo.InvariantCulture) + where;
         static string N(double v) => Format.Thousands((long)Math.Round(v));
         void Set(int i, string label, string value)
         {

@@ -288,6 +288,18 @@ duty; just you alone: above), each given a spot from their job's role
 the list's order; a fourth melee takes a free ranged spot (and the other way round), past eight
 P9, P10… Since 0.6.0 each also keeps their name, home world and level (above).
 
+**A spot is kept, never shown.** The game has no MT, OT or H1: a spot is the plugin's guess from the jobs and the
+party list's order, so it can't be trusted to be what the party decided. It stays inside (the recording's `slot`, the
+summary's `slots`, the meter's order and keys, matching a plan's cooldowns to the party), and the recording's format
+doesn't change. No window or message the player reads (the pulls, a pull's page and its sentence, the meter and its
+opened-up window, Copy as text, the death recap, the cooldown tracker, the ready check card, the tooltips) calls a
+player by one: each is their name (the game's), else their job, and two of a job shown by job are told apart by the
+party list's order, "WAR" then "WAR 2" (`Core/PartyNames.cs`, the site's logs' rule; with the meter's _Show: Jobs only_
+everyone is shown by job, numbered so). A job's icon's tooltip is the job. A **plan's** spots are the plan's own (the
+plan window's rows and board, "You:" under a callout, a cooldown the plan gives a spot): those stay, as the plan says
+them. Before this (0.11.1 and earlier) the windows showed the guessed spot in places: below, "the spot" in an older
+paragraph is now the job.
+
 Each action's data is looked up once from the game's Action sheet (`Game/GameData.cs`): name,
 cast type, reach, width, floor marker path and cast time, and since 0.3.0 its ActionCategory and
 base recast, and kept in the recording: the enemies' actions, and the party's, their pets' and
@@ -862,7 +874,9 @@ game closes isn't sent.
 
 _Send my party to my roster_ (Settings → Plan and callouts) sends `rp_plugin_roster` your party's names by spot
 (`PartyRoster`: the recording's spots from `Core/Roles.cs`, the eight only, names cut to 40), which
-replaces your roster on the site. It's the only call with names in it, and only when you press it.
+replaces your roster on the site. It's the only call with names in it, and only when you press it. Its row in
+Settings says they're placed by their jobs and the party list's order (the game doesn't say who stands where, so they
+may need moving on the site), and no longer lists the spots.
 It's refused with fewer than 2 names ("Your party can't be read here; try in the duty."): sending what's
 read (just you) would wipe the roster on the site down to one name. Since 0.5.0 the party is
 `PartyMembers`' (above), so a cross-world party outside a duty can be sent too.
@@ -1244,7 +1258,7 @@ above, 18 below), a footer on the basalt band where a screen has one.
 - **A pull's facts** (`Model/PullGist`, `Views/Pulls.cs`): the phase it ended in (of the phases the
   recording saw, `PullView.PhaseStarts`), the mechanic it ended at (the last before the wipe's first
   death, `PullView.WipeAt`, else the end), its deaths before the wipe and the first of them (by name
-  when the recording has it, else the spot, and what killed them), the party kept. Read from the
+  when the recording has it, else the job, "WAR 2" for the second of it, and what killed them), the party kept. Read from the
   pull's file on a worker, one file at a time, only for rows in view, and never while a pull is
   recorded or followed (its read would cost the game a frame); a pull's own screen fills it from its
   own read. Kept for the session.
@@ -1289,10 +1303,10 @@ above, 18 below), a footer on the basalt band where a screen has one.
   the mechanic drawn small in a 30px square well as the board draws it (`Glyphs`: circle, donut, cone,
   line, cross, stack, spread, tankbuster; a raidwide as rings; anything else a quiet ring), what it
   asks (Dodge, Share, Apart, Tanks) before its name, "×12" in mono; deaths as red rows with the job,
-  who (by name when the recording has it, else the spot) and what killed them ("Velka Moor died to
+  who (by name when the recording has it, else the job: "SCH died"; never the spot) and what killed them ("Velka Moor died to
   Latent Defect"; the wipe's own, a wiped pull's deaths within 6 seconds of its last, left out:
   `Model/PullView` by `PullStats.WipeDeaths`, the rule the summary, the meter and the site keep).
-  Reading it, the party in a row over a running cast bar; a file that won't read, the Boss awake
+  Reading it, the party in a row over a running cast bar (eight unlabelled dots in their roles' colours: a pull has no spots); a file that won't read, the Boss awake
   ("This pull won't open"); nothing in it, asleep ("Nothing went off").
 - **No Replay in the window** (since 0.9.1): 0.9.0 played a pull back in the window (`Views/Replay.cs`, `UI/ReplayBoard.cs`,
   `Model/Replay/`), the site's Review › Replay redrawn in ImGui. It went: keeping two replays alike as the site's changes
@@ -1657,12 +1671,12 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   you're on; a meter too narrow for the five has a tab menu in their row): **Damage** (ENCDPS, or DPS in Settings, and the share; pace from 10 s into a phase
   against the picked pull: "PACE · P2 +0:41", a 3px bar with this pull in ember and the other's tick
   in white, "on pull 4 +3.4%"), **Healing** (HPS and overheal %), **Taken** (damage taken and its
-  share), **Deaths** (each death's spot, name and job, its time in red, what killed them and how big,
-  since 0.4.0 "Weakness" when they died with it on and "raised by H1 after 0:11" when they were
+  share), **Deaths** (each death's job icon, name and job, its time in red, what killed them and how big,
+  since 0.4.0 "Weakness" when they died with it on and "raised by Sylvie after 0:11" (_Jobs only_ "by WHM") when they were
   (`MeterText.DeathLine`); the wipe's left out; live, "7 alive"; past the room cut, and said: "· 3 not
-  shown"), **Events** (0.4.0, below). Rows are 25 tall: the job's icon (18px, since 0.7.0: below; the spot
+  shown"), **Events** (0.4.0, below). Rows are 25 tall: the job's icon (18px, since 0.7.0: below; the job
   in its tooltip), the name (or the job
-  alone, _Jobs only_), the job in mono, the number in mono 600 13px, its second column, and a 2px bar
+  alone, _Jobs only_, "WAR 2" for the second of a job), the job in mono, the number in mono 600 13px, its second column, and a 2px bar
   under it to the top player's (grey; yours ember; a death's dimmer, its name muted with a red
   skull). The limit break has its own row under a hairline; the party's number at the foot ("Party ·
   165,000", "… HPS"), with where in the fight, "26% over" (the party's overheal, Healing; "shields not counted" before 0.9.0), "incl. bleeds", "kept as pull
@@ -1704,7 +1718,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   the fight shown, as a mini-parse in ACT's spirit, to the clipboard (`MeterText.Parse`), a line
   each: "Example Arena · Pull 12 · 3:31 · Wipe in P2 · Party 165,000 ENCDPS" (a live one "So far";
   a clear without the phase), then each player biggest first, "Rook (DRG) 27,840 · 16.9% · 0
-  deaths" (with _Jobs only_, "M1 DRG …": no names), the wipe's deaths not counted, and the limit
+  deaths" (with _Jobs only_, "DRG …", "WAR 2 …": no names, no spots), the wipe's deaths not counted, and the limit
   break last when it was used ("Limit break 7,000 · 4.2%"). The foot says "copied to the clipboard"
   for 2.5 seconds.
 - **Its height** (since 0.7.4 fitted to what it shows, `MeterFit`, tested): folded, empty or stopped, the
@@ -1802,7 +1816,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     Grimoire's underline still run under the number), in the role's colour at 30% with a solid 2px line at its foot; the job's icon (16px, the game's own:
     `ITextureProvider.GetFromGameIcon(62100 + the ClassJob row)`, `JobIcons`; the role's mark in a
     socket while it loads or for a job it doesn't know), the name (Geist 500 12, cut to fit; yours a
-    weight heavier; _Jobs only_ the job), then in right-aligned columns the number (mono 600 12 in
+    weight heavier; _Jobs only_ the job, "WAR 2" for the second of it), then in right-aligned columns the number (mono 600 12 in
     38px) and the share (mono 10 in 32). A column is at least its theme's width and at least as wide as
     its widest sample measured in the face actually drawn ("88.8k", "8.88M", whole "888,888"; the share
     "88.8", "100.0", "100%"), and the number's at least the widest number the rows have (`PlateColumns`,
@@ -1849,8 +1863,8 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
     red, why in its tooltip; its chevron opens Settings.
   - **The details panel** (pointed at a row; in a tooltip, so it sits over everything and needs no
     window): 236 wide, beside the meter on the side with room (right, else left), level with the row and
-    kept on the screen, in the meter's theme: the job icon, the name, "DRG · M1 · #1 of 8 · in P2" (the
-    spot lives here now), six figures (Damage: ENCDPS, DPS, share, damage, crit · DH, max hit; Healing:
+    kept on the screen, in the meter's theme: the job icon, the name, "DRG · #1 of 8 · in P2" (just "#1 of 8 · in P2" with
+    _Jobs only_, the name being the job; the guessed spot it showed until 0.11.1 is gone), six figures (Damage: ENCDPS, DPS, share, damage, crit · DH, max hit; Healing:
     HPS, overheal, share, healing, crit, max heal; Taken: taken, a second, share, max hit, deaths, time
     dead), the top four abilities with a slim bar in the role's colour, "0 deaths · 74 GCDs · 1 potion",
     and "Click: the full table and recap". Worked out once a snapshot for the member pointed at.
@@ -1957,7 +1971,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   1:40 they held a boss"; tank busters, red with "1 with nothing up"; self-healing and with what) and "Busters and
   raid-wides on Name", oldest first, scrolling: the time, the enemy's action over "Buster", "Shared buster" or
   "Raid-wide · 8 hit", the game's amount and (a barrier soaked some) "→" the HP it took (an estimate; its tooltip says
-  so), the mitigations up as chips (another's with their spot, "+2" past the room) or "nothing up" in red, and the tag:
+  so), the mitigations up as chips (another's with who put it on, by name or with _Jobs only_ their job, "+2" past the room) or "nothing up" in red, and the tag:
   MITIGATED on a light wash, LIGHT in the warning colour, UNMITIGATED and DIED in red (`MeterGuard.Line`). The sample
   fight has shields, heals and big hits for both (`MeterPreview.Protection`).
   Before 0.9.0: the five tabs full size with their icons and
@@ -1967,7 +1981,7 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   says "Copied to the clipboard" for 2.5 s; the small meter's text) and _Small_ back to the meter
   (turning _Show the meter_ on if it was
   off). Since 0.7.0 every player in it (the table, the abilities' head, the deaths and their recap, the
-  events) has their job's icon where their spot was (the spot in its tooltip; the game's own icon, as
+  events) has their job's icon where their spot was (the job in its tooltip; the game's own icon, as
   compact's). A slab with every column (Damage: ENCDPS, DPS, damage, %, crit, DH, max hit, deaths;
   Healing: HPS, healing, over, %, crit, max heal, raises given (0.4.0); Taken: taken, a second, %,
   max hit, deaths, time dead (0.4.0, red when any; the wipe's not counted); a count of none is "–"), a 34px
@@ -1984,12 +1998,12 @@ faces and sizes the paragraphs on the normal meter give are Ready Check's.
   (`DeathEntry.MaxHp`; the most the recap saw when it isn't known), amber when low, red at none), the
   killing blow (the line the death names, not always the last) on a red wash. Since 0.4.0 a death's
   row says Weakness and its raise after what killed them, and the recap says under its killing blow
-  "Died with Weakness · Raised at 3:02 by H1 · 0:11 dead" (green), or "Not raised" (muted)
+  "Died with Weakness · Raised at 3:02 by Sylvie · 0:11 dead" (green; _Jobs only_ "by WHM"), or "Not raised" (muted)
   (`MeterText.AfterDeath`). On **Events** (0.4.0), the table in spot order with each player's
   GCDs (_Casts_), _Potions_, _Interrupts_, _Raises_ given, times _Raised_ and _Time dead_ (the party's
   sums at the foot), three fifths of the width, beside the fight's events, oldest first, in a slab
   that scrolls (a 34px row each, only those in view drawn: the time in mono, the kind's mark in its
-  colour, the spot, the event's words, its kind in faint mono capitals on the right); pressed, a member's
+  colour, the member's job icon, the event's words, its kind in faint mono capitals on the right); pressed, a member's
   event picks them in the table, a death's opens its recap on Deaths. **In the theme** (since 0.7.2; the
   meter's theme, compact or not): a theme draws the window's ground and frame
   (`PlateMeter.Ground`, opaque, its sparkles left out), its panels a shade off its ground in its
@@ -2066,7 +2080,7 @@ behind them, hairlines between kinds): 10px in all round; each row on a dark gro
 corners, as solid as 0.3 plus 0.4 of the window's background), 3 apart, 8 between kinds. A row (28
 tall, 22 compact): the action's own icon from the game (20, 16 compact;
 `ITextureProvider`, its corners rounded 4px, at 45% while it recharges; its kind's Lucide mark in a
-quiet square while it loads), the member's job icon (16, 14 compact; since 0.7.0, their spot in its tooltip; the role's mark in a socket while it loads), the action's
+quiet square while it loads), the member's job icon (16, 14 compact; since 0.7.0, the job in its tooltip, their spot until 0.11.1; the role's mark in a socket while it loads), the action's
 name in the client's language (SansMedium 13, 12 compact; white when ready, the text colour while
 recharging), and at the right a **countdown ring** (18, 14 compact; `Kit.CountdownRing`, as the
 callouts') emptying as the cooldown comes back, white at 75% (yours ember), whole and green when it's
@@ -2225,7 +2239,7 @@ party list). The plugin only ever reads the game's ready check, never answers it
   seconds later.
 - **Each member** (`ReadyCheckReader.Members`, twice a second while it shows): the party (`PartyMembers`, in the
   party list's order) with their job's icon (`PlateArt.JobBadge`), their name (their job with the meter's _Show:
-  Jobs only_), and their food: Well Fed on their character's status list (the Status sheet's rows named "Well Fed",
+  Jobs only_ or no name, "WAR 2" for the second of it), and their food: Well Fed on their character's status list (the Status sheet's rows named "Well Fed",
   and 48) and its time left ("52:10", the fork-and-knife before it). Green; **amber** when it would run out before
   the average length of your kept pulls of this duty is over (`ReadyCheckView.AveragePull`: the kept pulls' list,
   `RecordingInfo.Duration`, those of the duty you're in; with none kept, nothing is amber: only the time shows);
@@ -2256,7 +2270,7 @@ would (in duties, or everywhere), even with _Show the meter_ off (`CombatMeter.A
   mouse is over the window (held); the pin keeps them until it's pressed again. Several at once (a wipe) are one-line
   rows, newest on top ("Fenn Hollow · Hello World (raid-wide)", the time and a chevron), at most eight; a row pressed
   opens into the full card in its place (its chevron folds it), and under the rows "Goes in 8 s" and the pin.
-- **The card** (`DeathRecapView.Card`): the job's icon, "Velka Moor died" (their spot with _Jobs only_), "4:12 · P3"
+- **The card** (`DeathRecapView.Card`): the job's icon, "Velka Moor died" (their job with _Jobs only_, "WAR 2" for the second of it), "4:12 · P3"
   (the clock, and the phase in a fight of more than one), a skull. In a red box: "Killed by **Latent Defect** for
   **182,400** (41,200 more than they had), a tank buster, with no mitigation up." (the kind when it's told, "no
   mitigation" when their statuses were read and nothing that lowers damage was up: a barrier doesn't count). "The
@@ -2431,7 +2445,7 @@ end with "Profile: Ultimate" while one is in effect (it opens Profiles).
 RaidPlanner/
   Plugin.cs, Services.cs, Configuration.cs
   Core/       game-free (tested): the recording, its builder and its combat block (CombatLog), an enemy's hit taken in (HitIntake), the
-              store, spots, timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
+              store, spots (Roles; kept, never shown), what a player is called (PartyNames), timeline, words, the site link and calls (SiteLink, SiteRpc, Pacing),
               uploading to the logs (LogUpload: the body, the answers, UploadQueue, UploadPrefs),
               the server's clock (ServerClock),
               plans (Plan, a real arena's rings: Rings, CueFollower), pull summaries and their numbers (PullSummary, PullStats),
@@ -2651,6 +2665,14 @@ entry).
   on Up, Bottom, Lowest first once and looking as it did.
 
 ## Release notes
+
+### Next (not released yet)
+
+- **No more MT, OT, H1… for a player**: the game never says who's which, so the plugin's guess (from jobs and the
+  party list's order) is no longer shown anywhere: the pulls, a pull's page, the meter, Copy as text, the death recap,
+  the cooldown tracker, the ready check card and their tooltips call each player by name, else by job ("WAR", and
+  "WAR 2" for the second). A plan's own spots stay as the plan says them. The recording and what goes to the site
+  don't change.
 
 ### 0.11.1
 

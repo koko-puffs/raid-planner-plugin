@@ -17,7 +17,7 @@ public static class MeterText
     /// <summary>
     /// The encounter as text for the clipboard, one line each: the duty, which pull, its length and how
     /// it ended (and where), the party's ENCDPS; then each player, biggest first: who (their name and job,
-    /// or their spot and job with Jobs only), ENCDPS, their share and their deaths (the wipe's not
+    /// or their job alone with Jobs only, "WAR 2" for the second of it), ENCDPS, their share and their deaths (the wipe's not
     /// counted); the limit break last when it was used.
     /// <code>
     /// Example Arena · Pull 12 · 3:31 · Wipe in P2 · Party 165,000 ENCDPS
@@ -50,12 +50,23 @@ public static class MeterText
         return sb.ToString();
     }
 
-    /// <summary>A player in the copied text: "Rook (DRG)", or with Jobs only "M1 DRG".</summary>
+    /// <summary>A player in the copied text: "Rook (DRG)", or with Jobs only (or no name) "DRG", the second of a job "DRG 2". Never their spot.</summary>
     public static string Who(MeterRow r, bool jobsOnly)
     {
-        if (jobsOnly || r.Name.Length == 0) return r.Job.Length > 0 ? $"{r.Slot} {r.Job}".Trim() : r.Slot;
+        if (jobsOnly || r.Name.Length == 0) return PartyNames.Who(null, r.Tag.Length > 0 ? r.Tag : r.Job, true);
         return r.Job.Length > 0 ? $"{r.Name} ({r.Job})" : r.Name;
     }
+
+    /// <summary>What a window calls a player in the meter: their name, or with Jobs only (or no name) their job ("WAR 2" for the second). Never their spot.</summary>
+    public static string Called(MeterRow r, bool jobsOnly) => r.IsLimitBreak ? r.Name : PartyNames.Who(r.Name, r.Tag.Length > 0 ? r.Tag : r.Job, jobsOnly);
+
+    /// <summary>A death's member as a window calls them (<see cref="Called(MeterRow, bool)"/>; their row in the encounter for their job when the death hasn't it).</summary>
+    public static string Called(DeathEntry d, bool jobsOnly, MeterRow? row = null) =>
+        PartyNames.Who(d.Name, d.Tag.Length > 0 ? d.Tag : row is { Tag.Length: > 0 } ? row.Tag : row?.Job ?? string.Empty, jobsOnly);
+
+    /// <summary>Who raised them, as a window calls them (their name, or with Jobs only their job); null when it isn't known.</summary>
+    public static string? RaisedBy(DeathEntry d, bool jobsOnly) =>
+        string.IsNullOrEmpty(d.RaisedByTag) && string.IsNullOrEmpty(d.RaisedByName) ? null : PartyNames.Who(d.RaisedByName, d.RaisedByTag ?? string.Empty, jobsOnly);
 
     /// <summary>An event's kind in a word, for its tooltip and the opened-up window's column.</summary>
     public static string KindWord(MeterEventKind kind) => kind switch
@@ -115,11 +126,11 @@ public static class MeterText
     };
 
     /// <summary>
-    /// What happened after a death, for its row and recap: "Raised at 3:02 by H1 · 0:11 dead",
+    /// What happened after a death, for its row and recap: "Raised at 3:02 by Sylvie · 0:11 dead" (with Jobs only "by WHM"),
     /// "Raised at 3:02 · 0:11 dead" (who isn't known), "Not raised" (null for one in the wipe). With
     /// Weakness on as they died, "with Weakness" first.
     /// </summary>
-    public static string? AfterDeath(DeathEntry d)
+    public static string? AfterDeath(DeathEntry d, bool jobsOnly = false)
     {
         if (d.PartOfWipe) return null;
         var parts = new List<string>(3);
@@ -127,7 +138,7 @@ public static class MeterText
         if (d.RaisedAt is { } at)
         {
             var raised = "Raised at " + Format.Clock(at);
-            if (!string.IsNullOrEmpty(d.RaisedBy)) raised += " by " + d.RaisedBy;
+            if (RaisedBy(d, jobsOnly) is { } by) raised += " by " + by;
             parts.Add(raised);
             parts.Add(Format.Clock(Math.Max(0, at - d.At)) + " dead");
         }
@@ -138,15 +149,15 @@ public static class MeterText
     /// <summary>
     /// A death's line under its name on the small meter: what killed them and how big, then (since
     /// 0.4.0) whether they had Weakness on and when they were raised and by whom: "Exaflare · 104,880 ·
-    /// Weakness · raised by H1 after 0:11".
+    /// Weakness · raised by Sylvie after 0:11" (with Jobs only "by WHM").
     /// </summary>
-    public static string DeathLine(DeathEntry d)
+    public static string DeathLine(DeathEntry d, bool jobsOnly = false)
     {
         var line = d.KilledBy + " · " + Format.Thousands(d.Amount);
         if (d.HadWeakness) line += " · Weakness";
         if (d.RaisedAt is { } at)
         {
-            line += string.IsNullOrEmpty(d.RaisedBy) ? " · raised" : " · raised by " + d.RaisedBy;
+            line += RaisedBy(d, jobsOnly) is { } by ? " · raised by " + by : " · raised";
             line += " after " + Format.Clock(Math.Max(0, at - d.At));
         }
         return line;

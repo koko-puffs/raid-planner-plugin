@@ -200,7 +200,11 @@ public class CooldownTests
         Assert.Equal("1/2", CooldownView.Charges(line));
         Assert.Null(CooldownView.Charges(line with { MaxCharges = 1 }));
         Assert.Contains("estimate", CooldownView.Tip(line));
-        Assert.StartsWith("Reprisal · OT · WAR.", CooldownView.Tip(line));
+        // Whose: their job (no name known), never their spot; their name when known, the job again with Jobs only.
+        Assert.StartsWith("Reprisal · WAR.", CooldownView.Tip(line));
+        var named = line with { Who = Party[1] with { Name = "Brann" } };
+        Assert.StartsWith("Reprisal · Brann.", CooldownView.Tip(named));
+        Assert.StartsWith("Reprisal · WAR.", CooldownView.Tip(named, jobsOnly: true));
         Assert.Contains("learned", CooldownView.Tip(line with { Learned = true }));
         Assert.Contains("game's own timer", CooldownView.Tip(line with { Exact = true, Who = Party[0] }));
         Assert.Contains("taken to be ready", CooldownView.Tip(line with { Seen = false }));
@@ -427,10 +431,11 @@ public class MeterTextTests
         Assert.EndsWith("% · 0 deaths", lines[1]);
         Assert.Contains(lines, l => l.StartsWith("Odette (SCH) 9,050 · ", StringComparison.Ordinal) && l.EndsWith("· 1 death", StringComparison.Ordinal));
         Assert.StartsWith("Limit break ", lines[^1]);
-        // Jobs only: the spot and the job, no names.
+        // Jobs only: the job, no names and no spots (the game never says who's M1).
         var jobs = MeterText.Parse(e, true);
         Assert.DoesNotContain("Rook", jobs);
-        Assert.Contains("M1 DRG 27,840", jobs);
+        Assert.Contains("\nDRG 27,840", jobs);
+        Assert.DoesNotContain("M1", jobs);
         // Over, a wipe in P2.
         Assert.StartsWith("Example Arena · Pull 12 · 3:31 · Wipe in P2 · ", MeterText.Parse(MeterPreview.PullAt(MeterPreview.Ends), false));
     }
@@ -441,9 +446,12 @@ public class MeterTextTests
         var d = new DeathEntry(8, "H2", "Odette", 171.3, "Exaflare", 104880, 18770, false, Array.Empty<RecapLine>());
         Assert.Equal("Exaflare · 104,880", MeterText.DeathLine(d));
         Assert.Equal("Not raised", MeterText.AfterDeath(d));
-        var raised = d with { RaisedAt = 180.4, RaisedBy = "H1", HadWeakness = true };
-        Assert.Equal("Exaflare · 104,880 · Weakness · raised by H1 after 0:09", MeterText.DeathLine(raised));
-        Assert.Equal("Died with Weakness · Raised at 3:00 by H1 · 0:09 dead", MeterText.AfterDeath(raised));
+        var raised = d with { RaisedAt = 180.4, RaisedBy = "H1", RaisedByName = "Sylvie", RaisedByTag = "WHM", HadWeakness = true };
+        Assert.Equal("Exaflare · 104,880 · Weakness · raised by Sylvie after 0:09", MeterText.DeathLine(raised));
+        Assert.Equal("Died with Weakness · Raised at 3:00 by Sylvie · 0:09 dead", MeterText.AfterDeath(raised));
+        // With Jobs only, the raiser's job; never the spot the plugin guessed (the game never says who's H1).
+        Assert.Equal("Exaflare · 104,880 · Weakness · raised by WHM after 0:09", MeterText.DeathLine(raised, jobsOnly: true));
+        Assert.Equal("Raised at 3:00 · 0:09 dead", MeterText.AfterDeath(d with { RaisedAt = 180.4, RaisedBy = "H1" }));
         Assert.Equal("Raised at 3:00 · 0:09 dead", MeterText.AfterDeath(d with { RaisedAt = 180.4 }));
         Assert.Null(MeterText.AfterDeath(d with { PartOfWipe = true }));
         Assert.Equal("–", MeterText.Dead(0));

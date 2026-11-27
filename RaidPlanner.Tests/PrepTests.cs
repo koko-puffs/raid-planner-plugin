@@ -157,7 +157,7 @@ public class PrepTests
         Assert.True(c.Weakness);
         Assert.Equal("Latent Defect (buster)", DeathRecapView.RowWords(c));
         Assert.Equal("Velka Moor", c.Who(false));
-        Assert.Equal("MT", c.Who(true));
+        Assert.Equal("PLD", c.Who(true));
     }
 
     [Fact]

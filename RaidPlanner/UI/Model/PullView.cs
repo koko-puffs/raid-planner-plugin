@@ -6,11 +6,14 @@ using RaidPlanner.Core;
 namespace RaidPlanner.UI.Model;
 
 /// <summary>A row of a pull's list: a mechanic (from the timeline) or a death.</summary>
-/// <remarks>A death also says who (their name when the recording has it, else their spot) and what killed them, when known.</remarks>
-public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<MechanicKind> Kinds, string? DeathSlot = null, string? DeathJob = null,
+/// <remarks>
+/// A death also says who (their name when the recording has it, else their job, "WAR 2" for the second of it unnamed: never their
+/// spot, the plugin's guess the game never says; <see cref="PartyNames"/>), their role (for its colour) and what killed them, when known.
+/// </remarks>
+public sealed record PullRow(double T, string Name, int Count, IReadOnlyList<MechanicKind> Kinds, string? DeathRole = null, string? DeathJob = null,
     string? DeathWho = null, string? DeathBy = null)
 {
-    public bool Death => DeathSlot != null;
+    public bool Death => DeathRole != null;
 }
 
 /// <summary>
@@ -31,6 +34,10 @@ public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double>
     {
         var rows = Timeline.Build(r).Select(e => new PullRow(e.T, e.Name, e.Count, e.Kinds)).ToList();
         var slots = r.Party.ToDictionary(p => p.Id);
+        // What each is called: their name, else their job (numbered from the second of it in the party list's order).
+        var labels = PartyNames.Labels(r.Party.Select(p => (PartyMember.Clean(p.Name), (string?)p.Job)).ToList());
+        var called = new Dictionary<int, string>(r.Party.Count);
+        for (var i = 0; i < r.Party.Count; i++) called[r.Party[i].Id] = labels[i];
         var deaths = new List<double>();
         var wipe = 0;
         // The wipe: a wiped pull's deaths within six seconds of its last death (counted back from that
@@ -47,10 +54,9 @@ public sealed record PullView(IReadOnlyList<PullRow> Rows, IReadOnlyList<double>
             var by = d.By == 0 ? null : d.ByStatus
                 ? r.Statuses.TryGetValue(d.By, out var st) ? st.Name : null
                 : r.Actions.TryGetValue(d.By, out var a) ? a.Name : null;
-            var slot = who?.Slot ?? "?";
-            var name = PartyMember.Clean(who?.Name) ?? slot;
+            var name = called.TryGetValue(d.Who, out var c) ? c : "Someone";
             var killer = by is { Length: > 0 } ? by.Trim() : null;
-            rows.Add(new PullRow(d.T, killer != null ? $"{name} died to {killer}" : $"{name} died", 1, Array.Empty<MechanicKind>(), slot, who?.Job, name, killer));
+            rows.Add(new PullRow(d.T, killer != null ? $"{name} died to {killer}" : $"{name} died", 1, Array.Empty<MechanicKind>(), who?.Role ?? "dps", who?.Job, name, killer));
             deaths.Add(d.T);
         }
         rows.Sort((a, b) => a.T != b.T ? a.T.CompareTo(b.T) : a.Death.CompareTo(b.Death));

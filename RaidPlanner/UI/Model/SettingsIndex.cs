@@ -280,7 +280,7 @@ namespace RaidPlanner.UI.Model
             new(SettingId.CalloutWhich, Pla, "On-screen callouts", "Which sound", "As <se.N> in a macro.", Sub: true),
             new(SettingId.CalloutSample, Pla, "On-screen callouts", "Show sample callouts", "Made-up steps counting down, to place them.", Action: true),
             new(SettingId.ShareStep, Pla, "With your static", "Share my step with the site", "Present on the site can follow along."),
-            new(SettingId.SendRoster, Pla, "With your static", "Send my party to my roster", "Their names, by spot, to your Raid Codex.", Action: true),
+            new(SettingId.SendRoster, Pla, "With your static", "Send my party to my roster", "Their names, to your roster on the Raid Codex.", Action: true),
             new(SettingId.ReadyCheckShow, Pla, "Ready checks", "Show at ready checks", "Who's fed and for how long, your tinctures and your gear's condition."),
             new(SettingId.ReadyCheckSample, Pla, "Ready checks", "See it", "A made-up party's ready check, to place it.", Action: true),
             new(SettingId.CalloutLead, Pla, "More", "How early the sound plays", "Before the step goes off.", "how early the sound plays", More: true),

@@ -274,7 +274,8 @@ public class ProtectionTests
         var dps = s.Protection(e.Id, e.Rows.Single(r => r.Slot == "R1").PartyId)!;
         Assert.Equal(2, dps.Hits.Count);
         Assert.Equal(MitigationVerdict.Light, dps.Hits[0].Verdict);
-        Assert.Equal("MT", dps.Hits[0].Up.Single().By);
+        // Who put it on: their job as a window calls them (never their spot).
+        Assert.Equal("PLD", dps.Hits[0].Up.Single().By);
         Assert.False(dps.Hits[0].Up.Single().Own);
         Assert.Equal(MitigationVerdict.Died, dps.Hits[1].Verdict);
         Assert.Empty(dps.Hits[1].Up);

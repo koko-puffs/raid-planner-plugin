@@ -788,7 +788,8 @@ public class PullViewTests
         var view = PullView.Build(r);
         Assert.Equal(new[] { 171.3 }, view.Deaths);
         Assert.Equal(2, view.WipeDeaths);
-        Assert.Equal(new[] { "H2" }, view.Rows.Where(x => x.Death).Select(x => x.DeathSlot));
+        Assert.Equal(new[] { "healer" }, view.Rows.Where(x => x.Death).Select(x => x.DeathRole));
+        Assert.Equal(new[] { "SCH died" }, view.Rows.Where(x => x.Death).Select(x => x.Name));
 
         // A pull that didn't end in a wipe has no wipe: every death is someone's.
         r.Outcome = Outcome.Clear;

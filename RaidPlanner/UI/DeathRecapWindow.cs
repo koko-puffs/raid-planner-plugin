@@ -196,7 +196,7 @@ public sealed class DeathRecapWindow : OverlayWindow
         var y = at.Y + S(Pad);
 
         // The head: the job, "Velka Moor died", when; a skull, or (opened in a stack) a chevron that folds it.
-        PlateArt.JobBadge(dl, new Vector2(left + S(14), y + S(HeadCss) / 2), 28, c.Job, c.Role, Config.MeterRoleColours, false, c.Slot);
+        PlateArt.JobBadge(dl, new Vector2(left + S(14), y + S(HeadCss) / 2), 28, c.Job, c.Role, Config.MeterRoleColours, false, c.Job);
         var tx = left + S(28) + S(12);
         var markW = S(22);
         var tw = right - markW - S(8) - tx;

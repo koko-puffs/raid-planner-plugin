@@ -936,8 +936,8 @@ public sealed partial class MeterWindow : Window
     /// <summary>Makes the shown fight's words again when it's a new snapshot.</summary>
     private void Words(MeterEncounter e)
     {
-        if (ReferenceEquals(said.Of, e)) return;
-        said.Fill(e);
+        if (ReferenceEquals(said.Of, e) && said.JobsOnly == config.MeterJobsOnly) return;
+        said.Fill(e, config.MeterJobsOnly);
     }
 
     /// <summary>The shown fight's words and lists, made once a snapshot (a few times a second in a fight), not each frame.</summary>
@@ -961,9 +961,12 @@ public sealed partial class MeterWindow : Window
         public readonly List<string> DeathRets = new();
         public readonly List<MeterRow> Spots = new();
 
-        public void Fill(MeterEncounter e)
+        public bool JobsOnly;
+
+        public void Fill(MeterEncounter e, bool jobsOnly)
         {
             Of = e;
+            JobsOnly = jobsOnly;
             var pull = e.Pull.ToString(CultureInfo.InvariantCulture);
             Clock = Format.Clock(e.Duration);
             Pick = "Pull " + pull;
@@ -983,7 +986,7 @@ public sealed partial class MeterWindow : Window
                 var d = Deaths[i];
                 var id = d.PartyId.ToString(CultureInfo.InvariantCulture) + "-" + i.ToString(CultureInfo.InvariantCulture);
                 DeathTimes.Add(Format.Clock(d.At));
-                DeathLines.Add(MeterText.DeathLine(d));
+                DeathLines.Add(MeterText.DeathLine(d, jobsOnly));
                 DeathIds.Add("##md" + id);
                 DeathRets.Add("##md-ret" + id);
             }
@@ -996,7 +999,7 @@ public sealed partial class MeterWindow : Window
                 if (!r.Dead) Alive++;
                 Spots.Add(r);
             }
-            // In spot order, MT to R2 (kept in the order they came where the spot isn't one of the eight's).
+            // In spot order, MT to R2 (kept in the order they came where the spot isn't one of the eight's): tanks, healers, DPS. Only the order: no spot is shown.
             for (var i = 1; i < Spots.Count; i++)
             {
                 var r = Spots[i];

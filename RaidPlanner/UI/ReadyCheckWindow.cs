@@ -193,7 +193,7 @@ public sealed class ReadyCheckWindow : OverlayWindow
             if (r.Tone != FoodTone.Unknown) Icons.Draw(dl, Icon.Utensils, new Vector2(right - tw - S(6) - icon, y + (rowH - icon) / 2), icon, ink);
             var nameX = left + S(30);
             var room = right - tw - S(6) - icon - S(10) - nameX;
-            var name = jobsOnly || r.Member.Name.Length == 0 ? r.Member.Job : r.Member.Name;
+            var name = r.Called(jobsOnly);
             if (room > S(16)) Txt.Line(dl, new Vector2(nameX, y), Txt.Fit(name, Face.SansMedium, 13, room), Face.SansMedium, 13, r.Member.IsYou ? Palette.White : Palette.Text, RowCss);
             if (r.Tone == FoodTone.Short && Kit.Pointed(new Vector2(left, y), new Vector2(right, y + rowH)))
                 Kit.Tooltip("Their food runs out before your average pull here is over.");

@@ -63,6 +63,9 @@ public enum PaceAgainst
 /// Added in 0.9.0: <see cref="Absorbed"/> what the barriers they put on soaked of enemies' hits (an estimate,
 /// <see cref="ShieldBook"/>; credited to whoever put the barrier on; never part of <see cref="Healing"/>, which stays what the
 /// heals put back, as the site counts it) and that over the encounter's length (<see cref="AbsorbedPerSecond"/>, as HPS is).
+/// <see cref="Slot"/> is the plugin's guess at their spot (MT, H1…) from jobs and the party list's order: kept for order and
+/// keys, never shown. <see cref="Tag"/> is what a window calls them without a name: their job, numbered from the second of a
+/// job in the party list's order ("WAR", "WAR 2"; <see cref="PartyNames"/>); "" for the limit break and the party row.
 /// </summary>
 public sealed record MeterRow(
     int PartyId,
@@ -102,7 +105,8 @@ public sealed record MeterRow(
     double DeadSeconds = 0,
     int Interrupts = 0,
     long Absorbed = 0,
-    double AbsorbedPerSecond = 0);
+    double AbsorbedPerSecond = 0,
+    string Tag = "");
 
 /// <summary>
 /// One ability in a player's breakdown (by ability, for one tab): its own row for a DoT/HoT's ticks
@@ -154,8 +158,11 @@ public enum MitigationVerdict
     Died,
 }
 
-/// <summary>A mitigation up on a big hit: its name, what it is, whether it's the target's own (they put it on), and who put it on (a slot, "" not known).</summary>
-public sealed record MitigationUp(string Name, MitigationKind Kind, bool Own, string By);
+/// <summary>
+/// A mitigation up on a big hit: its name, what it is, whether it's the target's own (they put it on), and who put it on:
+/// <paramref name="By"/> their job as the windows call them without a name ("SCH", "WAR 2"; "" not known), <paramref name="ByName"/> their name ("" none).
+/// </summary>
+public sealed record MitigationUp(string Name, MitigationKind Kind, bool Own, string By, string ByName = "");
 
 /// <summary>
 /// A big hit on one party member (the Mitigation tab): when (encounter seconds), the enemy's action, what it was, how many it
@@ -200,7 +207,9 @@ public sealed record RecapLine(double At, string What, long Amount, long HpBefor
 /// dying member's max HP as they died (<see cref="MaxHp"/>, 0 when not known: what the recap's HP
 /// bars are drawn against; added in the review round). Added in 0.4.0: <see cref="RaisedAt"/> when
 /// they were alive again (seconds since the encounter began; null: not raised in it),
-/// <see cref="RaisedBy"/> the raiser's slot (null when it isn't known who), <see cref="HadWeakness"/>
+/// <see cref="RaisedBy"/> the raiser's slot (null when it isn't known who; a key, never shown: <see cref="RaisedByName"/> their name and
+/// <see cref="RaisedByTag"/> their job as a window calls them without one, "WHM", "WAR 2"), <see cref="Tag"/> the dying member's job the
+/// same way (<see cref="MeterRow.Tag"/>), <see cref="HadWeakness"/>
 /// whether they died with Weakness or Brink of Death on (a death soon after an earlier raise). Since 0.9.0 (the death
 /// recap): <see cref="Mitigation"/> the mitigations up as the killing blow landed (a <see cref="Mitigations"/> mask: theirs as
 /// last read alive, and the party's on the bosses), <see cref="MitigationKnown"/> whether their statuses were read at all
@@ -224,7 +233,10 @@ public sealed record DeathEntry(
     ulong Mitigation = 0,
     bool MitigationKnown = false,
     DeathHit Hit = DeathHit.Unknown,
-    string? Phase = null);
+    string? Phase = null,
+    string Tag = "",
+    string? RaisedByName = null,
+    string? RaisedByTag = null);
 
 /// <summary>What a line of the Events tab is (<see cref="MeterEvent.Kind"/>).</summary>
 public enum MeterEventKind
