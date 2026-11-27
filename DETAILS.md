@@ -2666,7 +2666,7 @@ entry).
 
 ## Release notes
 
-### Next (not released yet)
+### 0.11.2
 
 - **No more MT, OT, H1… for a player**: the game never says who's which, so the plugin's guess (from jobs and the
   party list's order) is no longer shown anywhere: the pulls, a pull's page, the meter, Copy as text, the death recap,
